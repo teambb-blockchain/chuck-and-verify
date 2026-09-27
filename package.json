@@ -1,0 +1,31 @@
+{
+  "name": "project-tbd",
+  "version": "1.0.0",
+  "description": "Team project for smart contracts, tests, scripts, and docs.",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs",
+    "test": "test"
+  },
+  "scripts": {
+    "test": "hardhat test",
+    "compile": "hardhat compile"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/teambb-blockchain/project-tbd.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/teambb-blockchain/project-tbd/issues"
+  },
+  "homepage": "https://github.com/teambb-blockchain/project-tbd#readme",
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^6.1.2",
+    "dotenv": "^17.4.2",
+    "hardhat": "^2.29.1"
+  }
+}

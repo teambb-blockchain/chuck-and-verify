@@ -13,3 +13,9 @@ Add an entry whenever AI tools help with architecture, code, docs, or debugging 
 - **Tool:** Cursor agent
 - **Request:** Use `/Users/britt/Projects/teambb/first-blockchain-project/TEAM_CHARTER.md` as the example and incorporate it into this repo; start logging AI usage in `AI_RECORD.md`
 - **Outcome:** Filled `docs/TEAM_CHARTER.md` from that charter (same team, roles, and agreements). Paths point at this repo: ADRs in `docs/decisions/`, this log at the repo root. Linked the charter from `README.md`.
+
+### 2026-09-27 — Hardhat starter from the first blockchain project
+
+- **Tool:** Cursor agent
+- **Request:** Copy the first blockchain project as a starter template, including configuration and the example Solidity contracts
+- **Outcome:** Brought over `hardhat.config.js`, `.gitignore`, `.env.example`, `contracts/SimpleStorage.sol`, `contracts/ProjectAnchor.sol`, and `test/ProjectAnchor.test.js`. Pointed `package.json` at this repo and set `npm test` / `npm run compile` to Hardhat. Did not copy `.env`, `node_modules/`, `artifacts/`, or `cache/`. Proposal and architecture/decision stubs landed under `docs/`.

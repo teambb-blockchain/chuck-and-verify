@@ -6,7 +6,7 @@ Team project for smart contracts, tests, scripts, and docs.
 
 | Path | Purpose |
 |------|---------|
-| `contracts/` | Solidity (or other) smart contracts |
+| `contracts/` | Solidity (or other) smart contracts - Example contracts: `SimpleStorage.sol`, `ProjectAnchor.sol` |
 | `test/` | Contract and integration tests |
 | `scripts/` | Deploy and utility scripts |
 | `docs/` | Proposal and team charter |
@@ -16,8 +16,10 @@ Team project for smart contracts, tests, scripts, and docs.
 
 ## Setup
 
-1. Copy `.env.example` to `.env` and fill in values.
-2. Install dependencies once the toolchain is added (e.g. Hardhat / Foundry).
+1. Copy `.env.example` to `.env` and fill in `DEPLOYER_KEY` when you need to deploy. Leave it empty for local compile and test.
+2. Install dependencies: `npm install`
+3. Compile: `npm run compile`
+4. Test: `npm test`
 
 ## Environment
 
