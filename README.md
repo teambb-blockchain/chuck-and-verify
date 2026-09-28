@@ -1,6 +1,13 @@
 # project-tbd
 
 Team project for smart contracts, tests, scripts, and docs.
+## Project Overview
+
+This project focuses on tracking beef batches through the supply chain. The Beef Supply Chain Contract records important information about batch registration, USDA inspection, custody handoffs, and recalls.
+
+Authorized participants include processors, USDA inspectors, logistics partners, and retailers. Consumers can view the recorded information to verify a beef batch's inspection status, custody history, and recall status.
+
+Confidential business information such as pricing, sales data, employee information, shipping details, and complete inspection documents is kept off-chain.
 
 ## Structure
 
