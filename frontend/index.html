@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Chuck and Verify — Team BB</title>
+  <meta
+    name="description"
+    content="Chuck and Verify: tamper-evident inspection and custody records for the beef supply chain. A project by Team BB."
+  >
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap"
+    rel="stylesheet"
+  >
+  <style>
+    :root {
+      --paper: #ffffff;
+      --ink: #000000;
+      --gold: #ffd52f;
+      --seal: #b42318;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--paper);
+      color: var(--ink);
+      font-family: "Source Serif 4", Georgia, "Times New Roman", serif;
+      font-size: 1.125rem;
+      line-height: 1.6;
+    }
+
+    .sheet {
+      max-width: 44rem;
+      margin: 0 auto;
+      padding: 2.25rem 1.5rem 5rem;
+    }
+
+    .masthead {
+      background: var(--ink);
+      color: #ffffff;
+      border-bottom: 0.45rem solid var(--gold);
+      font-family: "Barlow Condensed", "Arial Narrow", sans-serif;
+      font-size: 1.35rem;
+      font-weight: 500;
+      line-height: 1;
+    }
+
+    .masthead-inner {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 1rem;
+      max-width: 44rem;
+      margin: 0 auto;
+      padding: 1.15rem 1.5rem 1rem;
+    }
+
+    .masthead p { margin: 0; }
+
+    .masthead a {
+      color: #ffffff;
+      text-underline-offset: 0.18em;
+    }
+
+    .masthead a:hover { text-decoration-thickness: 2px; }
+
+    .masthead a:focus-visible {
+      outline: 2px solid var(--gold);
+      outline-offset: 3px;
+    }
+
+    .title-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 8.75rem;
+      column-gap: 1.25rem;
+      align-items: start;
+      margin-bottom: 3rem;
+    }
+
+    h1 {
+      margin: 0;
+      color: var(--ink);
+      font-family: "Barlow Condensed", "Arial Narrow", sans-serif;
+      font-weight: 600;
+      letter-spacing: -0.015em;
+    }
+
+    h1 .short {
+      display: block;
+      font-size: clamp(3rem, 7.4vw, 4.35rem);
+      line-height: 0.95;
+    }
+
+    h1 .long {
+      display: block;
+      max-width: 24ch;
+      margin-top: 0.85rem;
+      font-size: clamp(1.4rem, 2.6vw, 1.7rem);
+      font-weight: 500;
+      line-height: 1.08;
+      text-wrap: balance;
+    }
+
+    .stamp {
+      width: 8.75rem;
+      height: 8.75rem;
+      margin-top: 0.15rem;
+      color: var(--seal);
+      justify-self: end;
+    }
+
+    h2 {
+      margin: 0 0 0.75rem;
+      color: var(--ink);
+      font-family: "Source Serif 4", Georgia, serif;
+      font-size: 1.35rem;
+      font-weight: 600;
+      line-height: 1.2;
+    }
+
+    .problem p {
+      max-width: 62ch;
+      margin: 0;
+    }
+
+    @media (max-width: 560px) {
+      .sheet { padding-top: 1.75rem; }
+
+      .title-row {
+        grid-template-columns: minmax(0, 1fr) 6.25rem;
+        column-gap: 0.75rem;
+      }
+
+      .stamp {
+        width: 6.25rem;
+        height: 6.25rem;
+      }
+
+      .masthead { font-size: 1.2rem; }
+    }
+  </style>
+</head>
+<body>
+  <header class="masthead">
+    <div class="masthead-inner">
+      <p>Team BB</p>
+      <a href="https://github.com/teambb-blockchain/chuck-and-verify">GitHub repository</a>
+    </div>
+  </header>
+  <main class="sheet">
+    <div class="title-row">
+      <h1>
+        <span class="short">Chuck and Verify</span>
+        <span class="long">Tamper-Evident Inspection and Custody Records for the Beef Supply Chain</span>
+      </h1>
+      <svg class="stamp" viewBox="0 0 200 200" aria-hidden="true">
+        <g opacity="0.32" transform="translate(14 16)">
+          <circle cx="86" cy="86" r="72" fill="none" stroke="currentColor" stroke-width="3"/>
+          <circle cx="86" cy="86" r="58" fill="none" stroke="currentColor" stroke-width="1.5"/>
+          <text
+            x="86"
+            y="98"
+            text-anchor="middle"
+            fill="currentColor"
+            font-family="Barlow Condensed, Arial Narrow, sans-serif"
+            font-size="38"
+            font-weight="600"
+            letter-spacing="3"
+          >COPY</text>
+        </g>
+        <g transform="rotate(-11 100 100)">
+          <circle cx="100" cy="96" r="72" fill="none" stroke="currentColor" stroke-width="3.5"/>
+          <circle cx="100" cy="96" r="58" fill="none" stroke="currentColor" stroke-width="1.75"/>
+          <text
+            x="100"
+            y="108"
+            text-anchor="middle"
+            fill="currentColor"
+            font-family="Barlow Condensed, Arial Narrow, sans-serif"
+            font-size="40"
+            font-weight="600"
+            letter-spacing="3.5"
+          >COPY</text>
+        </g>
+      </svg>
+    </div>
+
+    <section class="problem" aria-labelledby="problem-heading">
+      <h2 id="problem-heading">The problem</h2>
+      <p>
+        Beef passes through several stages and organizations before it reaches the consumer. During this process, buyers, restaurants, retailers, and other businesses depend on inspection records to confirm that the meat has been properly inspected and is safe for sale. A major concern is that inspection documents can be altered, copied, or falsely created, making it difficult to confirm whether the information is genuine. As a result, businesses or consumers could unknowingly purchase beef with unreliable or missing inspection information. This may lead to health and safety concerns, financial losses, product recalls, and loss of trust in the beef supply chain. The current verification process can also be time-consuming because information may be maintained by different organizations. A dependable method of verifying inspection records and tracking the history of beef products is therefore needed.
+      </p>
+    </section>
+  </main>
+</body>
+</html>
