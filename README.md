@@ -1,4 +1,4 @@
-# project-tbd
+# chuck-and-verify
 
 Team project for smart contracts, tests, scripts, and docs.
 ## Project Overview

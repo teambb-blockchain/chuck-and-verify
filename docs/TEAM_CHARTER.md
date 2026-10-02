@@ -4,7 +4,7 @@
 
 ## Purpose
 
-Define how this team collaborates on project-tbd: goals, roles, communication, and quality expectations.
+Define how this team collaborates on chuck-and-verify: goals, roles, communication, and quality expectations.
 
 ## Goals
 

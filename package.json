@@ -1,5 +1,5 @@
 {
-  "name": "project-tbd",
+  "name": "chuck-and-verify",
   "version": "1.0.0",
   "description": "Team project for smart contracts, tests, scripts, and docs.",
   "main": "index.js",
@@ -14,16 +14,16 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/teambb-blockchain/project-tbd.git"
+    "url": "git+https://github.com/teambb-blockchain/chuck-and-verify.git"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
   "bugs": {
-    "url": "https://github.com/teambb-blockchain/project-tbd/issues"
+    "url": "https://github.com/teambb-blockchain/chuck-and-verify/issues"
   },
-  "homepage": "https://github.com/teambb-blockchain/project-tbd#readme",
+  "homepage": "https://github.com/teambb-blockchain/chuck-and-verify#readme",
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^6.1.2",
     "dotenv": "^17.4.2",
