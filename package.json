@@ -8,6 +8,7 @@
     "test": "test"
   },
   "scripts": {
+    "start": "node index.js",
     "test": "hardhat test",
     "compile": "hardhat compile"
   },
