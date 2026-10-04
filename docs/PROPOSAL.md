@@ -72,7 +72,7 @@ Custody handoffs are confirmed when the receiving party scans the batch's QR cod
 | TBD | TBD |
 
 ## Success criteria
-- The deployed contract records beef batch registration, USDA inspection, custody handoffs, and recalls.
+- The deployed contract records beef batch registration, USDA inspection, custody handoffs, temperature monitoring and recalls.
 - Only authorized participants can perform restricted actions.
 - Failed or recalled batches cannot be transferred further.
 - Custody handoffs can be confirmed through the simulated QR scan.
