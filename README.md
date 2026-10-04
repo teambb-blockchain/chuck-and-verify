@@ -19,7 +19,8 @@ Confidential business information such as pricing, sales data, employee informat
 | `docs/` | Proposal and team charter |
 | `docs/architecture/` | High-level system design notes |
 | `docs/decisions/` | Architecture Decision Records (one file per decision) |
-| `frontend/` | Client UI (empty for now) |
+| `frontend/` | Public project page (`/frontend/` on the DIDLab host) |
+| `index.html` | Tiny redirect from `/` to `/frontend/index.html` (nginx web root is the repo root) |
 
 ## Setup
 
@@ -27,6 +28,12 @@ Confidential business information such as pricing, sales data, employee informat
 2. Install dependencies: `npm install`
 3. Compile: `npm run compile`
 4. Test: `npm test`
+
+## Run the project page locally
+
+Open `frontend/index.html` in a browser.
+
+On the DIDLab host, nginx serves the repo checkout. Today `/frontend/index.html` works; `/` is still 403 until the root `index.html` redirect is deployed.
 
 ## Environment
 
