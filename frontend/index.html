@@ -127,6 +127,23 @@
       margin: 0;
     }
 
+    .problem .cite {
+      margin-top: 1.25rem;
+      font-size: 0.95rem;
+      line-height: 1.5;
+    }
+
+    .problem .cite a {
+      color: var(--ink);
+      text-underline-offset: 0.15em;
+      overflow-wrap: anywhere;
+    }
+
+    .problem .cite a:focus-visible {
+      outline: 2px solid var(--seal);
+      outline-offset: 2px;
+    }
+
     @media (max-width: 560px) {
       .sheet { padding-top: 1.75rem; }
 
@@ -192,7 +209,12 @@
     <section class="problem" aria-labelledby="problem-heading">
       <h2 id="problem-heading">The problem</h2>
       <p>
-        Beef passes through several stages and organizations before it reaches the consumer. During this process, buyers, restaurants, retailers, and other businesses depend on inspection records to confirm that the meat has been properly inspected and is safe for sale. A major concern is that inspection documents can be altered, copied, or falsely created, making it difficult to confirm whether the information is genuine. As a result, businesses or consumers could unknowingly purchase beef with unreliable or missing inspection information. This may lead to health and safety concerns, financial losses, product recalls, and loss of trust in the beef supply chain. The current verification process can also be time-consuming because information may be maintained by different organizations. A dependable method of verifying inspection records and tracking the history of beef products is therefore needed.
+        Beef passes through several stages and organizations before it reaches the consumer. During this process, distributors, retailers, restaurants, and consumers depend on inspection records to confirm that the meat has been properly inspected and is safe for consumption. A major concern is that inspection records can be altered, forged, or falsely claimed, making it difficult to confirm whether the information is genuine. In September 2026, FSIS issued a Class I recall due to the false mark of USDA inspection on over 167,000 pounds of meat products (U.S. Department of Agriculture, Food Safety and Inspection Service, 2026). Because of this false mark, retailers and restaurants unknowingly purchased meat with unreliable inspection information to sell to consumers. Another important component of beef safety is temperature during storage and transport. The FSIS issues standards for the safe temperature for beef storage and transport, but adherence to these standards is not independently verifiable by other custodians outside of the time of handoff. When a custodian has possession of the beef, they are both liable and self-reporting on the supply chain status and safety, giving them incentive for falsifying the claims they create and control without options for other parties to verify these claims. These factors can lead to health and safety concerns, financial losses, disruption from product recalls, and overall loss of trust in the beef supply chain by consumers. A method that is tamper-evident and independently verifiable for inspections, custody, and temperature is needed.
+      </p>
+      <p class="cite">
+        U.S. Department of Agriculture, Food Safety and Inspection Service. (2026, September 22).
+        <cite>Star Meat Delivery Inc. recalls raw pork, beef, and goat products produced without the benefit of inspection</cite>.
+        <a href="https://www.fsis.usda.gov/recalls-alerts/star-meat-delivery-inc--recalls-raw-pork-beef-and-goat-products-produced-without">https://www.fsis.usda.gov/recalls-alerts/star-meat-delivery-inc--recalls-raw-pork-beef-and-goat-products-produced-without</a>
       </p>
     </section>
   </main>
