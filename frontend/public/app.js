@@ -40,8 +40,16 @@ function setStatus(before, hash, after = "") {
   if (after) el.append(after);
 }
 
-const block = await publicClient.getBlockNumber();
-$("network").textContent = `chain 252501 · block ${block}`;
+// Don't block the rest of module init on RPC — a hung getBlockNumber()
+// left #state stuck on the HTML "loading…" placeholder forever.
+publicClient.getBlockNumber()
+  .then((block) => {
+    $("network").textContent = `chain 252501 · block ${block}`;
+  })
+  .catch((err) => {
+    $("network").textContent =
+      `network: unreachable — ${err.shortMessage ?? err.message}`;
+  });
 
 let walletClient = null;
 let account = null;
