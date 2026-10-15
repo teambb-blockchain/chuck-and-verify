@@ -79,3 +79,11 @@ Add an entry whenever AI tools help with architecture, code, docs, or debugging 
 - **Outcome:** Added `setIssuer` (admin-only) and `issuerOf` mapping; `grant`/`revoke` now require `msg.sender == issuerOf[credentialType]`. Rewrote CredentialRegistry tests for cross-type isolation, revoke, and expiry; BeefSupplyChain tests set admin as issuer for all three types before granting.
 - **Verification:** `npm test` — 28 passing (BeefSupplyChain, CredentialRegistry, ProjectAnchor)
 - **What it got wrong:** Nothing found
+
+### 2026-10-15 — DIDLab deploy/setup scripts for BeefSupplyChain
+
+- **Tool:** Cursor agent
+- **Request:** Mirror `deploy-credential-registry.mjs` to cover BeefSupplyChain deploy plus post-deploy `setIssuer` / `grant` setup; later, review and tighten `.env.example`
+- **Outcome:** Added `scripts/deploy-beef-supply-chain.mjs` (`npm run deploy:supply-chain`, requires `CREDENTIAL_REGISTRY_ADDRESS`) and `scripts/setup-credential-registry.mjs` (`npm run setup:registry`: admin sets issuer for all three types, grants demo holders, verifies `isValid`). Updated README deploy steps and `docs/references/notes.md` placeholders. Rewrote `.env.example` so Hardhat-safe vars are uncommented (`DIDLAB_RPC_URL`, `PORT`, `CREDENTIAL_REGISTRY_ADDRESS`), optional `DEMO_*` / TTL stay commented, and `DIDLAB_PRIVATE_KEY` is documented as shell-export only (no assignment line), with a note that plain Node deploy scripts do not load `.env`.
+- **Verification:** Scripts not run against DIDLab in this session (need shell-exported key); artifacts already present from prior compile; `.env.example` checked against README and script `process.env` usage
+- **What it got wrong:** First `.env.example` pass left every line commented and still showed a private-key assignment; fixed in the tighten pass

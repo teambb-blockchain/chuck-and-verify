@@ -24,23 +24,41 @@ Confidential business information such as pricing, sales data, employee informat
 
 ## Setup
 
-1. Copy `.env.example` to `.env` and fill in `DEPLOYER_KEY` when you need to deploy. Leave it empty for local compile and test.
-2. Install dependencies: `npm install`
-3. Compile: `npm run compile`
-4. Test: `npm test`
+1. Install dependencies: `npm install`
+2. Compile: `npm run compile`
+3. Test: `npm test`
+
+## Deploy to DIDLab
+
+Credentials come from the shell only. Never write a private key to `.env`, the repo, or any other file. Use a disposable DIDLab lab wallet with enough TRUST for gas.
+
+```bash
+npx hardhat compile
+export DIDLAB_RPC_URL=https://eth.didlab.org
+export DIDLAB_PRIVATE_KEY='0x…'   # 64 hex chars after 0x — not your wallet address
+
+# 1) CredentialRegistry
+npm run deploy:registry
+export CREDENTIAL_REGISTRY_ADDRESS='0x…'   # printed Contract: line
+
+# 2) BeefSupplyChain (points at that registry)
+npm run deploy:supply-chain
+
+# 3) Issuers + demo credentials (admin key; defaults holders to the deployer)
+npm run setup:registry
+# Optional role wallets:
+# export DEMO_PROCESSOR='0x…'
+# export DEMO_INSPECTOR='0x…'
+# export DEMO_CUSTODIAN='0x…'
+```
+
+Each deploy script prints the deployer address, contract address, and deployment transaction hash. Confirm them in the [DIDLab explorer](https://explorer.didlab.org). Record addresses in `docs/references/notes.md`.
 
 ## Run the project page locally
 
 Open `frontend/index.html` in a browser.
 
 On the DIDLab host, nginx serves the repo checkout. Today `/frontend/index.html` works; `/` is still 403 until the root `index.html` redirect is deployed.
-
-## Environment
-
-See `.env.example` for required variables:
-
-- `DIDLAB_RPC` — RPC endpoint
-- `DEPLOYER_KEY` — deployer private key (never commit the real value)
 
 ## Team docs
 

@@ -10,7 +10,10 @@
   "scripts": {
     "start": "node index.js",
     "test": "hardhat test",
-    "compile": "hardhat compile"
+    "compile": "hardhat compile",
+    "deploy:registry": "node scripts/deploy-credential-registry.mjs",
+    "deploy:supply-chain": "node scripts/deploy-beef-supply-chain.mjs",
+    "setup:registry": "node scripts/setup-credential-registry.mjs"
   },
   "repository": {
     "type": "git",
@@ -26,7 +29,9 @@
   "homepage": "https://github.com/teambb-blockchain/chuck-and-verify#readme",
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^6.1.2",
-    "dotenv": "^17.4.2",
     "hardhat": "^2.29.1"
+  },
+  "dependencies": {
+    "ethers": "^6.17.0"
   }
 }

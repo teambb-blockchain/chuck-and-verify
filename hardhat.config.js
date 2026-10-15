@@ -1,5 +1,4 @@
 require("@nomicfoundation/hardhat-toolbox");
-require("dotenv").config();
 
 module.exports = {
   solidity: {
@@ -9,10 +8,10 @@ module.exports = {
   networks: {
     hardhat: {},
     didlab: {
-      url: process.env.DIDLAB_RPC || "https://eth.didlab.org",
+      url: process.env.DIDLAB_RPC_URL || "https://eth.didlab.org",
       chainId: 252501,
-      accounts: process.env.DEPLOYER_KEY
-        ? [process.env.DEPLOYER_KEY]
+      accounts: process.env.DIDLAB_PRIVATE_KEY
+        ? [process.env.DIDLAB_PRIVATE_KEY]
         : [],
     },
   },
