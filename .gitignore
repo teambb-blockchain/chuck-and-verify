@@ -2,6 +2,7 @@ node_modules/
 .env
 artifacts/
 cache/
+docs/references/*
 
 # TypeChain files
 /typechain

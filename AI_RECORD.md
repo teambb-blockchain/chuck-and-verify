@@ -63,3 +63,19 @@ Add an entry whenever AI tools help with architecture, code, docs, or debugging 
 - **Outcome:** Live probes showed `/` as nginx 403 and `/frontend/index.html` as 200 with the project page. Inferred the host docroot is the repo checkout (URL paths match tree paths; no nginx config inspected). Added repo-root `index.html` that redirects to `/frontend/index.html`; kept the full page in `frontend/index.html`. Kept `index.js` / `npm start` for local serving and any host path that still expects `/srv/app/index.js`. Root fix not live until deploy — `/` still 403.
 - **Verification:** `curl` on live host: `/` body identifies `nginx/1.24.0 (Ubuntu)`; `/frontend/index.html` returns 200 with project content. Cloudflare is the edge `Server` header. Local root file is a redirect, not the full page.
 - **What it got wrong:** Oct 2 entry treated Node as what answered the public HTTPS URL. Proven wrong by the nginx 403 page. That Node served locally was verified; that it served teambb.didlab.org was not.
+
+### 2026-10-15 — Supply-chain skeleton and credential registry scaffold
+
+- **Tool:** Cursor agent
+- **Request:** Implement checkpoint deliverable #3 (supply-chain contract skeleton) with a minimal CredentialRegistry so each write can check `isValid`
+- **Outcome:** Added `ICredentialRegistry`, `CredentialRegistry` (admin grant/revoke/isValid with expiry and revocation), and `BeefSupplyChain` with `registerBatch`, `recordInspection`, `recordShipment`, `confirmReceipt`, and `recordRecall`, each gated on PROCESSOR / INSPECTOR / CUSTODIAN credentials. Added Hardhat tests for authorized and unauthorized writes plus registry revoke/expiry cases.
+- **Verification:** `npm test` — 21 passing (BeefSupplyChain, CredentialRegistry, ProjectAnchor)
+- **What it got wrong:** Nothing found; registry uses a single admin issuer (issuer-per-type left for Britt’s follow-up on deliverable #2)
+
+### 2026-10-15 — CredentialRegistry issuer-per-type
+
+- **Tool:** Cursor agent
+- **Request:** Implement checkpoint deliverable #2: issuers grant and revoke only their own credential type; `isValid` checks expiry and revocation
+- **Outcome:** Added `setIssuer` (admin-only) and `issuerOf` mapping; `grant`/`revoke` now require `msg.sender == issuerOf[credentialType]`. Rewrote CredentialRegistry tests for cross-type isolation, revoke, and expiry; BeefSupplyChain tests set admin as issuer for all three types before granting.
+- **Verification:** `npm test` — 28 passing (BeefSupplyChain, CredentialRegistry, ProjectAnchor)
+- **What it got wrong:** Nothing found
