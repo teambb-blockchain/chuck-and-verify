@@ -2,7 +2,7 @@ const http = require("http");
 const fs = require("fs");
 const path = require("path");
 
-const root = path.join(__dirname, "frontend");
+const root = path.join(__dirname, "frontend", "public");
 const port = Number(process.env.PORT) || 3000;
 
 const types = {

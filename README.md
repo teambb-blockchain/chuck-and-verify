@@ -19,8 +19,9 @@ Confidential business information such as pricing, sales data, employee informat
 | `docs/` | Proposal and team charter |
 | `docs/architecture/` | High-level system design notes |
 | `docs/decisions/` | Architecture Decision Records (one file per decision) |
-| `frontend/` | Public project page (`/frontend/` on the DIDLab host) |
-| `index.html` | Tiny redirect from `/` to `/frontend/index.html` (nginx web root is the repo root) |
+| `frontend/` | DApp UI: Express server (`server.js`) + static assets in `public/` |
+| `frontend/public/project-page.html` | Earlier Team BB marketing page (preserved) |
+| `index.html` | Same DApp shell as `frontend/public/index.html` for nginx: URL stays `/`; scripts load from `/frontend/public/` |
 
 ## Setup
 
@@ -54,11 +55,17 @@ npm run setup:registry
 
 Each deploy script prints the deployer address, contract address, and deployment transaction hash. Confirm them in the [DIDLab explorer](https://explorer.didlab.org). Record addresses in `docs/references/notes.md`.
 
-## Run the project page locally
+## Run the frontend locally
 
-Open `frontend/index.html` in a browser.
+```bash
+cd frontend
+npm install
+npm start
+```
 
-On the DIDLab host, nginx serves the repo checkout. Today `/frontend/index.html` works; `/` is still 403 until the root `index.html` redirect is deployed.
+Open `http://localhost:3000`. The server binds to `process.env.PORT` or `3000`. On DIDLab, the Node app entry point is `frontend/server.js` (serves `public/` at `/`).
+
+If the host is nginx over the repo checkout instead, root `index.html` is the page at `/` (address bar stays `/`); it loads `/frontend/public/app.js`. Keep root `index.html` in sync with `frontend/public/index.html` when the shell markup changes (script `src` differs: absolute vs relative).
 
 ## Team docs
 

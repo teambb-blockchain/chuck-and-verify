@@ -87,3 +87,84 @@ Add an entry whenever AI tools help with architecture, code, docs, or debugging 
 - **Outcome:** Added `scripts/deploy-beef-supply-chain.mjs` (`npm run deploy:supply-chain`, requires `CREDENTIAL_REGISTRY_ADDRESS`) and `scripts/setup-credential-registry.mjs` (`npm run setup:registry`: admin sets issuer for all three types, grants demo holders, verifies `isValid`). Updated README deploy steps and `docs/references/notes.md` placeholders. Rewrote `.env.example` so Hardhat-safe vars are uncommented (`DIDLAB_RPC_URL`, `PORT`, `CREDENTIAL_REGISTRY_ADDRESS`), optional `DEMO_*` / TTL stay commented, and `DIDLAB_PRIVATE_KEY` is documented as shell-export only (no assignment line), with a note that plain Node deploy scripts do not load `.env`.
 - **Verification:** Scripts not run against DIDLab in this session (need shell-exported key); artifacts already present from prior compile; `.env.example` checked against README and script `process.env` usage
 - **What it got wrong:** First `.env.example` pass left every line commented and still showed a private-key assignment; fixed in the tighten pass
+
+### 2026-10-15 — DApp vertical slice activity 01 (local frontend server)
+
+- **Tool:** Cursor agent
+- **Request:** Start Guided Lab activity 01 from `docs/references/DApp Vertical Slice.html`; match the listed example code and `frontend/` hierarchy
+- **Outcome:** Added `frontend/package.json`, `frontend/server.js` (Express static on `PORT`/`3000`), and `frontend/public/{index.html,abi.js,app.js}` from the lab examples (`abi.js`/`app.js` stubs for later activities). Moved the prior marketing page to `frontend/public/project-page.html`. Pointed root `index.js` at `frontend/public` so repo-root `npm start` still serves the static tree.
+- **Verification:** `cd frontend && npm install && npm start` printed `listening on 3000`; `curl` of `/` returned the lab page and `/app.js` / `/abi.js` were 200
+- **What it got wrong:** Nothing found
+
+### 2026-10-15 — DApp vertical slice activity 02 (export ABI)
+
+- **Tool:** Cursor agent
+- **Request:** Activity 02 — export contract ABI via the lab shell one-liner; heed Watch out (regenerate on contract change) and Expected (`export const abi = [`)
+- **Outcome:** Ran the lab `node -e` command with `BeefSupplyChain` (not the placeholder `YourContract`) writing `frontend/public/abi.js`. Freed leftover process on port 3000 from activity 01.
+- **Verification:** File begins `export const abi = [`; ABI includes writes (`registerBatch`, `recordInspection`, `recordShipment`, `confirmReceipt`, `recordRecall`), read (`getBatch`, `registry`, credential constants), and events (`BatchRegistered`, `InspectionRecorded`, …)
+- **What it got wrong:** Nothing found; Watch out called out that a stale ABI encodes cleanly then fails on chain — regenerate after every contract change / recompile
+
+### 2026-10-15 — DApp vertical slice activity 03 (read chain, no wallet)
+
+- **Tool:** Cursor agent
+- **Request:** Activity 03 — write `frontend/public/app.js` from the lab example (viem public client, DIDLab chain, block number into `#network`)
+- **Outcome:** Replaced the stub with the lab imports/setup; set `CONTRACT` to BeefSupplyChain `0x981aE7CcD177a5F137CF49Eed2CA7122B3F783D8` from `docs/references/notes.md` (not the placeholder)
+- **Verification:** Two `eth_blockNumber` RPCs to `https://eth.didlab.org` ~2s apart returned increasing hex block numbers (chain is live). Browser Expected (reload shows rising block) needs a local `npm start` + page load
+- **What it got wrong:** Nothing found
+
+### 2026-10-15 — DApp vertical slice activity 04 (wallet connect + chain guard)
+
+- **Tool:** Cursor agent
+- **Request:** Activity 04 — append connect/guard logic to `app.js`
+- **Outcome:** Appended lab code: `connect()` via `createWalletClient` + `custom(window.ethereum)`, request address, switch/add DIDLab (252501) on mismatch (4902 → `addChain`), enable Submit only after connect; reload on `chainChanged` / `accountsChanged`
+- **Verification:** Code matches lab snippet; browser Expected (Connect opens wallet, address shown, Submit enabled) requires MetaMask on DIDLab against the running `npm start` page
+- **What it got wrong:** Nothing found
+
+### 2026-10-15 — DApp vertical slice activity 05 (read + render state)
+
+- **Tool:** Cursor agent
+- **Request:** Activity 05 — append `loadState()` / render into `#state`
+- **Outcome:** First pass used `registry` (lab placeholder was `current`). Review against `CHECKPOINT_REPORT.md` showed that is admin plumbing, not the operational read consumers need. Rewired to `getBatch(keccak256(batchLabel))` with labeled fields; **Load batch** works without a wallet
+- **Verification:** Live `getBatch` on unknown id reverts `BatchNotFound()`
+- **What it got wrong:** First chose `registry` for a no-arg lab fit; corrected to match Chuck and Verify batch lineage (§4–§5)
+
+### 2026-10-15 — DApp vertical slice activity 06 (simulate before send)
+
+- **Tool:** Cursor agent
+- **Request:** Activity 06 — append `buildArgs` / `simulate`
+- **Outcome:** Lab `anchor` → `registerBatch`; args `[keccak256(batchLabel), 1000n]` (demo weight). `simulateContract` uses connected `account` so Unauthorized / EmptyBatchId / BatchAlreadyExists surface before gas
+- **Verification:** Code appended; end-to-end simulate needs Connect as PROCESSOR (demo grants in notes). Submit wiring is activity 07
+- **What it got wrong:** Nothing found
+
+### 2026-10-15 — DApp vertical slice activity 07 (send + wait for receipt)
+
+- **Tool:** Cursor agent
+- **Request:** Activity 07 — append `submit()` and wire the Submit button
+- **Outcome:** Lab flow unchanged: simulate → `walletClient.writeContract(request)` → `waitForTransactionReceipt`; status line shows simulating / awaiting signature / pending hash / receipt status+block+gas. Uses existing `registerBatch` simulate
+- **Verification:** Code matches lab; browser Expected needs PROCESSOR wallet on DIDLab, unique batch id, approve in MetaMask, then confirm hash on explorer
+- **What it got wrong:** Nothing found
+
+### 2026-10-15 — DApp vertical slice activity 08 (four outcomes)
+
+- **Tool:** Cursor agent
+- **Request:** Activity 08 — replace `submit()` with pending / confirmed / reverted / rejected handling
+- **Outcome:** Replaced submit with lab try/catch/finally: disable button while in flight; map `UserRejectedRequestError` and simulation `ContractFunctionRevertedError`; distinguish receipt `reverted` vs `confirmed`
+- **Verification:** Code matches lab. Browser: duplicate batch id or empty → `would revert: …`; Reject in wallet → cancelled; happy path → confirmed. On-chain revert screenshot needs console bypass (adapted): `registerBatch` + `args: [zeroHash, 1000n]` + manual `gas` (EmptyBatchId)
+- **What it got wrong:** Console bypass cannot see ES module locals; exposed `globalThis.dapp` so the lab snippet works after Connect
+
+### 2026-10-15 — DApp vertical slice activity 09 (re-render from events)
+
+- **Tool:** Cursor agent
+- **Request:** Activity 09 — append `watchContractEvent` so Current state / Activity refresh from the chain
+- **Outcome:** Lab `CommitmentAnchored` → `BatchRegistered`. On logs: prepend Activity list item, then `loadState()` — not called from `submit`
+- **Verification:** Code matches lab pattern; Expected needs a successful `registerBatch` then a short poll delay (HTTP transport). Teammate writes on same contract should update this page too
+- **What it got wrong:** Nothing found
+
+### 2026-10-15 — DApp vertical slice activity 10 (prove it does not lie)
+
+- **Tool:** Cursor agent
+- **Request:** Activity 10 — verify state updates are event-driven only; failed tx must not change Current state
+- **Outcome:** Confirmed `submit()` never calls `loadState()` (`loadState` only from Load/Enter, initial load, and `BatchRegistered` watcher). No code change required
+- **Verification:** Static check of `app.js` call sites. Browser Part D: note state → run Activity 8 on-chain revert console snippet → status shows failure, Current state and Activity list unchanged (no `BatchRegistered`)
+- **What it got wrong:** Lab Expected says status reports failure, but the console bypass never touches the DOM — so after DEMO-LOT-1 load the whole UI looked frozen. That is correct for Current state/Activity (no event). Exposed `setStatus` on `dapp` so a console snippet can update status without calling `loadState`
+

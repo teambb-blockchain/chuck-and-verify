@@ -1,13 +1,32 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta http-equiv="refresh" content="0; url=/frontend/index.html">
-  <link rel="canonical" href="/frontend/index.html">
-  <title>Chuck and Verify — Team BB</title>
-  <script>location.replace("/frontend/index.html");</script>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Project</title>
 </head>
 <body>
-  <p><a href="/frontend/index.html">Chuck and Verify — Team BB</a></p>
+  <h1>Project</h1>
+
+  <p id="network">network: checking…</p>
+  <p id="account">wallet: not connected</p>
+  <button id="connect">Connect wallet</button>
+
+  <h2>Current state</h2>
+  <pre id="state">loading…</pre>
+
+  <h2>Act</h2>
+  <input id="input" placeholder="value to submit" />
+  <button id="submit" disabled>Submit</button>
+
+  <h2>Status</h2>
+  <pre id="status">idle</pre>
+
+  <h2>Activity</h2>
+  <ul id="events"></ul>
+
+  <!-- Absolute path: nginx docroot is the repo root, so `/` stays on this file
+       while modules still load from frontend/public/. -->
+  <script type="module" src="/frontend/public/app.js"></script>
 </body>
 </html>
