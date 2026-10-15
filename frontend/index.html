@@ -1,9 +1,9 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Chuck and Verify — Team BB</title>
+  <title>Chuck and Verify â€” Team BB</title>
   <meta
     name="description"
     content="Chuck and Verify: tamper-evident inspection and custody records for the beef supply chain. A project by Team BB."
@@ -217,6 +217,167 @@
         <a href="https://www.fsis.usda.gov/recalls-alerts/star-meat-delivery-inc--recalls-raw-pork-beef-and-goat-products-produced-without">https://www.fsis.usda.gov/recalls-alerts/star-meat-delivery-inc--recalls-raw-pork-beef-and-goat-products-produced-without</a>
       </p>
     </section>
+
+<section id="blockchain" style="margin-top:3rem; border-top:4px solid #ffd52f; padding-top:1.5rem;">
+  <h2>Live Beef Batch Verification</h2>
+
+  <p>
+    Verify a registered beef batch directly against the
+    DIDLab blockchain (Chain ID: 252501).
+  </p>
+
+  <button id="connectWallet" type="button">
+    Connect MetaMask
+  </button>
+
+  <p id="walletStatus">Wallet not connected</p>
+
+  <label for="batchId">Batch ID:</label>
+  <input id="batchId" value="BEEF-001" />
+
+  <button id="verifyBatch" type="button">
+    Verify Batch
+  </button>
+
+  <p id="verificationStatus" role="status"></p>
+
+  <div id="batchResult" hidden>
+    <h3>Blockchain Batch Record</h3>
+    <p><strong>Batch ID:</strong> <span id="resultId"></span></p>
+    <p><strong>Weight:</strong> <span id="resultWeight"></span></p>
+    <p><strong>Processor:</strong> <span id="resultProcessor"></span></p>
+    <p><strong>Current Holder:</strong> <span id="resultHolder"></span></p>
+    <p><strong>Inspected:</strong> <span id="resultInspected"></span></p>
+    <p><strong>Inspection Passed:</strong> <span id="resultPassed"></span></p>
+    <p><strong>Recalled:</strong> <span id="resultRecalled"></span></p>
+  </div>
+</section>
+
   </main>
+
+<script type="module">
+  import {
+    createPublicClient,
+    createWalletClient,
+    custom,
+    http,
+    stringToHex
+  } from "https://esm.sh/viem@2";
+
+  const chain = {
+    id: 252501,
+    name: "DIDLab Blockchain",
+    nativeCurrency: {
+      name: "TRUST",
+      symbol: "TRUST",
+      decimals: 18
+    },
+    rpcUrls: {
+      default: { http: ["https://eth.didlab.org"] }
+    }
+  };
+
+  const contractAddress =
+    "0x20bA1c398CD59b05dA4427162bdA7F26d5AB802e";
+
+  const abi = [
+    {
+      type: "function",
+      name: "getBatch",
+      stateMutability: "view",
+      inputs: [
+        { name: "batchId", type: "bytes32" }
+      ],
+      outputs: [
+        { name: "processor", type: "address" },
+        { name: "weightLbs", type: "uint256" },
+        { name: "currentHolder", type: "address" },
+        { name: "pendingReceiver", type: "address" },
+        { name: "inspected", type: "bool" },
+        { name: "inspectionPassed", type: "bool" },
+        { name: "inspectionReportHash", type: "bytes32" },
+        { name: "recalled", type: "bool" },
+        { name: "recallNoticeHash", type: "bytes32" },
+        { name: "recallClassification", type: "uint8" }
+      ]
+    }
+  ];
+
+  const publicClient = createPublicClient({
+    chain,
+    transport: http()
+  });
+
+  const walletStatus = document.getElementById("walletStatus");
+  const verificationStatus =
+    document.getElementById("verificationStatus");
+
+  document.getElementById("connectWallet").onclick = async () => {
+    if (!window.ethereum) {
+      walletStatus.textContent = "MetaMask is not installed.";
+      return;
+    }
+
+    try {
+      const walletClient = createWalletClient({
+        chain,
+        transport: custom(window.ethereum)
+      });
+
+      const [account] = await walletClient.requestAddresses();
+      const currentChainId = await walletClient.getChainId();
+
+      if (currentChainId !== 252501) {
+        walletStatus.textContent =
+          "Wrong network. Switch MetaMask to DIDLab (252501).";
+        return;
+      }
+
+      walletStatus.textContent = "Connected: " + account;
+    } catch (error) {
+      walletStatus.textContent = "Wallet connection failed: " + error.message;
+    }
+  };
+
+  document.getElementById("verifyBatch").onclick = async () => {
+    const batchName = document.getElementById("batchId").value.trim();
+    const result = document.getElementById("batchResult");
+
+    result.hidden = true;
+    verificationStatus.textContent = "Reading DIDLab blockchain...";
+
+    try {
+      const batchId = stringToHex(batchName, { size: 32 });
+
+      const batch = await publicClient.readContract({
+        address: contractAddress,
+        abi,
+        functionName: "getBatch",
+        args: [batchId]
+      });
+
+      document.getElementById("resultId").textContent = batchName;
+      document.getElementById("resultProcessor").textContent = batch[0];
+      document.getElementById("resultWeight").textContent =
+        batch[1].toString() + " lbs";
+      document.getElementById("resultHolder").textContent = batch[2];
+      document.getElementById("resultInspected").textContent =
+        batch[4] ? "Yes" : "No";
+      document.getElementById("resultPassed").textContent =
+        batch[5] ? "Yes" : "No";
+      document.getElementById("resultRecalled").textContent =
+        batch[7] ? "Yes" : "No";
+
+      result.hidden = false;
+      verificationStatus.textContent =
+        "Verified against DIDLab blockchain.";
+    } catch (error) {
+      verificationStatus.textContent =
+        "Unable to verify batch. Check the ID or network connection.";
+      console.error(error);
+    }
+  };
+</script>
+
 </body>
 </html>
