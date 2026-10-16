@@ -63,7 +63,14 @@ npm install
 npm start
 ```
 
-Open `http://localhost:3000`. The server binds to `process.env.PORT` or `3000`. On DIDLab, the Node app entry point is `frontend/server.js` (serves `public/` at `/`).
+Open `http://localhost:3000`. The server binds to `process.env.PORT` or `3000`.
+
+DIDLab runs `node /srv/app/index.js` (from `package.json` `"main"`). Use either:
+
+| App root on DIDLab | Entry file | Serves |
+|--------------------|------------|--------|
+| Repo root | `index.js` | `frontend/public/` at `/` |
+| `frontend/` | `frontend/index.js` → Express | `public/` at `/` |
 
 If the host is nginx over the repo checkout instead, root `index.html` is the page at `/` (address bar stays `/`); it loads `/frontend/public/app.js`. Keep root `index.html` in sync with `frontend/public/index.html` when the shell markup changes (script `src` differs: absolute vs relative).
 

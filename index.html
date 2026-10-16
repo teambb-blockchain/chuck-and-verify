@@ -13,7 +13,7 @@
   <button id="connect">Connect wallet</button>
 
   <h2>Current state</h2>
-  <pre id="state">loading…</pre>
+  <pre id="state">enter a batch id to load inspection, custody, and recall state</pre>
 
   <h2>Act</h2>
   <input id="input" placeholder="value to submit" />
@@ -27,6 +27,7 @@
 
   <!-- Absolute path: nginx docroot is the repo root, so `/` stays on this file
        while modules still load from frontend/public/. -->
-  <script type="module" src="/frontend/public/app.js"></script>
+  <script type="module" src="/frontend/public/app.js"
+    onerror="document.getElementById('state').textContent='failed to load /frontend/public/app.js'"></script>
 </body>
 </html>

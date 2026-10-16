@@ -13,7 +13,7 @@
   <button id="connect">Connect wallet</button>
 
   <h2>Current state</h2>
-  <pre id="state">loading…</pre>
+  <pre id="state">enter a batch id to load inspection, custody, and recall state</pre>
 
   <h2>Act</h2>
   <input id="input" placeholder="batch id" />
@@ -26,6 +26,7 @@
   <h2>Activity</h2>
   <ul id="events"></ul>
 
-  <script type="module" src="./app.js"></script>
+  <script type="module" src="./app.js"
+    onerror="document.getElementById('state').textContent='failed to load app.js'"></script>
 </body>
 </html>
