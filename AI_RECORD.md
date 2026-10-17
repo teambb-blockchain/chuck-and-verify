@@ -87,3 +87,11 @@ Add an entry whenever AI tools help with architecture, code, docs, or debugging 
 - **Outcome:** Added eight failure-path tests: rejects an empty batch id; rejects registering a batch that already exists; rejects inspecting a batch that does not exist; rejects recalling a batch that does not exist; rejects shipping to the zero address; rejects a shipment from someone who is not the current holder; rejects confirming receipt when no shipment is pending; rejects confirming receipt by someone who is not the pending receiver
 - **Verification:** `npm test` — 36 passing (BeefSupplyChain, CredentialRegistry, ProjectAnchor)
 - **What it got wrong:** Nothing found
+
+### 2026-10-16 — Live-site deployed addresses and network status
+
+- **Tool:** Cursor agent (Auto / Composer)
+- **Request:** Edit `frontend/index.html`: show deployed BeefSupplyChain and CredentialRegistry addresses with chain ID 252501; add a live network status line with four wallet/network states, `chainChanged`/`accountsChanged` listeners, numeric hex chain comparison, and a "Switch to DIDLab" button (`wallet_switchEthereumChain` with `wallet_addEthereumChain` fallback); keep batch reads on the DIDLab RPC; no explorer links (none given); append this AI_RECORD entry; do not commit
+- **Outcome:** Updated `frontend/index.html` with a Deployed contracts section (addresses as constants reused by the read path), an `aria-live` network status line plus warning styling that does not rely on color alone, live status via `eth_accounts`/`eth_chainId` and wallet event listeners (no page reload), and a wrong-network-only Switch to DIDLab button. Appended this entry.
+- **Verification:** `npm test` — 36 passing; visual inspection locally
+- **What it got wrong:** No-wallet status said "No Ethereum wallet detected" instead of "No Wallet Detected"

@@ -159,6 +159,29 @@
 
       .masthead { font-size: 1.2rem; }
     }
+
+    .network-status-warn {
+      font-weight: 600;
+      border-left: 4px solid var(--seal);
+      padding-left: 0.75rem;
+    }
+
+    #switchNetwork[hidden] { display: none; }
+
+    .deployed-contracts code {
+      font-size: 0.95rem;
+      overflow-wrap: anywhere;
+    }
+
+    .deployed-contracts a {
+      color: var(--ink);
+      text-underline-offset: 0.15em;
+    }
+
+    .deployed-contracts a:focus-visible {
+      outline: 2px solid var(--seal);
+      outline-offset: 2px;
+    }
   </style>
 </head>
 <body>
@@ -226,11 +249,27 @@
     DIDLab blockchain (Chain ID: 252501).
   </p>
 
+  <section class="deployed-contracts" aria-labelledby="deployed-contracts-heading">
+    <h3 id="deployed-contracts-heading">Deployed contracts</h3>
+    <p>Chain ID: <span id="deployedChainId">252501</span></p>
+    <p>
+      <strong>BeefSupplyChain:</strong>
+      <a id="linkBeefSupplyChain" href="#"><code id="addrBeefSupplyChain">0x20bA1c398CD59b05dA4427162bdA7F26d5AB802e</code></a>
+    </p>
+    <p>
+      <strong>CredentialRegistry:</strong>
+      <a id="linkCredentialRegistry" href="#"><code id="addrCredentialRegistry">0x9ef5cb328aE86C968dDcb1Fd60887bd021D7AB2E</code></a>
+    </p>
+  </section>
+
   <button id="connectWallet" type="button">
     Connect MetaMask
   </button>
 
-  <p id="walletStatus">Wallet not connected</p>
+  <p id="networkStatus" role="status" aria-live="polite">Checking network...</p>
+  <button id="switchNetwork" type="button" hidden>
+    Switch to DIDLab
+  </button>
 
   <label for="batchId">Batch ID:</label>
   <input id="batchId" value="BEEF-001" />
@@ -264,8 +303,26 @@
     stringToHex
   } from "https://esm.sh/viem@2";
 
+  // Addresses and chain ID live in the Deployed contracts markup once;
+  // the read path and explorer links reuse those values.
+  const EXPLORER_BASE = "https://explorer.didlab.org";
+  const REQUIRED_CHAIN_ID = Number(
+    document.getElementById("deployedChainId").textContent.trim()
+  );
+  const beefSupplyChainAddress = document
+    .getElementById("addrBeefSupplyChain")
+    .textContent.trim();
+  const credentialRegistryAddress = document
+    .getElementById("addrCredentialRegistry")
+    .textContent.trim();
+
+  document.getElementById("linkBeefSupplyChain").href =
+    EXPLORER_BASE + "/address/" + beefSupplyChainAddress;
+  document.getElementById("linkCredentialRegistry").href =
+    EXPLORER_BASE + "/address/" + credentialRegistryAddress;
+
   const chain = {
-    id: 252501,
+    id: REQUIRED_CHAIN_ID,
     name: "DIDLab Blockchain",
     nativeCurrency: {
       name: "TRUST",
@@ -276,9 +333,6 @@
       default: { http: ["https://eth.didlab.org"] }
     }
   };
-
-  const contractAddress =
-    "0x20bA1c398CD59b05dA4427162bdA7F26d5AB802e";
 
   const abi = [
     {
@@ -308,13 +362,96 @@
     transport: http()
   });
 
-  const walletStatus = document.getElementById("walletStatus");
+  const networkStatus = document.getElementById("networkStatus");
+  const switchNetworkBtn = document.getElementById("switchNetwork");
   const verificationStatus =
     document.getElementById("verificationStatus");
 
+  async function updateNetworkStatus() {
+    switchNetworkBtn.hidden = true;
+    networkStatus.classList.remove("network-status-warn");
+
+    if (!window.ethereum) {
+      networkStatus.textContent = "No Wallet Detected";
+      return;
+    }
+
+    try {
+      const accounts = await window.ethereum.request({
+        method: "eth_accounts"
+      });
+      const chainIdHex = await window.ethereum.request({
+        method: "eth_chainId"
+      });
+      const currentChainId = Number(chainIdHex);
+
+      if (!accounts || accounts.length === 0) {
+        networkStatus.textContent =
+          "Wallet detected, not connected.";
+        return;
+      }
+
+      if (currentChainId !== REQUIRED_CHAIN_ID) {
+        networkStatus.textContent =
+          "WARNING: Connected on chain " +
+          currentChainId +
+          "; required " +
+          REQUIRED_CHAIN_ID +
+          " (DIDLab).";
+        networkStatus.classList.add("network-status-warn");
+        switchNetworkBtn.hidden = false;
+        return;
+      }
+
+      networkStatus.textContent =
+        "Connected on DIDLab (" +
+        REQUIRED_CHAIN_ID +
+        "): " +
+        accounts[0];
+    } catch (error) {
+      networkStatus.textContent =
+        "Unable to read wallet network status: " + error.message;
+    }
+  }
+
+  async function switchToDidLab() {
+    if (!window.ethereum) {
+      networkStatus.textContent = "No Wallet Detected";
+      return;
+    }
+
+    const chainIdHex = "0x" + REQUIRED_CHAIN_ID.toString(16);
+
+    try {
+      await window.ethereum.request({
+        method: "wallet_switchEthereumChain",
+        params: [{ chainId: chainIdHex }]
+      });
+    } catch (error) {
+      if (error.code === 4902) {
+        await window.ethereum.request({
+          method: "wallet_addEthereumChain",
+          params: [
+            {
+              chainId: chainIdHex,
+              chainName: chain.name,
+              nativeCurrency: chain.nativeCurrency,
+              rpcUrls: chain.rpcUrls.default.http
+            }
+          ]
+        });
+      } else {
+        networkStatus.textContent =
+          "Could not switch network: " + error.message;
+      }
+    }
+
+    await updateNetworkStatus();
+  }
+
   document.getElementById("connectWallet").onclick = async () => {
     if (!window.ethereum) {
-      walletStatus.textContent = "MetaMask is not installed.";
+      await updateNetworkStatus();
       return;
     }
 
@@ -324,20 +461,28 @@
         transport: custom(window.ethereum)
       });
 
-      const [account] = await walletClient.requestAddresses();
-      const currentChainId = await walletClient.getChainId();
-
-      if (currentChainId !== 252501) {
-        walletStatus.textContent =
-          "Wrong network. Switch MetaMask to DIDLab (252501).";
-        return;
-      }
-
-      walletStatus.textContent = "Connected: " + account;
+      await walletClient.requestAddresses();
+      await updateNetworkStatus();
     } catch (error) {
-      walletStatus.textContent = "Wallet connection failed: " + error.message;
+      networkStatus.textContent =
+        "Wallet connection failed: " + error.message;
     }
   };
+
+  switchNetworkBtn.onclick = () => {
+    switchToDidLab();
+  };
+
+  updateNetworkStatus();
+
+  if (window.ethereum && window.ethereum.on) {
+    window.ethereum.on("chainChanged", () => {
+      updateNetworkStatus();
+    });
+    window.ethereum.on("accountsChanged", () => {
+      updateNetworkStatus();
+    });
+  }
 
   document.getElementById("verifyBatch").onclick = async () => {
     const batchName = document.getElementById("batchId").value.trim();
@@ -350,7 +495,7 @@
       const batchId = stringToHex(batchName, { size: 32 });
 
       const batch = await publicClient.readContract({
-        address: contractAddress,
+        address: beefSupplyChainAddress,
         abi,
         functionName: "getBatch",
         args: [batchId]
