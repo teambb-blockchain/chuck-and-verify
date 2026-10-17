@@ -65,6 +65,19 @@ describe("BeefSupplyChain", function () {
         supplyChain.connect(unauthorized).registerBatch(batchId, 1000)
       ).to.be.revertedWithCustomError(supplyChain, "Unauthorized");
     });
+
+    it("rejects an empty batch id", async function () {
+      await expect(
+        supplyChain.connect(processor).registerBatch(ethers.ZeroHash, 1000)
+      ).to.be.revertedWithCustomError(supplyChain, "EmptyBatchId");
+    });
+
+    it("rejects registering a batch that already exists", async function () {
+      await supplyChain.connect(processor).registerBatch(batchId, 1000);
+      await expect(
+        supplyChain.connect(processor).registerBatch(batchId, 1000)
+      ).to.be.revertedWithCustomError(supplyChain, "BatchAlreadyExists");
+    });
   });
 
   describe("recordInspection", function () {
@@ -94,6 +107,15 @@ describe("BeefSupplyChain", function () {
           .recordInspection(batchId, reportHash, true)
       ).to.be.revertedWithCustomError(supplyChain, "Unauthorized");
     });
+
+    it("rejects inspecting a batch that does not exist", async function () {
+      const missingId = ethers.keccak256(ethers.toUtf8Bytes("missing-batch"));
+      await expect(
+        supplyChain
+          .connect(inspector)
+          .recordInspection(missingId, reportHash, true)
+      ).to.be.revertedWithCustomError(supplyChain, "BatchNotFound");
+    });
   });
 
   describe("recordShipment", function () {
@@ -121,6 +143,22 @@ describe("BeefSupplyChain", function () {
           .recordShipment(batchId, custodianA.address)
       ).to.be.revertedWithCustomError(supplyChain, "Unauthorized");
     });
+
+    it("rejects shipping to the zero address", async function () {
+      await expect(
+        supplyChain
+          .connect(processor)
+          .recordShipment(batchId, ethers.ZeroAddress)
+      ).to.be.revertedWithCustomError(supplyChain, "ZeroAddress");
+    });
+
+    it("rejects a shipment from someone who is not the current holder", async function () {
+      await expect(
+        supplyChain
+          .connect(custodianA)
+          .recordShipment(batchId, custodianB.address)
+      ).to.be.revertedWithCustomError(supplyChain, "NotCurrentHolder");
+    });
   });
 
   describe("confirmReceipt", function () {
@@ -146,6 +184,20 @@ describe("BeefSupplyChain", function () {
         supplyChain.connect(unauthorized).confirmReceipt(batchId)
       ).to.be.revertedWithCustomError(supplyChain, "Unauthorized");
     });
+
+    it("rejects confirming receipt when no shipment is pending", async function () {
+      const unshippedId = ethers.keccak256(ethers.toUtf8Bytes("batch-unshipped"));
+      await supplyChain.connect(processor).registerBatch(unshippedId, 500);
+      await expect(
+        supplyChain.connect(processor).confirmReceipt(unshippedId)
+      ).to.be.revertedWithCustomError(supplyChain, "NoPendingShipment");
+    });
+
+    it("rejects confirming receipt by someone who is not the pending receiver", async function () {
+      await expect(
+        supplyChain.connect(custodianB).confirmReceipt(batchId)
+      ).to.be.revertedWithCustomError(supplyChain, "NotPendingReceiver");
+    });
   });
 
   describe("recordRecall", function () {
@@ -170,6 +222,13 @@ describe("BeefSupplyChain", function () {
       await expect(
         supplyChain.connect(unauthorized).recordRecall(batchId, noticeHash, 1)
       ).to.be.revertedWithCustomError(supplyChain, "Unauthorized");
+    });
+
+    it("rejects recalling a batch that does not exist", async function () {
+      const missingId = ethers.keccak256(ethers.toUtf8Bytes("missing-batch"));
+      await expect(
+        supplyChain.connect(inspector).recordRecall(missingId, noticeHash, 1)
+      ).to.be.revertedWithCustomError(supplyChain, "BatchNotFound");
     });
   });
 

@@ -79,3 +79,11 @@ Add an entry whenever AI tools help with architecture, code, docs, or debugging 
 - **Outcome:** Added `setIssuer` (admin-only) and `issuerOf` mapping; `grant`/`revoke` now require `msg.sender == issuerOf[credentialType]`. Rewrote CredentialRegistry tests for cross-type isolation, revoke, and expiry; BeefSupplyChain tests set admin as issuer for all three types before granting.
 - **Verification:** `npm test` — 28 passing (BeefSupplyChain, CredentialRegistry, ProjectAnchor)
 - **What it got wrong:** Nothing found
+
+### 2026-10-16 — BeefSupplyChain custom-error failure-path tests
+
+- **Tool:** Cursor agent
+- **Request:** Close the test gap in `test/BeefSupplyChain.test.js` by covering EmptyBatchId, BatchAlreadyExists, BatchNotFound (recordInspection plus one other), ZeroAddress, NotCurrentHolder, NoPendingShipment, and NotPendingReceiver — one custom-error assertion per test, without changing `contracts/` or `scripts/`
+- **Outcome:** Added eight failure-path tests: rejects an empty batch id; rejects registering a batch that already exists; rejects inspecting a batch that does not exist; rejects recalling a batch that does not exist; rejects shipping to the zero address; rejects a shipment from someone who is not the current holder; rejects confirming receipt when no shipment is pending; rejects confirming receipt by someone who is not the pending receiver
+- **Verification:** `npm test` — 36 passing (BeefSupplyChain, CredentialRegistry, ProjectAnchor)
+- **What it got wrong:** Nothing found
