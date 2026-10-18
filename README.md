@@ -13,7 +13,7 @@ Confidential business information such as pricing, sales data, employee informat
 
 | Path | Purpose |
 |------|---------|
-| `contracts/` | Solidity (or other) smart contracts - Example contracts: `SimpleStorage.sol`, `ProjectAnchor.sol` |
+| `contracts/` | Solidity (or other) smart contracts 
 | `test/` | Contract and integration tests |
 | `scripts/` | Deploy and utility scripts |
 | `docs/` | Proposal and team charter |
