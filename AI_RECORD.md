@@ -95,3 +95,11 @@ Add an entry whenever AI tools help with architecture, code, docs, or debugging 
 - **Outcome:** Updated `frontend/index.html` with a Deployed contracts section (addresses as constants reused by the read path), an `aria-live` network status line plus warning styling that does not rely on color alone, live status via `eth_accounts`/`eth_chainId` and wallet event listeners (no page reload), and a wrong-network-only Switch to DIDLab button. Appended this entry.
 - **Verification:** `npm test` — 36 passing; visual inspection locally
 - **What it got wrong:** No-wallet status said "No Ethereum wallet detected" instead of "No Wallet Detected"
+
+### 2026-10-18 — Merge Checkpoint 2 draft into CHECKPOINT_REPORT
+
+- **Tool:** Cursor agent (Auto / Composer)
+- **Request:** Use `docs/references/Checkpoint2 - DRAFT.md` to update `docs/CHECKPOINT_REPORT.md` and the draft itself; append this AI_RECORD entry
+- **Outcome:** Filled report §6–§8 and §15 from the draft; replaced §11–§14 with CP2 content (AI record, contributions, risks, CP3 plan). Sections 1–5 left unchanged. Completed empty draft §6/§8: deployment addresses plus creation TX hashes from the DIDLab Blockscout API, and Hardhat testing evidence (`npm test` — 32 passing after scaffold removal). Fixed draft typos (`fun` → `run`; checkpoint title Foundation → On Chain). Marked the draft as merged into the report.
+- **Verification:** Checked cited commits against `git log`; confirmed addresses match `frontend/index.html`; confirmed creation TXs via explorer API for both contracts; ran `npm test` (32 passing)
+- **What it got wrong:** Nothing found

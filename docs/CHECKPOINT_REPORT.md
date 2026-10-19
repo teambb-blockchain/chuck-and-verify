@@ -4,8 +4,8 @@ Cumulative report, maintained across the semester. Sections appear as they becom
 
 | Checkpoint | Deadline | Question |
 | :--- | :--- | :--- |
-| **1 — Foundation** | Sunday, October 4, 2026 | Is this project real, and can this team ship? |
-| 2 — On Chain | Sunday, October 18, 2026 | Does it actually touch the blockchain? |
+| 1 — Foundation | Sunday, October 4, 2026 | Is this project real, and can this team ship? |
+| **2 — On Chain** | Sunday, October 18, 2026 | Does it actually touch the blockchain? |
 | 3 — Functional | Sunday, November 8, 2026 | Can someone who is not on your team actually use it? |
 | 4 — Release Candidate | Sunday, November 29, 2026 | Is it finished? |
 
@@ -13,13 +13,13 @@ Cumulative report, maintained across the semester. Sections appear as they becom
 
 ## 1. Project identity — name, team, roles, domain, repository
 
-| | |
-| :--- | :--- |
-| **Project Name** | Chuck and Verify |
-| **Project Team** | Team BB |
-| **Team Members** | Britt Huffman ([@brittshanklin](https://github.com/brittshanklin))<br>Bhavana Sriharika Kondapalli ([@bhavana-sriharika-kondapalli](https://github.com/bhavana-sriharika-kondapalli)) |
-| **Domain** | <https://teambb.didlab.org/frontend/index.html> |
-| **Repository** | <https://github.com/teambb-blockchain/chuck-and-verify> |
+|                  |                                                                                                                                                                                    |
+| :--------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Project Name** | Chuck and Verify                                                                                                                                                                   |
+| **Project Team** | Team BB                                                                                                                                                                            |
+| **Team Members** | Britt Huffman ([@brittshanklin](https://github.com/brittshanklin)) Bhavana Sriharika Kondapalli ([@bhavana-sriharika-kondapalli](https://github.com/bhavana-sriharika-kondapalli)) |
+| **Domain**       | <https://teambb.didlab.org/frontend/index.html>                                                                                                                                    |
+| **Repository**   | <https://github.com/teambb-blockchain/chuck-and-verify>                                                                                                                            |
 
 ## 2. Problem, stakeholders, and trust boundaries
 
@@ -31,14 +31,14 @@ Beef passes through several stages and organizations before it reaches the consu
 
 ### Stakeholders
 
-| Element | Prompt | Our Answer |
-| :--- | :--- | :--- |
-| **Stakeholders** | Who acts? Name every distinct party — "the hospital" and "the insurer" and "the patient", not "users". | USDA Food Safety and Inspection Service, USDOT Federal Motor Carrier Safety Administration, US FDA, State/Local Health Departments, Beef Processor, Storage Facilities, Distributors, Carriers, Retailers, Restaurants, Consumer |
-| **Assets** | What is owned, transferred, claimed, or attested? | **Owned:** The beef batch is owned by the purchaser, and ownership changes with each sale. The temperature report during custody is owned by the custodian.<br>**Transferred:** The beef batch is transferred from sending to receiving custodians.<br>**Claimed:** The beef is claimed to be inspected and safe for consumption. The temperature during custody is claimed to be safe to the other parties by the custodian.<br>**Attested:** The processor is attested by the USDA FSIS by inspection. The carrier's vehicle and driver safety are attested by the USDOT FMCSA. The restaurant is attested by a health inspection report by the State/Local Health Inspectors. |
-| **Transactions** | What are the state-changing actions? Who initiates each? | *USDA FSIS* — grant of inspection + revocation of inspection + classification of recalls + recall notifications<br>*USDOT FMCSA* — USDOT numbers + operating authority<br>*US FDA* — audit reports<br>*State/Local Health Departments* — health inspections<br>*Beef Processors* — beef batch registration + mark of inspection + recalls<br>*Storage Facilities* — beef storage + shipping + receipt of shipment<br>*Distributors* — receipt of shipment + splitting batch into smaller lots + distribution<br>*Carriers* — transport of beef to recipient<br>*Retailers* — selling of beef lots + receipt of shipment<br>*Restaurants* — receipt of shipment + preparing for consumption |
-| **Records** | What is written down today, by whom, and where does it live? | *USDA FSIS* — grant of inspection records + revocations + pass/fail + recall classifications + notifications (federal government database)<br>*USDOT FMCSA* — USDOT numbers + licenses to operate (federal government database)<br>*US FDA* — audit records + pass/fail (federal government database)<br>*State/Local Health Inspectors* — inspection records + pass/fail (state/local government database, health notices)<br>*Beef Processors* — production and batch records (business database, paper records)<br>*Storage Facilities* — inventory, temperature, orders and deliveries (business database, paper records)<br>*Distributors* — orders, shipping and receiving status, temperature (business database, paper records)<br>*Carriers* — travel logs, arrival times, temperature (business database, paper records)<br>*Retailers* — sales (business database, paper records)<br>*Restaurants* — inventory, menu (business database, paper records)<br>*Consumer* — receipts of purchase |
-| **Current Intermediary** | Who sits in the middle today? A company, a registry, a regulator, a spreadsheet someone emails. | USDA FSIS is the intermediary for beef inspection but currently not intermediary across the supply chain for custody and temperature. |
-| **What goes wrong** | The concrete failure. Fraud, delay, cost, dispute, loss, capture. | **Fraud:** altered, forged or falsely claimed inspection records; falsified temperature readings<br>**Delay:** access to beef due to recall disruptions<br>**Cost:** financial losses due to misattributed liability or overly broad recalls<br>**Dispute:** liability for beef product loss during recall<br>**Loss:** health and wellbeing of consumers who ingest bad beef; trust in the beef supply chain by consumers |
+| Element                  | Prompt                                                                                                 | Our Answer                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| :----------------------- | :----------------------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Stakeholders**         | Who acts? Name every distinct party — "the hospital" and "the insurer" and "the patient", not "users". | USDA Food Safety and Inspection Service, USDOT Federal Motor Carrier Safety Administration, US FDA, State/Local Health Departments, Beef Processor, Storage Facilities, Distributors, Carriers, Retailers, Restaurants, Consumer                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| **Assets**               | What is owned, transferred, claimed, or attested?                                                      | **Owned:** The beef batch is owned by the purchaser, and ownership changes with each sale. The temperature report during custody is owned by the custodian. **Transferred:** The beef batch is transferred from sending to receiving custodians. **Claimed:** The beef is claimed to be inspected and safe for consumption. The temperature during custody is claimed to be safe to the other parties by the custodian. **Attested:** The processor is attested by the USDA FSIS by inspection. The carrier's vehicle and driver safety are attested by the USDOT FMCSA. The restaurant is attested by a health inspection report by the State/Local Health Inspectors.                                                                                                                                                                                                                                                                                                   |
+| **Transactions**         | What are the state-changing actions? Who initiates each?                                               | *USDA FSIS* — grant of inspection + revocation of inspection + classification of recalls + recall notifications *USDOT FMCSA* — USDOT numbers + operating authority *US FDA* — audit reports *State/Local Health Departments* — health inspections *Beef Processors* — beef batch registration + mark of inspection + recalls *Storage Facilities* — beef storage + shipping + receipt of shipment *Distributors* — receipt of shipment + splitting batch into smaller lots + distribution *Carriers* — transport of beef to recipient *Retailers* — selling of beef lots + receipt of shipment *Restaurants* — receipt of shipment + preparing for consumption                                                                                                                                                                                                                                                                                                           |
+| **Records**              | What is written down today, by whom, and where does it live?                                           | *USDA FSIS* — grant of inspection records + revocations + pass/fail + recall classifications + notifications (federal government database) *USDOT FMCSA* — USDOT numbers + licenses to operate (federal government database) *US FDA* — audit records + pass/fail (federal government database) *State/Local Health Inspectors* — inspection records + pass/fail (state/local government database, health notices) *Beef Processors* — production and batch records (business database, paper records) *Storage Facilities* — inventory, temperature, orders and deliveries (business database, paper records) *Distributors* — orders, shipping and receiving status, temperature (business database, paper records) *Carriers* — travel logs, arrival times, temperature (business database, paper records) *Retailers* — sales (business database, paper records) *Restaurants* — inventory, menu (business database, paper records) *Consumer* — receipts of purchase |
+| **Current Intermediary** | Who sits in the middle today? A company, a registry, a regulator, a spreadsheet someone emails.        | USDA FSIS is the intermediary for beef inspection but currently not intermediary across the supply chain for custody and temperature.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| **What goes wrong**      | The concrete failure. Fraud, delay, cost, dispute, loss, capture.                                      | **Fraud:** altered, forged or falsely claimed inspection records; falsified temperature readings **Delay:** access to beef due to recall disruptions **Cost:** financial losses due to misattributed liability or overly broad recalls **Dispute:** liability for beef product loss during recall **Loss:** health and wellbeing of consumers who ingest bad beef; trust in the beef supply chain by consumers                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 
 ### Trust boundaries
 
@@ -103,15 +103,44 @@ A third party with no access to any participant's private systems can verify tha
 
 ## 6. Deployment record — contract addresses, deployment transactions, chain 252501
 
-_Due at Checkpoint 2._
+Both contracts are live on DIDLab chain **252501**. Deploy script: `scripts/deploy.js` (refuses any chain other than 252501). Commit: [`83d7418`](https://github.com/teambb-blockchain/chuck-and-verify/commit/83d7418). Live page: <https://teambb.didlab.org/frontend/index.html> (Deployed contracts section).
+
+| Contract | Address | Deployment transaction |
+| :--- | :--- | :--- |
+| **BeefSupplyChain** | [`0x20bA1c398CD59b05dA4427162bdA7F26d5AB802e`](https://explorer.didlab.org/address/0x20bA1c398CD59b05dA4427162bdA7F26d5AB802e) | [`0xe7c3f5bd803f2a26cae4293658c17a9eef8d58966084901f9291036756072d89`](https://explorer.didlab.org/tx/0xe7c3f5bd803f2a26cae4293658c17a9eef8d58966084901f9291036756072d89) |
+| **CredentialRegistry** | [`0x9ef5cb328aE86C968dDcb1Fd60887bd021D7AB2E`](https://explorer.didlab.org/address/0x9ef5cb328aE86C968dDcb1Fd60887bd021D7AB2E) | [`0x0666fbae85959f573ce04400a072ffce7506f05db951a09b22a63dcc959056da`](https://explorer.didlab.org/tx/0x0666fbae85959f573ce04400a072ffce7506f05db951a09b22a63dcc959056da) |
+
+Deployer (creator) address: `0xb323821F0dFCf3b2E8727A7FBae2E34F0D4f393F`. 
+
+**Sample Batch Registration and Verification**
+We used `scripts/registerBatch.js` to register the sample batch `BEEF-001` on DIDLab chain 252501. The transaction was recorded in block 6223773.
+Transaction hash: [`0x8f33623a90575c56720bf36ad627ed668784ac5113ea82a7eeee3f6b935dc712`](https://explorer.didlab.org/tx/0x8f33623a90575c56720bf36ad627ed668784ac5113ea82a7eeee3f6b935dc712)
+
+We also checked the registered batch through the live website and confirmed that its information could be retrieved from the blockchain.
 
 ## 7. Features completed, with evidence
 
-_Due at Checkpoint 2._
+| Feature | What it does | Evidence |
+| :--- | :--- | :--- |
+| CredentialRegistry (simulated administrative chain) | Admin assigns one issuer per credential type (PROCESSOR, INSPECTOR, CUSTODIAN). That issuer alone may grant or revoke credentials of that type. `isValid` returns false when a credential is missing, revoked, or past `expiresAt`. | Contract: `contracts/CredentialRegistry.sol`, `contracts/ICredentialRegistry.sol`. Tests: `test/CredentialRegistry.test.js` — issuer-per-type isolation, revoke, and expiry. Commit: [`00680e9`](https://github.com/teambb-blockchain/chuck-and-verify/commit/00680e9) |
+| BeefSupplyChain write path | Credential-gated writes for the operational chain: `registerBatch` (processor), `recordInspection` (inspector; stores report hash + pass/fail), `recordShipment` / `confirmReceipt` (custodian; custody completes only when the pending receiver confirms), `recordRecall` (inspector; stores notice hash + classification). Unauthorized callers revert with `Unauthorized`. | Contract: `contracts/BeefSupplyChain.sol`. Tests: `test/BeefSupplyChain.test.js` — authorized and unauthorized cases for each write, plus an end-to-end register → inspect → ship → confirm → recall path and custom-error failure paths. Commits: [`00680e9`](https://github.com/teambb-blockchain/chuck-and-verify/commit/00680e9), [`845007e`](https://github.com/teambb-blockchain/chuck-and-verify/commit/845007e) |
+| Receiver-confirmed custody handoff | A shipment sets `pendingReceiver`; `currentHolder` updates only when that receiver calls `confirmReceipt`. Sender-only delivery claims are rejected (`NotCurrentHolder`, `NotPendingReceiver`, `NoPendingShipment`). | Same contract and tests as above (`recordShipment` / `confirmReceipt` describe blocks). |
+| Deployed on DIDLab (chain 252501) | Both contracts are live on the course chain and referenced by the public page. | Live page: <https://teambb.didlab.org/frontend/index.html> (Deployed contracts section). Addresses and deployment TXs in §6. Deploy script: `scripts/deploy.js`. Commit: [`83d7418`](https://github.com/teambb-blockchain/chuck-and-verify/commit/83d7418) |
+| Demo credential setup and sample batch | Scripts grant demo credentials and register batch `BEEF-001` against the deployed addresses so the verify UI has an on-chain record to read. | `scripts/setupCredentials.js`, `scripts/registerBatch.js` (hard-coded deployed addresses matching the frontend). Commit: [`83d7418`](https://github.com/teambb-blockchain/chuck-and-verify/commit/83d7418) |
+| Live beef batch verification (read path) | Anyone can look up a batch on DIDLab via the project page: wallet/network status for chain 252501, optional Switch to DIDLab, and `getBatch` over the DIDLab RPC showing processor, weight, current holder, inspection flags, and recall status. | Live: <https://teambb.didlab.org/> — section Live Beef Batch Verification; default batch id `BEEF-001`. Source: `frontend/index.html`. Commits: [`83d7418`](https://github.com/teambb-blockchain/chuck-and-verify/commit/83d7418), [`de66ed3`](https://github.com/teambb-blockchain/chuck-and-verify/commit/de66ed3) |
 
 ## 8. Testing evidence
 
-_Due at Checkpoint 2._
+| Suite | What it covers | Result |
+| :--- | :--- | :--- |
+| `test/CredentialRegistry.test.js` | Admin/`setIssuer`, issuer-per-type grant/revoke isolation, expiry and revocation making `isValid` false, zero-address and unauthorized issuer rejections | Passing under `npm test` |
+| `test/BeefSupplyChain.test.js` | Authorized and unauthorized writes for register, inspect, ship, confirm, recall; end-to-end path; custom-error failure paths (`EmptyBatchId`, `BatchAlreadyExists`, `BatchNotFound`, `ZeroAddress`, `NotCurrentHolder`, `NoPendingShipment`, `NotPendingReceiver`) | Passing under `npm test` |
+
+`npm test` currently reports **32 passing** (CredentialRegistry + BeefSupplyChain) after the course scaffold contracts and `ProjectAnchor` tests were removed [`008233c`]. Earlier in the checkpoint the same suites passed at 21, then 28, then 36 (including scaffold) as contracts and failure-path tests landed.
+
+On-chain smoke check: sample batch `BEEF-001` is readable via Live Beef Batch Verification on <https://teambb.didlab.org/> against chain 252501 and the §6 addresses.
+
+We ran npm test after updating the repository and confirmed that all 32 tests passed without errors.
 
 ## 9. Security and privacy review
 
@@ -125,22 +154,22 @@ _Due at Checkpoint 3._
 
 See also [AI_RECORD.md](../AI_RECORD.md) for the running log.
 
-| Field | Entry |
-| :--- | :--- |
-| Tools used (or "none") | Claude, ChatGPT |
-| What you asked for | **Claude:** critique of our §2 and §3 drafts (as a reviewer, not a writer), fact-checks of regulatory claims, review of our §13 risks, rendering of the trust-boundary and architecture diagrams from our own designs, and first drafts of the §4 component descriptions.<br>**ChatGPT:** research on carriers' food-safety obligations under FDA rules, and review of our §5 on-chain/off-chain decisions against the architecture and checkpoint requirements. |
-| What it produced | Feedback and guiding questions on our drafts, regulatory corrections, the two diagrams, draft component descriptions, and suggestions for organizing the on-chain/off-chain table. |
-| How you verified it | We wrote §2 and §3 ourselves and revised them using the feedback; §5 started from our own design decisions. Regulatory claims were checked against FSIS, FMCSA, and FDA sources. We checked both diagrams against our design and edited the component descriptions before including them. Design decisions stayed with the team. |
-| What it got wrong | Claude wrongly concluded that carriers have no food-safety obligations, went into more regulatory detail than this checkpoint needed, referenced a trust-boundary label we never defined, and scrambled the custody order in its first diagram layout. ChatGPT cited irrelevant links and some of its suggestions conflicted with our scope until we gave it more context. |
+| Field                  | Entry                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| :--------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Tools used (or "none") | Cursor, Claude, ChatGPT                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| What you asked for     | **Cursor agent:** implement the CP1 plan's contract deliverables: the supply-chain contract with a minimal credential registry (item 3), then issuer-per-type grant and revoke (item 2); add failure-path tests for every custom error in BeefSupplyChain; add the deployed-contract addresses and a live network status line to the site. **Claude:** audit the repository against our CP1 commitments; order the CP2 rubric by implementation cost and build a day-by-day schedule; critique the CP1 plans for decision records 0002–0004; give a staged test plan, as pseudocode, for the ESP32 signing feasibility test; draft decision records 0002–0004, the CP3 plan (§14), and this change log (§15) from our decisions. **ChatGPT:** We asked for clarification on DIDLab deployment steps, MetaMask configuration, blockchain connectivity, and GitHub commands when needed. |
+| What it produced       | **Cursor agent:** drafts of the code: ICredentialRegistry, CredentialRegistry, and BeefSupplyChain with their Hardhat tests; eight failure-path tests; the site's Deployed contracts section and network status logic. **Claude:** a status table comparing the repo to CP1 §14; a prioritized schedule; review questions on each decision record; the four-stage signing test outline; drafts of 0002–0004, §14, §15, and this section. Claude wrote these from our answers to its questions and from summaries of our earlier conversations, and left placeholders wherever it lacked facts. **ChatGPT:** Explanations, example commands, and suggestions for resolving technical issues                                                                                                                                                                                             |
+| How you verified it    | We ran `npm test` after each contract and test change (21, then 28, then 36 passing, before the scaffold ProjectAnchor tests were removed). We read the site locally at desktop width and checked each network state. We checked every factual claim in Claude's drafts against the code and git history; that check confirmed the deployed contract has no temperature write and that the DIDLab setup uses one wallet for every role. We filled in the facts Claude left as placeholders (hardware status, cut dates, the reasons for the deferral and the item 3 reassignment) and checked every cited commit hash against `git log`. Scope, ownership, and cut dates were decided by the team. **ChatGPT:** We reviewed the suggestions against our project code, ran commands in VS Code, checked blockchain transactions, and tested the live application ourselves.             |
+| What it got wrong      | **Cursor agent:** the first registry gave a single admin the power to grant every credential type, which did not meet CP1 item 2 until we asked for issuer-per-type; the site's no-wallet message used different wording from what we specified. **Claude:** its first draft of 0004 claimed the hardware "proved more involved than we planned," although no stage of the signing test had run; we replaced it with the actual reason (prioritization). Its §15 draft added a rationale for the item 3 reassignment beyond the one we gave, and assumed 0004 was merged before we had confirmed it. **ChatGPT:** Some suggestions did not match our existing setup. We identified the differences, reviewed the repository, and made the necessary corrections.                                                                                                                       |
 
 ## 12. Individual contributions
 
 | Member Name | Number of commits | What they contributed |
 | :--- | :--- | :--- |
-| Britt Huffman | 10 | Repository setup and project documentation, including the AI usage log and team charter [`4e8bbad`, `d1477ce`]; Hardhat project setup with initial contracts and tests [`549f0c2`] and cleanup of unused files [`0ae73c3`]; decision record 0001 and AI usage log entries [`5b9ff33`, `7d3ce7e`]; static frontend page, entry point, and root redirect [`5cb5fc6`, `a001134`, `c551746`]; rename from project-tbd to chuck-and-verify [`9b14b5b`] |
-| Bhavana Sriharika Kondapalli | 6 | README update [`1f90598`]; PROPOSAL.md updates with the on-chain/off-chain data decisions, temperature monitoring, project scope, and success criteria [`77ab72e`, `ec8be94`, `0ca15d1`, `e6edbba`, `dd9623a`] |
+| Britt Huffman | 5 | Both contracts and their tests, CredentialRegistry, ICredentialRegistry and BeefSupplyChain [`00680e9`]. Eight failure-path tests [`845007e`]. The site’s deployed-contracts section and live network status [`de66ed3`]. Decision records 0002–0004 [`8cca1b1`]. Removal of the scaffold contracts and their test [`008233c`]. |
+| Bhavana Sriharika Kondapalli | 2 | The deploy, credential-setup and batch-registration scripts, plus live batch verification on the site [`83d7418`]. A page-title encoding fix [`cd17603`]. |
 
-Commit counts are from `git shortlog -sn` on `main` as of the graded commit.
+Commit counts are Checkpoint 2 commits on `main` as of the graded commit (since Checkpoint 1).
 
 ## 13. Risks, blockers, and what went wrong
 
@@ -148,32 +177,45 @@ Commit counts are from `git shortlog -sn` on `main` as of the graded commit.
 
 | Risk | Impact | Mitigation |
 | :--- | :--- | :--- |
-| Scope grew in three directions (temperature, real hardware, credential registry) | Week 14 deliverables slip | Build the registry and temperature summaries on simulated inputs first before swapping in hardware once it works. Simulated inputs remain as a demo fallback. |
-| Hardware lead time and cost | Late integration | Order this week to receive earlier in the semester and borrow coolers and a Raspberry Pi. |
-| QR scanner reliability | Handoffs fail during the demo | Test the scanner on arrival after order and setup; phone cameras are the fallback scanner. |
-| DIDLab platform constraints (for example, the required URL path) | Deployment surprises | Run all tests on the local Hardhat network; document platform constraints in the README. |
+| Hardware lead time and cost | Late integration | Hardware was acquired early; begin incorporating in first week of CP3 |
+| QR scanner reliability | Handoffs fail during the demo | QR scanners tested, using cell phone cameras remain as backup |
+| DIDLab platform constraints | Deployment surprises | Deployment with cushion from deadlines, run all tests on the local Hardhat network; document platform constraints in the README. |
 
 ### Blockers
 
-- Decisions on architecture for administrative chains and file storage.
+- Decisions on architecture for temperature sensors and device authority to write on-chain.
 
 ### What went wrong
 
-- Part A was first written about our design rather than today's system. The stakeholder table and trust-boundary diagram had to be reworked once we read the rubric's "current intermediary" and "unverifiable trust" language, which resulted in significant rework.
-- Regulatory research went too deep for this checkpoint. We spent considerable time researching and verifying regulatory standards beyond what is helpful for this assignment.
-- An unverified claim initially made it into a draft based on assumptions. We initially assumed that FSIS issues recalls, which turned out to be wrong.
+- Was unable to complete the signing feasibility test; this becomes a priority for the first week of the next checkpoint.
 
 ## 14. Plan for the next checkpoint
 
 | # | Deliverable | Owner | Done when |
 | :--- | :--- | :--- | :--- |
-| 1 | Decision records 0002–0004: temperature in scope, simulated administrative chain, real sensors and scanners | Britt Huffman | Merged to main |
-| 2 | CredentialRegistry contract: issuers grant and revoke only their own credential type; `isValid` checks expiry and revocation | Britt Huffman | Tests pass, including revoked and expired cases |
-| 3 | Supply-chain contract skeleton: `registerBatch`, `recordInspection`, `recordShipment`, `confirmReceipt`, `recordRecall`, each checking the registry | Bhavana Sriharika Kondapalli | Tests pass for authorized and unauthorized writes |
-| 4 | Deploy both contracts to DIDLab | Bhavana Sriharika Kondapalli | Evidence block filled in the report |
-| 5 | Order hardware; ESP32 signing feasibility test | Britt Huffman | A signed reading verifies on chain |
-| 6 | Update PROPOSAL.md, README, and the A2 stakeholder table to the current scope | Bhavana Sriharika Kondapalli | Merged to main |
+| 1 | Sensor credential type in CredentialRegistry, with its own issuer standing in for the calibration lab (0003 follow-up) | Britt Huffman | Tests pass for grant, revoke, and expiry of a sensor credential; a wrong-type issuer cannot grant it |
+| 2 | Software signing path: a Python script signs a reading in the fixed byte layout, and a contract view function recovers the signer (0004, stages 1–3) | Britt Huffman | The recovered address matches the registered sensor key, and a tampered message, a wrong key, and an unregistered key each fail to verify; byte layout committed in one shared file. If not met, hardware is cut (0004) |
+| 3 | ESP32 signing path: the device signs the same reading layout (0004, stage 4) | Britt Huffman | Row 2's checks pass with a device-produced signature. If not met, the software signer becomes the stand-in sensor and 0004 is superseded |
+| 4 | Per-leg temperature summary write in BeefSupplyChain: min/max, time out of range, timestamp, log hash, with a sensor signature checked on chain (0002) | Bhavana Sriharika Kondapalli | Tests pass for an authorized write, an unauthorized caller, an invalid signature, and a replayed reading |
+| 5 | Redeploy to DIDLab and rerun setup with separate wallets for admin, each issuer, and each holder (0003 follow-up) | Bhavana Sriharika Kondapalli | §6 lists one transaction hash per step (register, inspect, ship, confirm, temperature, recall), each sent from the address that holds that role |
+| 6 | Site shows a batch's full history: inspection, custody chain, temperature summaries, and recall status | Bhavana Sriharika Kondapalli | Entering a batch ID on teambb.didlab.org/frontend renders every record from row 5 read from chain 252501 |
+| 7 | Update PROPOSAL.md, README, and the A2 stakeholder table to the current scope (carried from CP2) | Bhavana Sriharika Kondapalli | PROPOSAL.md scope and stretch goals match 0002–0004; README lists the deployed addresses and the commands to run the tests and the deploy |
+| 8 | Security and privacy review (§9) | Britt Huffman | §9 names each known limitation and where it is handled or accepted: single admin key, custodian-held signing key, replay, one-wallet CP2 deployment |
+| 9 | Performance measurements (§10) | Britt Huffman | §10 reports gas used for each write type, taken from the row 5 DIDLab receipts |
 
 ## 15. Change log — what changed since the previous checkpoint and why
 
-_Due at Checkpoint 2._
+### Design and scope changes
+
+- The administrative chain has two levels (0003). The admin assigns one issuer per credential type, and only that issuer can grant or revoke credentials of that type. Checkpoint 1 described the team as the administrative chain without specifying this structure.
+- Temperature stays in scope but is not on chain yet (0002). The deployed `BeefSupplyChain` has no temperature write. Any temperature claim at this checkpoint is a design commitment, not a working feature. The write is planned for CP3.
+- Real sensors and the physical QR scanner are deferred (0004). Custody is confirmed by the receiver calling `confirmReceipt` from its own credentialed address, which stands in for the scan.
+- Custody handoff became two-step. The holder records a shipment to a named receiver, and the handoff completes only when that receiver confirms. Checkpoint 1 stated the property (receiver confirmation); this is how the contract enforces it.
+- The DIDLab deployment uses one wallet for every role. `setupCredentials.js` makes the same address the admin, the processor issuer, and the processor holder. Role separation is therefore shown in the Hardhat tests, not on chain. CP3 fixes this (§14, row 5).
+
+### Other changes
+
+- Removed the course scaffold contracts `ProjectAnchor.sol` and `SimpleStorage.sol`, with the `ProjectAnchor` test file [`008233c`, Britt Huffman]. Neither was part of the §4 architecture, so `contracts/` now holds only the registry, its interface, and the supply-chain contract.
+- The site now shows the deployed contracts and live network status [`de66ed3`, Britt Huffman], and the page title encoding is fixed [`cd17603`, Bhavana Sriharika Kondapalli].
+- `AI_RECORD.md` was updated with each contract, test, and frontend commit [`00680e9`, `845007e`, `de66ed3`].
+- §14 now holds the Checkpoint 3 plan, with due dates and the 0004 cut dates as milestones.
