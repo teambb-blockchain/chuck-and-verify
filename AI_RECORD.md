@@ -248,3 +248,11 @@ Add an entry whenever AI tools help with architecture, code, docs, or debugging 
 - **Verification:** Viem `ContractFunctionExecutionError` chain, inner `NotAuthorized` with role id matching notes `PROCESSOR`. Request body `eth_call`, not `eth_sendRawTransaction`.
 - **What it got wrong:** First console instructions used `dapp.publicClient` and `dapp.anchorAbi`. The lab paste uses bare `publicClient`, and that paste threw `ReferenceError: publicClient is not defined` because `app.js` is an ES module. After those names were hung on `globalThis`, the console printed a long viem stack (`ContractFunctionExecutionError`, `ContractFunctionRevertedError`, `CallExecutionError`). The contract line inside it is `NotAuthorized` for `PROCESSOR`. The call was `eth_call`. Nothing was sent.
 
+### 2026-10-25 — Anchoring lab activity 12 (privacy audit)
+
+- **Tool:** Cursor agent
+- **Request:** Guided Lab 2 activity 12 — enumerate every field `AnchorRegistry` writes to state, calldata, or an event, and give each a verdict
+- **Outcome:** Decision only; no contract change. `recordId` is `keccak256` of the lot code `BB-2026-014`, not of the filename. Calldata of the deploy, both grants, the anchor, and the verify transaction contains no lot-code plaintext, filename, employee id, or gateway URL. Submitter, verifier, and admin addresses stay organization role keys. `cid` is the bare CIDv0 of the ciphertext. Recorded in `docs/references/notes.md`.
+- **Verification:** Decoded the five DIDLab transactions. Stored `submittedAt` `1792975193` matches anchor block `6669839`. Stored `verifiedAt` `1792975633` matches verify block `6670059`. `keccak256` of the filename differs from the on-chain `recordId`.
+- **What it got wrong:** Nothing found
+
