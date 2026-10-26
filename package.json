@@ -13,7 +13,9 @@
     "compile": "hardhat compile",
     "deploy:registry": "node scripts/deploy-credential-registry.mjs",
     "deploy:supply-chain": "node scripts/deploy-beef-supply-chain.mjs",
-    "setup:registry": "node scripts/setup-credential-registry.mjs"
+    "setup:registry": "node scripts/setup-credential-registry.mjs",
+    "deploy:anchor": "hardhat run scripts/deploy-registry.js --network didlab",
+    "grant:anchor": "hardhat run scripts/grant.js --network didlab"
   },
   "repository": {
     "type": "git",

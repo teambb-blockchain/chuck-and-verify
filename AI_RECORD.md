@@ -168,3 +168,83 @@ Add an entry whenever AI tools help with architecture, code, docs, or debugging 
 - **Verification:** Static check of `app.js` call sites. Browser Part D: note state → run Activity 8 on-chain revert console snippet → status shows failure, Current state and Activity list unchanged (no `BatchRegistered`)
 - **What it got wrong:** Lab Expected says status reports failure, but the console bypass never touches the DOM — so after DEMO-LOT-1 load the whole UI looked frozen. That is correct for Current state/Activity (no event). Exposed `setStatus` on `dapp` so a console snippet can update status without calling `loadState`
 
+### 2026-10-25 — Anchoring lab activity 02 (retrieve and verify digest)
+
+- **Tool:** Cursor agent
+- **Request:** Start Guided Lab 2 activity 02; pull the example from the lab (tagged DApp Vertical Slice; the verify script is in Anchoring and Authorization)
+- **Outcome:** Added `scripts/verify-stored.mjs` from the lab example. Ran it against the activity 01 gateway URL and ciphertext SHA-256. Digest matched (`true`). Gitignored `retrieved.bin`.
+- **Verification:** `bytes 12355`, `sha256 afe5eb481bbcd5e4329aa884ab05e5d2d319cc5567dee386867751503cdfe66e`, `match true`. Retrieved file is binary `data`, not a directory listing
+- **What it got wrong:** Tagged file was Guided Lab 1; activity 02 lives in Guided Lab 2. Bundle `size` is 12366 vs retrieved 12355 (plaintext 12339 + 16-byte GCM tag); digest still matches the ciphertext the portal hashed
+
+### 2026-10-25 — Anchoring lab activity 03 (the tamper test)
+
+- **Tool:** Cursor agent
+- **Request:** Guided Lab 2 activity 03 — flip one bit of the retrieved ciphertext and show the digest no longer matches
+- **Outcome:** Added `scripts/tamper.mjs` from the lab example. It hashes `retrieved.bin`, flips one bit in memory (`bytes[0] ^= 0x01`), and hashes again. The file on disk is unchanged.
+- **Verification:** `before afe5eb481bbcd5e4329aa884ab05e5d2d319cc5567dee386867751503cdfe66e` (same digest as activity 02), `after 8f064ff72f1d46abf0b5261b55aaceee6e2b8cae1409f8ef25d28b837970cb97`, `changed 1 bit of 98840`, `same? false`. The two digests differ in 143 of 256 bits and share 2 of 64 hex characters. Disk SHA-256 of `retrieved.bin` still matches `before`.
+- **What it got wrong:** Nothing found
+
+### 2026-10-25 — Anchoring lab activity 04 (what goes on chain)
+
+- **Tool:** Cursor agent
+- **Request:** Guided Lab 2 activity 04 — fill the on-chain table for Chuck and Verify, with the record identifier kept free of person-identifying keys
+- **Outcome:** Decision only; no contract change. Record id is `batchId`, a product-lot key (random `bytes32` in the QR, or `keccak256` of a lot code that names the lot alone). `keccak256` in `app.js` is a fixed-width key, not a privacy control. Project facts that stay on chain: credentialed `msg.sender`, block time, weight at custody, holder and pending receiver, inspection pass/fail and grade, recall classification and public recall number, temperature min/max and time out of range. Off-chain documents (inspection report, recall notice, temperature log) are anchored as ciphertext SHA-256 plus CID. Filename, employee and certifier identity, truck and device records, scan images, sales, prices, and remaining quantity stay off chain, in line with ADR 0001.
+- **Verification:** Checked against `docs/PROPOSAL.md` on-chain table, ADR 0001, and `BeefSupplyChain` fields. Skeleton already stores report and notice hashes and does not yet store CID, grade, or temperature summaries.
+- **What it got wrong:** Nothing found
+
+### 2026-10-25 — Anchoring lab activity 05 (role-based contract)
+
+- **Tool:** Cursor agent
+- **Request:** Guided Lab 2 activity 05 — write `contracts/AnchorRegistry.sol`, with the lab roles mapped to this project's stakeholders
+- **Outcome:** Added `AnchorRegistry`. `PROCESSOR` may `anchor` a ciphertext SHA-256 and CID. `INSPECTOR` may `verify`. Deployer receives `ADMIN` only. `SelfVerification` stays, so the address that anchored a batch cannot verify it. Role strings match `BeefSupplyChain` (`PROCESSOR`, `INSPECTOR`) but this contract has its own role mapping and does not read `CredentialRegistry`. Custody stays on `BeefSupplyChain`.
+- **Verification:** `npx hardhat compile` succeeded
+- **What it got wrong:** Nothing found
+
+### 2026-10-25 — Anchoring lab activity 06 (role-boundary tests)
+
+- **Tool:** Cursor agent
+- **Request:** Fill `bafyTESTCIDPLACEHOLDER` with this project's stored object; do not commit private keys
+- **Outcome:** Added `test/AnchorRegistry.test.js`. `DIGEST` stays the lab value `"0x" + "11".repeat(32)` (a non-zero 32-byte stand-in for the role tests). CID is the activity 01 portal value `QmYE3zK8Kov7vHQpSaETDqXyjUHnHHt9WBvTWKL5MVP1mG`. Record id is `keccak256("BB-2026-014")`. Roles are `PROCESSOR` and `INSPECTOR`. Tests use Hardhat's local signers, so no key is read from `.env` or written to the repo. `.env` stays gitignored.
+- **Verification:** `npx hardhat test test/AnchorRegistry.test.js` — 10 passing
+- **What it got wrong:** First pass set `DIGEST` to the activity 01 ciphertext SHA-256. The lab line is `const DIGEST = "0x" + "11".repeat(32)`, a non-zero 32-byte stand-in the role tests can compare to the word they stored. Replaced `DIGEST` with that stand-in. The portal CID stayed `QmYE3zK8Kov7vHQpSaETDqXyjUHnHHt9WBvTWKL5MVP1mG`.
+
+### 2026-10-25 — Anchoring lab activity 07 (deploy and grant two wallets)
+
+- **Tool:** Cursor agent
+- **Request:** Guided Lab 2 activity 07 — deploy `AnchorRegistry` and grant the two roles to two different wallets
+- **Outcome:** Added `scripts/deploy-registry.js` and `scripts/grant.js`, plus `npm run deploy:anchor` and `npm run grant:anchor`. Lab `SUBMITTER` / `VERIFIER` are this contract's `PROCESSOR` / `INSPECTOR`. Addresses come from the shell (`ANCHOR_REGISTRY_ADDRESS`, `DEMO_PROCESSOR`, `DEMO_INSPECTOR`). The grant script refuses a missing address, the zero address, and the same address for both roles. Deploy checks that the deployer holds `ADMIN` only. Deployed to DIDLab: `0x5dcEde6EFeBE6592874b263456232fD2328f89B2`, tx `0x83ff0dd18efe2967456451b652909304d76a59e106a2406cf6acb32398a24c14`. Granted `PROCESSOR` to wallet A `0xc2Ad3207fD426313CB6DeE60A8e00A1aA577351E` (`0x55b45bc648f256a58596b5d8fe706493062e01cc7076e6fdcc0d4ea0dd91433c`) and `INSPECTOR` to wallet B `0x2710C588137CC6b0BAa46e5a504ECfF246b93b5b` (`0xf7feb3f4320b4788c689507b9e5fbe5a686c435bfd67b9443162fa6eb788c07d`), recorded in `docs/references/notes.md`.
+- **Verification:** Deploy script printed deployer `ADMIN` only. Grant script printed two `RoleGranted` logs and `hasRole PROCESSOR: true` / `hasRole INSPECTOR: true`.
+- **What it got wrong:** Grant steps were written into the README next to the Oct 15 line "Record addresses in `docs/references/notes.md`" before `deploy:anchor` had printed an address. Looking that name up in notes would have used `CredentialRegistry` (`0x3eC133afE2455Ac690ECd92358DE555C267338B2`). Activity 07's address is the `AnchorRegistry:` line from the deploy script. Also called the npm script `scripts/anchor`; the file is `scripts/deploy-registry.js`.
+
+### 2026-10-25 — Anchoring lab activity 08 (anchor the stored lot)
+
+- **Tool:** Cursor agent
+- **Request:** Guided Lab 2 activity 08 — append `anchorRecord` and anchor the activity 01 artifact from wallet A
+- **Outcome:** Added `frontend/public/anchor-abi.js` from the `AnchorRegistry` artifact and appended `recordIdFor` / `anchorRecord` / `anchorStoredLot` to `frontend/public/app.js`. Lab `SUBMITTER` is `PROCESSOR`. Registry is `0x5dcEde6EFeBE6592874b263456232fD2328f89B2`. Wallet A anchored lot `BB-2026-014`, ciphertext SHA-256 `afe5eb481bbcd5e4329aa884ab05e5d2d319cc5567dee386867751503cdfe66e`, and CID `QmYE3zK8Kov7vHQpSaETDqXyjUHnHHt9WBvTWKL5MVP1mG`. Tx `0x67a0cf3fd313bdcb1ab23059b8646ef8b2b21271a7f9151222c2b4e2f1904a61`, block `6669839`, recorded in `docs/references/notes.md`. The BeefSupplyChain page is unchanged.
+- **Verification:** Receipt status 1, `RecordAnchored`, `get` digest and CID match activity 01, submitter is wallet A.
+- **What it got wrong:** The anchor helper was added in the same session as deploy, before `grant:anchor`. The first log said nothing was sent because the deployer holds `ADMIN` only. Activity 09 was then opened as if 08 were done, while `get(keccak256("BB-2026-014"))` was still empty (`submittedAt` 0). User flagged hardcoding `STORED_LOT`, `STORED_DIGEST`, and `STORED_CID`; they stayed as the activity 01 one-shot, and `anchorRecord(businessKey, sha256Hex, cid)` is the general call. User also pushed back that a page served from localhost must not write localhost to chain. `anchor` stores the lot id, the ciphertext digest, and the CID. The page origin is not an argument.
+
+### 2026-10-25 — Anchoring lab activity 09 (verify from wallet B)
+
+- **Tool:** Cursor agent
+- **Request:** Guided Lab 2 activity 09 — verify the anchored lot from wallet B; record SelfVerification from wallet A and NotAuthorized from a wallet with no role
+- **Outcome:** Appended `getStoredLot` / `verifyRecord` / `verifyStoredLot` to `frontend/public/app.js`. Lab `VERIFIER` is this contract's `INSPECTOR`. Wallet B verified lot `BB-2026-014`: tx `0x50d8386b8216df4b40bf4d2daef9768a6e1880a8e5bf98d83b6e483594a02308`, block `6670059`. Wallet A `verify` simulated `NotAuthorized` (A has no `INSPECTOR`, so `SelfVerification` is not reached). A no-role wallet: `anchorStoredLot` stopped on the PROCESSOR check; `verifyStoredLot` simulated `NotAuthorized`. Recorded in `docs/references/notes.md`.
+- **Verification:** Receipt status 1, `RecordVerified`, `get.verifier` is wallet B. Both refusals reported `nothing was sent`.
+- **What it got wrong:** First plan said wallet A should also hold `INSPECTOR` and call `verify` before B, to produce `SelfVerification`. The grant script refuses both roles on one address. On this deploy `onlyRole(INSPECTOR)` runs first, so wallet A's result was `NotAuthorized`. Also expected `NotAuthorized` from the no-role wallet on both calls. `anchorStoredLot` returns in the page (`this wallet does not hold PROCESSOR`) and never simulates. `verifyStoredLot` is the call that reached the contract.
+
+### 2026-10-25 — Anchoring lab activity 10 (role-aware interface)
+
+- **Tool:** Cursor agent
+- **Request:** Guided Lab 2 activity 10 — append the lab `refreshRole` example; show each wallet only what it can do; render the record from chain
+- **Outcome:** Lab `SUBMITTER` / `VERIFIER` and `abi` are this contract's `PROCESSOR` / `INSPECTOR` and `anchorAbi`. Added `#role`, `#anchor-panel`, `#verify-panel`, and `#anchor-record` to `frontend/public/index.html` and root `index.html`. `refreshRole` runs after Connect. Record render is digest, CID as a DIDLab gateway link, submitter, and verifier. Buttons call the activity 08/09 helpers.
+- **Verification:** `http://localhost:3000` with no wallet: both panels `hidden` / `display:none`, role `not connected`, chain 252501. Record matches notes: digest `afe5eb48…`, CID link, submitter wallet A, verified by wallet B. Wallet A / B panel split confirmed in UX.
+- **What it got wrong:** Nothing found
+
+### 2026-10-25 — Anchoring lab activity 11 (UI is not the security boundary)
+
+- **Tool:** Cursor agent
+- **Request:** Guided Lab 2 activity 11 — with a no-role wallet and both panels hidden, call `anchor` from the browser console
+- **Outcome:** Lab snippet uses `abi` / `publicClient` / `recordIdFor` as module locals. First pass only put them on `dapp`; a bare `publicClient` in the console threw `ReferenceError`. Hang those names on `globalThis` so the lab paste runs. Console `abi` is `anchorAbi`; BeefSupplyChain stays at `dapp.abi`. Probe args stay the lab values: `console-probe`, digest `0x22`.repeat(32), CID `bafyPROBE`. Simulate from `0x24117a294a5167573C5D79cEb62845Db4a33D9d2` reverted `NotAuthorized(PROCESSOR)`; RPC was `eth_call`. Recorded in `docs/references/notes.md`.
+- **Verification:** Viem `ContractFunctionExecutionError` chain, inner `NotAuthorized` with role id matching notes `PROCESSOR`. Request body `eth_call`, not `eth_sendRawTransaction`.
+- **What it got wrong:** First console instructions used `dapp.publicClient` and `dapp.anchorAbi`. The lab paste uses bare `publicClient`, and that paste threw `ReferenceError: publicClient is not defined` because `app.js` is an ES module. After those names were hung on `globalThis`, the console printed a long viem stack (`ContractFunctionExecutionError`, `ContractFunctionRevertedError`, `CallExecutionError`). The contract line inside it is `NotAuthorized` for `PROCESSOR`. The call was `eth_call`. Nothing was sent.
+

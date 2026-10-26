@@ -10,7 +10,23 @@
 
   <p id="network">network: checking…</p>
   <p id="account">wallet: not connected</p>
+  <p id="role">registry role: not connected</p>
   <button id="connect">Connect wallet</button>
+
+  <h2>Anchored lot BB-2026-014</h2>
+  <div id="anchor-record">loading…</div>
+
+  <div id="anchor-panel" hidden>
+    <h2>Anchor</h2>
+    <p>PROCESSOR may commit the ciphertext digest and CID.</p>
+    <button id="anchor" type="button">Anchor stored lot</button>
+  </div>
+
+  <div id="verify-panel" hidden>
+    <h2>Verify</h2>
+    <p>INSPECTOR may attest the anchored lot. The submitter cannot verify it.</p>
+    <button id="verify-lot" type="button">Verify stored lot</button>
+  </div>
 
   <h2>Current state</h2>
   <pre id="state">enter a batch id to load inspection, custody, and recall state</pre>

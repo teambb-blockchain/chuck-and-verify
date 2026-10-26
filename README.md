@@ -51,6 +51,13 @@ npm run setup:registry
 # export DEMO_PROCESSOR='0x…'
 # export DEMO_INSPECTOR='0x…'
 # export DEMO_CUSTODIAN='0x…'
+
+# 4) AnchorRegistry. The deployer receives ADMIN only.
+npm run deploy:anchor
+export ANCHOR_REGISTRY_ADDRESS='0x…'   # printed AnchorRegistry: line
+export DEMO_PROCESSOR='0x…'            # wallet A — a wallet you can sign with
+export DEMO_INSPECTOR='0x…'            # wallet B — a different wallet you can sign with
+npm run grant:anchor
 ```
 
 Each deploy script prints the deployer address, contract address, and deployment transaction hash. Confirm them in the [DIDLab explorer](https://explorer.didlab.org). Record addresses in `docs/references/notes.md`.

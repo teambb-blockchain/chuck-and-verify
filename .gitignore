@@ -14,3 +14,6 @@ docs/references/*
 
 # Hardhat Ignition default folder for deployments against a local node
 ignition/deployments/chain-31337
+
+# Guided Lab 2 activity 02 — ciphertext dump from the gateway
+retrieved.bin

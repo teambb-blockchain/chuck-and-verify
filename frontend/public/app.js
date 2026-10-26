@@ -5,6 +5,7 @@ import {
 } from "https://esm.sh/viem@2";
 
 import { abi } from "./abi.js";
+import { anchorAbi } from "./anchor-abi.js";
 
 export const didlab = defineChain({
   id: 252501,
@@ -81,6 +82,7 @@ async function connect() {
 
   $("account").textContent = `wallet: ${account}`;
   $("submit").disabled = false;
+  await refreshRole();
 }
 
 $("connect").addEventListener("click", connect);
@@ -219,8 +221,16 @@ async function submit() {
 
 $("submit").addEventListener("click", submit);
 
-// Activity 08 lab: on-chain revert screenshot bypasses simulation (browser console).
+// Activity 08/11 lab: browser console must reach module locals.
 // Modules do not put locals on `window`; expose what the console snippet needs.
+// Activity 11 (no-role wallet, panels hidden):
+//   await dapp.publicClient.simulateContract({
+//     account: dapp.account,
+//     address: dapp.REGISTRY,
+//     abi: dapp.anchorAbi,
+//     functionName: "anchor",
+//     args: [dapp.recordIdFor("console-probe"), `0x${"22".repeat(32)}`, "bafyPROBE"],
+//   });
 Object.defineProperty(globalThis, "dapp", {
   configurable: true,
   get: () => ({
@@ -231,9 +241,190 @@ Object.defineProperty(globalThis, "dapp", {
     abi,
     zeroHash,
     publicClient,
+    anchorAbi,
+    recordIdFor,
     setStatus,
+    anchorRecord,
+    anchorStoredLot,
+    verifyRecord,
+    verifyStoredLot,
+    getStoredLot,
+    refreshRole,
+    loadAnchorRecord,
+    REGISTRY,
+    PROCESSOR,
+    INSPECTOR,
   }),
 });
+
+const REGISTRY = "0x5dcEde6EFeBE6592874b263456232fD2328f89B2";
+
+// Activity 01 ciphertext. The business key is the lot code, not the filename.
+const STORED_LOT = "BB-2026-014";
+const STORED_DIGEST = "afe5eb481bbcd5e4329aa884ab05e5d2d319cc5567dee386867751503cdfe66e";
+const STORED_CID = "QmYE3zK8Kov7vHQpSaETDqXyjUHnHHt9WBvTWKL5MVP1mG";
+
+const PROCESSOR = await publicClient.readContract({
+  address: REGISTRY,
+  abi: anchorAbi,
+  functionName: "PROCESSOR",
+});
+
+const INSPECTOR = await publicClient.readContract({
+  address: REGISTRY,
+  abi: anchorAbi,
+  functionName: "INSPECTOR",
+});
+
+function recordIdFor(businessKey) {
+  // businessKey must identify nothing about a person.
+  return keccak256(stringToHex(businessKey));
+}
+
+// Activity 11 lab snippet uses bare names. Console `abi` is AnchorRegistry;
+// BeefSupplyChain stays at dapp.abi.
+Object.defineProperties(globalThis, {
+  publicClient: { configurable: true, get: () => publicClient },
+  account: { configurable: true, get: () => account },
+  REGISTRY: { configurable: true, get: () => REGISTRY },
+  recordIdFor: { configurable: true, get: () => recordIdFor },
+  abi: { configurable: true, get: () => anchorAbi },
+});
+
+async function anchorRecord(businessKey, sha256Hex, cid) {
+  const { request } = await publicClient.simulateContract({
+    account,
+    address: REGISTRY,
+    abi: anchorAbi,
+    functionName: "anchor",
+    args: [recordIdFor(businessKey), `0x${sha256Hex}`, cid],
+  });
+
+  const hash = await walletClient.writeContract(request);
+  const receipt = await publicClient.waitForTransactionReceipt({ hash });
+  return receipt;
+}
+
+async function anchorStoredLot() {
+  if (!account || !walletClient) {
+    setStatus("connect wallet A (the processor) before anchoring");
+    return;
+  }
+
+  const canAnchor = await publicClient.readContract({
+    address: REGISTRY,
+    abi: anchorAbi,
+    functionName: "hasRole",
+    args: [PROCESSOR, account],
+  });
+  if (!canAnchor) {
+    setStatus("this wallet does not hold PROCESSOR — nothing was sent");
+    return;
+  }
+
+  setStatus("simulating anchor…");
+  try {
+    const receipt = await anchorRecord(STORED_LOT, STORED_DIGEST, STORED_CID);
+    const recordId = recordIdFor(STORED_LOT);
+    console.log({
+      transactionHash: receipt.transactionHash,
+      block: receipt.blockNumber.toString(),
+      gasUsed: receipt.gasUsed.toString(),
+      recordId,
+      digest: `0x${STORED_DIGEST}`,
+      cid: STORED_CID,
+    });
+    setStatus(
+      `${receipt.status} — `,
+      receipt.transactionHash,
+      ` (block ${receipt.blockNumber}, gas ${receipt.gasUsed})`,
+    );
+    return receipt;
+  } catch (err) {
+    if (err instanceof BaseError) {
+      const rejected = err.walk((e) => e instanceof UserRejectedRequestError);
+      if (rejected) {
+        setStatus("cancelled — you rejected the request. Nothing was sent.");
+        return;
+      }
+      const reverted = err.walk((e) => e instanceof ContractFunctionRevertedError);
+      if (reverted) {
+        setStatus(
+          `would revert: ${reverted.data?.errorName ?? reverted.shortMessage} — nothing was sent`,
+        );
+        return;
+      }
+    }
+    setStatus(`error — ${err.shortMessage ?? err.message}`);
+  }
+}
+
+async function getStoredLot() {
+  return publicClient.readContract({
+    address: REGISTRY,
+    abi: anchorAbi,
+    functionName: "get",
+    args: [recordIdFor(STORED_LOT)],
+  });
+}
+
+async function verifyRecord(businessKey) {
+  const { request } = await publicClient.simulateContract({
+    account,
+    address: REGISTRY,
+    abi: anchorAbi,
+    functionName: "verify",
+    args: [recordIdFor(businessKey)],
+  });
+
+  const hash = await walletClient.writeContract(request);
+  const receipt = await publicClient.waitForTransactionReceipt({ hash });
+  return receipt;
+}
+
+async function verifyStoredLot() {
+  if (!account || !walletClient) {
+    setStatus("connect wallet B (the inspector) before verifying");
+    return;
+  }
+
+  setStatus("simulating verify…");
+  try {
+    const receipt = await verifyRecord(STORED_LOT);
+    const recordId = recordIdFor(STORED_LOT);
+    const rec = await getStoredLot();
+    console.log({
+      transactionHash: receipt.transactionHash,
+      block: receipt.blockNumber.toString(),
+      gasUsed: receipt.gasUsed.toString(),
+      recordId,
+      verifier: rec.verifier,
+      verifiedAt: rec.verifiedAt.toString(),
+    });
+    setStatus(
+      `${receipt.status} — `,
+      receipt.transactionHash,
+      ` (block ${receipt.blockNumber}, gas ${receipt.gasUsed})`,
+    );
+    return receipt;
+  } catch (err) {
+    if (err instanceof BaseError) {
+      const rejected = err.walk((e) => e instanceof UserRejectedRequestError);
+      if (rejected) {
+        setStatus("cancelled — you rejected the request. Nothing was sent.");
+        return;
+      }
+      const reverted = err.walk((e) => e instanceof ContractFunctionRevertedError);
+      if (reverted) {
+        setStatus(
+          `would revert: ${reverted.data?.errorName ?? reverted.shortMessage} — nothing was sent`,
+        );
+        return;
+      }
+    }
+    setStatus(`error — ${err.shortMessage ?? err.message}`);
+  }
+}
 
 publicClient.watchContractEvent({
   address: CONTRACT,
@@ -250,3 +441,80 @@ publicClient.watchContractEvent({
     await loadState();
   },
 });
+
+async function refreshRole() {
+  if (!account) return;
+
+  const [canSubmit, canVerify] = await Promise.all([
+    publicClient.readContract({
+      address: REGISTRY,
+      abi: anchorAbi,
+      functionName: "hasRole",
+      args: [PROCESSOR, account],
+    }),
+    publicClient.readContract({
+      address: REGISTRY,
+      abi: anchorAbi,
+      functionName: "hasRole",
+      args: [INSPECTOR, account],
+    }),
+  ]);
+
+  $("anchor-panel").hidden = !canSubmit;
+  $("verify-panel").hidden = !canVerify;
+
+  $("role").textContent =
+    canSubmit && canVerify ? "submitter + verifier"
+    : canSubmit ? "submitter"
+    : canVerify ? "verifier"
+    : "no role on this registry";
+}
+
+async function loadAnchorRecord() {
+  const el = $("anchor-record");
+  el.replaceChildren();
+
+  try {
+    const rec = await getStoredLot();
+    if (rec.submittedAt === 0n) {
+      el.textContent = "not anchored yet";
+      return;
+    }
+
+    const line = (label, value) => {
+      const p = document.createElement("p");
+      p.append(`${label}: `);
+      p.append(value);
+      el.append(p);
+    };
+
+    line("digest", rec.digest);
+    const cidLink = document.createElement("a");
+    cidLink.href = `https://gateway.didlab.org/ipfs/${rec.cid}`;
+    cidLink.target = "_blank";
+    cidLink.rel = "noopener noreferrer";
+    cidLink.textContent = rec.cid;
+    line("cid", cidLink);
+    line("submitter", rec.submitter);
+
+    if (rec.verifiedAt === 0n) {
+      line("verified", "no");
+    } else {
+      line("verified", `yes, by ${rec.verifier} at ${rec.verifiedAt.toString()}`);
+    }
+  } catch (err) {
+    el.textContent = `error — ${err.shortMessage ?? err.message}`;
+  }
+}
+
+$("anchor").addEventListener("click", async () => {
+  await anchorStoredLot();
+  await loadAnchorRecord();
+});
+
+$("verify-lot").addEventListener("click", async () => {
+  await verifyStoredLot();
+  await loadAnchorRecord();
+});
+
+await loadAnchorRecord();
