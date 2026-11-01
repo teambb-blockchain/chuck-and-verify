@@ -277,6 +277,23 @@
   <button id="verifyBatch" type="button">
     Verify Batch
   </button>
+  
+  <div id="registerSection" style="margin-top:2rem; padding:1rem; border:1px solid #ccc;">
+    <h3>Register New Beef Batch</h3>
+
+    <label for="newBatchId">New Batch ID:</label>
+    <input id="newBatchId" value="BEEF-A1-001" maxlength="31" />
+
+    <label for="newBatchWeight">Weight (lbs):</label>
+    <input id="newBatchWeight" type="number" min="1" value="500" />
+
+    <button id="registerBatch" type="button">Register Batch</button>
+
+    <p id="transactionStatus" role="status" aria-live="polite">
+    No transaction submitted.
+    </p>
+    <p id="transactionDetails"></p>
+  </div>
 
   <p id="verificationStatus" role="status"></p>
 
@@ -522,6 +539,132 @@
       console.error(error);
     }
   };
+  
+  const registerButton = document.getElementById("registerBatch");
+  const transactionStatus = document.getElementById("transactionStatus");
+  const transactionDetails = document.getElementById("transactionDetails");
+
+  const registerAbi = [
+    {
+      type: "function",
+      name: "registerBatch",
+      stateMutability: "nonpayable",
+      inputs: [
+        { name: "batchId", type: "bytes32" },
+        { name: "weightLbs", type: "uint256" }
+      ],
+      outputs: []
+    },
+    {
+      type: "event",
+      name: "BatchRegistered",
+      inputs: [
+        { name: "batchId", type: "bytes32", indexed: true },
+        { name: "processor", type: "address", indexed: true },
+        { name: "weightLbs", type: "uint256", indexed: false }
+      ]
+    }
+  ];
+
+  registerButton.onclick = async () => {
+    registerButton.disabled = true;
+    transactionDetails.textContent = "";
+
+    try {
+      if (!window.ethereum) {
+        throw new Error("No wallet detected. Install MetaMask.");
+      }
+
+      const accounts = await window.ethereum.request({
+        method: "eth_requestAccounts"
+      });
+
+      const walletChainId = Number(
+        await window.ethereum.request({ method: "eth_chainId" })
+      );
+
+      if (walletChainId !== REQUIRED_CHAIN_ID) {
+        throw new Error("Wrong network. Switch MetaMask to DIDLab.");
+      }
+
+      const batchName = document.getElementById("newBatchId").value.trim();
+      const weightText = document.getElementById("newBatchWeight").value;
+
+      if (!batchName || new TextEncoder().encode(batchName).length > 31) {
+        throw new Error("Batch ID must contain 1–31 UTF-8 bytes.");
+      }
+
+      const weight = BigInt(weightText);
+
+      if (weight <= 0n) {
+        throw new Error("Weight must be greater than zero.");
+      }
+
+      const batchId = stringToHex(batchName, { size: 32 });
+
+      const walletClient = createWalletClient({
+        chain,
+        transport: custom(window.ethereum)
+      });
+
+      transactionStatus.textContent =
+        "Waiting for MetaMask approval. No transaction sent yet.";
+
+      const hash = await walletClient.writeContract({
+        address: beefSupplyChainAddress,
+        abi: registerAbi,
+        functionName: "registerBatch",
+        args: [batchId, weight],
+        account: accounts[0]
+      });
+
+      transactionStatus.textContent =
+        "PENDING: Transaction sent. Waiting for blockchain confirmation.";
+
+      transactionDetails.innerHTML =
+        'Transaction: <a target="_blank" rel="noopener noreferrer" href="' +
+        EXPLORER_BASE + "/tx/" + hash + '">' + hash + "</a>";
+
+      const receipt = await publicClient.waitForTransactionReceipt({
+        hash,
+        confirmations: 1
+      });
+
+      if (receipt.status !== "success") {
+        transactionStatus.textContent =
+          "REVERTED: Transaction reached the blockchain but failed. Gas was consumed.";
+        transactionDetails.textContent +=
+          " | Block: " + receipt.blockNumber +
+          " | Gas used: " + receipt.gasUsed;
+        return;
+      }
+
+      transactionStatus.textContent =
+        "CONFIRMED: Batch successfully registered on DIDLab.";
+
+      transactionDetails.textContent =
+        "Transaction: " + hash +
+        " | Block: " + receipt.blockNumber +
+        " | Gas used: " + receipt.gasUsed;
+
+      document.getElementById("batchId").value = batchName;
+      document.getElementById("verifyBatch").click();
+
+    } catch (error) {
+      if (error.code === 4001 ||
+          error.name === "UserRejectedRequestError") {
+        transactionStatus.textContent =
+          "REJECTED: You declined in MetaMask. No transaction was sent and no gas was used.";
+      } else {
+        transactionStatus.textContent =
+          "Transaction not completed: " +
+          (error.shortMessage || error.message);
+      }
+    } finally {
+      registerButton.disabled = false;
+    }
+  };
+
 </script>
 
 </body>
