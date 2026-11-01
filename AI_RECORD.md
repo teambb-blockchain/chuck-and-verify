@@ -264,3 +264,106 @@ Add an entry whenever AI tools help with architecture, code, docs, or debugging 
 - **Verification:** `npx hardhat test test/AnchorRegistry.test.js` — 23 passing (was 10)
 - **What it got wrong:** The first tests were written with no entry here, and the user had to ask for the log. The role-boundary tests were then a second Activity 07 entry, and the user had to ask for the two to be combined. The combined line said nothing was wrong. The first draft named the findings file `Book1.xlsx`; it is `docs/references/SecurityAuditActivity6.xlsx`. The outcome also said Activity 10 would make the long cid, the zero-address grant, and the duplicate role events revert. Those rows were asked for as demonstrations that the calls succeed. A repeat `grantRole` or a `revokeRole` of a role not held is an extra event, and reverting it was not the finding. Comments explaining the findings were added in `test/AnchorRegistry.test.js`; the Activity 6 comments were taken back out of the suite. The lockout test originally called `grantRole` only from the former admin. The "anyone" row needs the processor, the inspector, and the outsider as well, which this pass adds.
 
+### 2026-11-01 — AnchorRegistry security audit (unedited)
+
+- **Tool:** Cursor agent
+- **Request:** Audit `contracts/AnchorRegistry.sol` for security vulnerabilities. For each finding, state the function, the vulnerability class (access control, input validation, reentrancy, unchecked external calls, or state-ordering), the exact exploit scenario, and the severity. Also state where you looked and found nothing. Then paste the complete, unedited output into this record, every finding included, including the ones that will be disproved.
+- **Outcome:** No contract change. The reply below is pasted complete and unedited.
+
+`AnchorRegistry` has no critical or high findings. Eight issues are real, and they all sit behind a role the admin has already granted. The contract holds no ether and never calls another contract, so the reentrancy and unchecked-call classes are empty.
+
+`★ Insight ─────────────────────────────────────`
+A record counts as present only when `submittedAt != 0`, and as verified only when `verifiedAt != 0`. The `recordId` key is never the sentinel, which is why `bytes32(0)` is a normal, permanent slot. `onlyRole` runs before the function body, so a processor who lacks `INSPECTOR` reverts with `NotAuthorized` and never reaches `SelfVerification`.
+`─────────────────────────────────────────────────`
+
+## Findings
+
+### 1. `revokeRole` — access control — Medium
+
+The sole admin can remove itself. Nothing in `revokeRole` counts remaining admins or requires a successor.
+
+```68:71:contracts/AnchorRegistry.sol
+    function revokeRole(bytes32 role, address account) external onlyRole(ADMIN) {
+        _roles[role][account] = false;
+        emit RoleRevoked(role, account, msg.sender);
+    }
+```
+
+**Exploit.** The deployer calls `revokeRole(ADMIN, deployer)` and has not granted `ADMIN` to anyone else. Every later `grantRole` and `revokeRole` reverts `NotAuthorized(ADMIN)`, from the old admin and from every other account. `PROCESSOR` and `INSPECTOR` grants already stored keep working, so a processor key that should have been rotated can still call `anchor`, and nobody can revoke it.
+
+### 2. `anchor` — access control — Medium
+
+`PROCESSOR` is global. Any holder may anchor any `recordId`. There is no link between a lot and the plant allowed to write it, and no function clears a record after the processor is revoked.
+
+**Exploit.** The admin has granted `PROCESSOR` to plant A and plant B. Plant B calls `anchor(keccak256("BB-2026-014"), B's digest, B's cid)` for a lot that belongs to plant A. The call succeeds. Plant A's later `anchor` of that same id reverts `AlreadyAnchored`. The admin then `revokeRole(PROCESSOR, plant B)`. `get` still returns B's digest, cid, and submitter. `verify` will attest that stored record.
+
+### 3. `anchor` — state-ordering — Medium
+
+Two valid anchors of the same id are settled by inclusion order. The first one to be mined sets `submittedAt`, and the second reverts. There is no commit-reveal, no expected-digest argument, and no admin rewrite.
+
+```77:78:contracts/AnchorRegistry.sol
+        if (digest == bytes32(0)) revert EmptyDigest();
+        if (_records[recordId].submittedAt != 0) revert AlreadyAnchored();
+```
+
+**Exploit.** Plant A broadcasts `anchor(lotId, honestDigest, honestCid)`. Plant B, also `PROCESSOR`, sees that pending transaction and submits `anchor(lotId, otherDigest, otherCid)` with a higher gas price. B's transaction is mined first. A's transaction reverts `AlreadyAnchored`. The digest stored for that lot is B's, for good. `verify` takes only `recordId`, so an inspector who attests the lot is attesting whichever digest won the race.
+
+### 4. `anchor` — input validation — Medium
+
+A non-zero digest is required. The cid is not. `verify` never looks at `cid` either.
+
+**Exploit.** A processor calls `anchor(recordId, nonZeroDigest, "")`. `submittedAt` is set and `RecordAnchored` is emitted with an empty cid. A different address that holds `INSPECTOR` calls `verify(recordId)`. `SelfVerification` passes, and `verifiedAt` is set. `get` returns a verified record whose location string is empty. A repair anchor reverts `AlreadyAnchored`, so the lot id is burned and the verified record points nowhere.
+
+### 5. `anchor` — input validation — Low
+
+`recordId` is not checked. `bytes32(0)` is stored like any other key.
+
+**Exploit.** A processor calls `anchor(bytes32(0), digest, cid)`. That slot is occupied. A client that leaves the id unset sends `bytes32(0)`: `get` returns this record, and a later `anchor` of the zero id reverts `AlreadyAnchored`.
+
+### 6. `anchor` — input validation — Low
+
+`cid` has no maximum length and no character set. The processor pays to store it. Every later `get` of that id copies the whole string, and `RecordAnchored` logs it.
+
+**Exploit.** A processor anchors a cid whose size is limited only by the block gas limit (a portal CIDv0 is 46 characters; the test suite already stores 1024). Readers and indexers of that one `recordId` pay for the full string. Other lot ids are unaffected. The same unconstrained string can carry a filename or a pre-signed URL into storage and into the event log, permanently.
+
+### 7. `grantRole` — input validation — Low
+
+`account` is not checked against `address(0)`.
+
+**Exploit.** The admin calls `grantRole(PROCESSOR, address(0))`. The call emits `RoleGranted` and `hasRole` becomes true. No transaction can use the grant, because `msg.sender` cannot be the zero address. An operator counting role holders treats a dead entry as a live processor until someone revokes it.
+
+### 8. `verify` — access control — Low
+
+The self-check compares two addresses. The comment on the contract says a processor must not be the party that attests its own batch. The code enforces a narrower rule.
+
+```92:96:contracts/AnchorRegistry.sol
+    function verify(bytes32 recordId) external onlyRole(INSPECTOR) {
+        Record storage r = _records[recordId];
+        if (r.submittedAt == 0) revert UnknownRecord();
+        if (r.verifiedAt != 0) revert AlreadyVerified();
+        if (r.submitter == msg.sender) revert SelfVerification();
+```
+
+**Exploit.** One organization controls keys A and B. The admin grants `PROCESSOR` to A and `INSPECTOR` to B. A calls `anchor`. B calls `verify`. `r.submitter == msg.sender` is false, so `RecordVerified` is emitted. The same organization both wrote the digest and attested it.
+
+## Where I looked and found nothing
+
+**Reentrancy.** `constructor`, `grantRole`, `revokeRole`, `anchor`, `verify`, and `get` never transfer ether and never make an external call. No `.call`, `.delegatecall`, `.staticcall`, `.transfer`, or `.send`. Control never leaves the contract, so there is no callback to re-enter on. `verify` writes `verifier` and `verifiedAt` before it emits, and an event is not an external call.
+
+**Unchecked external calls.** Same six functions. There is no external call whose success could be ignored.
+
+**Access control that holds.** `onlyRole` gates every state change. The constructor grants `ADMIN` to `msg.sender` and does not grant `PROCESSOR` or `INSPECTOR`. `grantRole(ADMIN, self)` from an account without `ADMIN` reverts `NotAuthorized`. A processor without `INSPECTOR` who calls `verify` reverts `NotAuthorized(INSPECTOR)`. The same address anchoring and then verifying reverts `SelfVerification`. `hasRole` and `get` are views.
+
+**Input checks that hold.** `anchor` reverts `EmptyDigest` on `bytes32(0)`. A second `anchor` of an existing id reverts `AlreadyAnchored`, including a second processor using a different digest. `verify` reverts `UnknownRecord` when `submittedAt` is still 0, including a `verify` mined before the matching `anchor`. A second `verify` reverts `AlreadyVerified`, and the first verifier stays in storage.
+
+**State-ordering that holds.** The digest cannot change after `anchor`, so an inspector who has already read `get` cannot have the digest swapped out before `verify`. A `verify` ordered ahead of its `anchor` hits `UnknownRecord`. Revoking `PROCESSOR` or `INSPECTOR` blocks later calls from that account; it does not rewrite records already stored.
+
+**Also examined, and not a vulnerability.** A second `grantRole` of a role the account already holds emits another `RoleGranted` and leaves the mapping true. `revokeRole` of a role the account does not hold emits `RoleRevoked` and leaves the mapping false. Both are noisy for an indexer. Neither changes who can call `anchor` or `verify`. `grantRole` will also store a role id that is not `ADMIN`, `PROCESSOR`, or `INSPECTOR`; no function checks those ids. Solidity 0.8.24 reverts on overflow. The `uint64` timestamp cast is the existence flag, and a real block timestamp is not zero and does not approach `2^64`.
+
+`★ Insight ─────────────────────────────────────`
+This file is a different shape from `SafeVault` and `VulnerableVault` in the same repo. Those contracts send ether, so they have to order the balance update against the external call and check the call's success. `AnchorRegistry` never hands control to another account. Its failures are permanent storage: a bad `recordId`, digest, or cid cannot be overwritten, and role admin can be deleted with no successor.
+`─────────────────────────────────────────────────`
+
+- **Verification:** Compared this entry to the prior reply and to `contracts/AnchorRegistry.sol` lines 68–71, 77–78, and 92–96. No tests run. The contract is unchanged.
+- **What it got wrong:** Not judged here. All eight findings are kept, including any that a later pass disproves. The empty reentrancy and unchecked-call sections are kept too.
+
