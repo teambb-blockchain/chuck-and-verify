@@ -64,6 +64,24 @@ describe("AnchorRegistry", function () {
     ).to.be.revertedWithCustomError(reg, "AlreadyAnchored");
   });
 
+  it("keeps the first processor's record when a second processor anchors the same id", async function () {
+    const signers = await ethers.getSigners();
+    const processorB = signers[4];
+    const digestB = "0x" + "22".repeat(32);
+
+    await reg.grantRole(PROCESSOR, processorB.address);
+    await reg.connect(processor).anchor(recordId, DIGEST, CID);
+
+    await expect(
+      reg.connect(processorB).anchor(recordId, digestB, CID)
+    ).to.be.revertedWithCustomError(reg, "AlreadyAnchored");
+
+    const r = await reg.get(recordId);
+    expect(r.digest).to.equal(DIGEST);
+    expect(r.cid).to.equal(CID);
+    expect(r.submitter).to.equal(processor.address);
+  });
+
   it("rejects verification from an account without INSPECTOR", async function () {
     await reg.connect(processor).anchor(recordId, DIGEST, CID);
     await expect(
@@ -97,10 +115,154 @@ describe("AnchorRegistry", function () {
     expect(r.verifiedAt).to.be.greaterThan(0n);
   });
 
+  it("rejects a second verification of the same record", async function () {
+    await reg.connect(processor).anchor(recordId, DIGEST, CID);
+    await reg.connect(inspector).verify(recordId);
+
+    await expect(
+      reg.connect(inspector).verify(recordId)
+    ).to.be.revertedWithCustomError(reg, "AlreadyVerified");
+
+    const r = await reg.get(recordId);
+    expect(r.verifier).to.equal(inspector.address);
+    expect(r.verifiedAt).to.be.greaterThan(0n);
+  });
+
   it("rejects a revoked processor", async function () {
     await reg.revokeRole(PROCESSOR, processor.address);
     await expect(
       reg.connect(processor).anchor(recordId, DIGEST, CID)
     ).to.be.revertedWithCustomError(reg, "NotAuthorized");
+  });
+
+
+  it("rejects grantRole from an account without ADMIN", async function () {
+    await expect(
+      reg.connect(processor).grantRole(INSPECTOR, outsider.address)
+    )
+      .to.be.revertedWithCustomError(reg, "NotAuthorized")
+      .withArgs(ADMIN);
+
+    expect(await reg.hasRole(INSPECTOR, outsider.address)).to.equal(false);
+  });
+
+  it("rejects revokeRole from an account without ADMIN", async function () {
+    await expect(
+      reg.connect(processor).revokeRole(PROCESSOR, processor.address)
+    )
+      .to.be.revertedWithCustomError(reg, "NotAuthorized")
+      .withArgs(ADMIN);
+
+    expect(await reg.hasRole(PROCESSOR, processor.address)).to.equal(true);
+  });
+
+  it("rejects verify from a processor who does not hold INSPECTOR", async function () {
+    await reg.connect(processor).anchor(recordId, DIGEST, CID);
+    await expect(reg.connect(processor).verify(recordId))
+      .to.be.revertedWithCustomError(reg, "NotAuthorized")
+      .withArgs(INSPECTOR);
+  });
+
+  it("rejects a non-admin granting themselves ADMIN", async function () {
+    await expect(
+      reg.connect(outsider).grantRole(ADMIN, outsider.address)
+    )
+      .to.be.revertedWithCustomError(reg, "NotAuthorized")
+      .withArgs(ADMIN);
+
+    expect(await reg.hasRole(ADMIN, outsider.address)).to.equal(false);
+  });
+
+  it("accepts grantRole to the zero address", async function () {
+    await expect(reg.grantRole(PROCESSOR, ethers.ZeroAddress))
+      .to.emit(reg, "RoleGranted")
+      .withArgs(PROCESSOR, ethers.ZeroAddress, admin.address);
+
+    expect(await reg.hasRole(PROCESSOR, ethers.ZeroAddress)).to.equal(true);
+  });
+
+  it("emits a second RoleGranted when the role is already held", async function () {
+    expect(await reg.hasRole(PROCESSOR, processor.address)).to.equal(true);
+    const prior = await reg.queryFilter(
+      reg.filters.RoleGranted(PROCESSOR, processor.address)
+    );
+
+    await expect(reg.grantRole(PROCESSOR, processor.address))
+      .to.emit(reg, "RoleGranted")
+      .withArgs(PROCESSOR, processor.address, admin.address);
+
+    const after = await reg.queryFilter(
+      reg.filters.RoleGranted(PROCESSOR, processor.address)
+    );
+    expect(after.length).to.equal(prior.length + 1);
+    expect(await reg.hasRole(PROCESSOR, processor.address)).to.equal(true);
+  });
+
+  it("emits RoleRevoked when the account does not hold the role", async function () {
+    expect(await reg.hasRole(PROCESSOR, outsider.address)).to.equal(false);
+
+    await expect(reg.revokeRole(PROCESSOR, outsider.address))
+      .to.emit(reg, "RoleRevoked")
+      .withArgs(PROCESSOR, outsider.address, admin.address);
+
+    expect(await reg.hasRole(PROCESSOR, outsider.address)).to.equal(false);
+  });
+
+
+  it("lets the last ADMIN revoke itself and leave zero admins", async function () {
+    await expect(reg.revokeRole(ADMIN, admin.address))
+      .to.emit(reg, "RoleRevoked")
+      .withArgs(ADMIN, admin.address, admin.address);
+
+    expect(await reg.hasRole(ADMIN, admin.address)).to.equal(false);
+
+    for (const caller of [admin, processor, inspector, outsider]) {
+      await expect(
+        reg.connect(caller).grantRole(PROCESSOR, outsider.address)
+      )
+        .to.be.revertedWithCustomError(reg, "NotAuthorized")
+        .withArgs(ADMIN);
+    }
+
+    await expect(reg.connect(processor).anchor(recordId, DIGEST, CID)).to.emit(
+      reg,
+      "RecordAnchored"
+    );
+  });
+
+  it("accepts an empty cid", async function () {
+    await reg.connect(processor).anchor(recordId, DIGEST, "");
+
+    const r = await reg.get(recordId);
+    expect(r.cid).to.equal("");
+    expect(r.digest).to.equal(DIGEST);
+    expect(r.submitter).to.equal(processor.address);
+    expect(r.submittedAt).to.be.greaterThan(0n);
+  });
+
+  it("accepts a zero recordId", async function () {
+    await reg.connect(processor).anchor(ethers.ZeroHash, DIGEST, CID);
+
+    const r = await reg.get(ethers.ZeroHash);
+    expect(r.digest).to.equal(DIGEST);
+    expect(r.cid).to.equal(CID);
+    expect(r.submitter).to.equal(processor.address);
+
+    // Zero is a real key, so the next anchor of the default id is permanent.
+    await expect(
+      reg.connect(processor).anchor(ethers.ZeroHash, DIGEST, CID)
+    ).to.be.revertedWithCustomError(reg, "AlreadyAnchored");
+  });
+
+  it("accepts a very long cid", async function () {
+    // A portal CIDv0 is 46 characters. anchor stores whatever string it is given.
+    const longCid = "x".repeat(1024);
+    await reg.connect(processor).anchor(recordId, DIGEST, longCid);
+
+    const r = await reg.get(recordId);
+    expect(r.cid).to.equal(longCid);
+    expect(r.cid.length).to.equal(1024);
+    expect(r.digest).to.equal(DIGEST);
+    expect(r.submittedAt).to.be.greaterThan(0n);
   });
 });
