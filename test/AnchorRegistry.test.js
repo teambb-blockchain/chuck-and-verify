@@ -27,6 +27,20 @@ describe("AnchorRegistry", function () {
     await reg.grantRole(INSPECTOR, inspector.address);
   });
 
+  // Sends the transaction first. revertedWithCustomError looks the error name
+  // up on the contract before sending, so on the old source it fails in the
+  // matcher and never shows that the call succeeded.
+  async function expectNamedRevert(tx, errorName, succeeded) {
+    let caught;
+    try {
+      await tx;
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught, succeeded).to.not.equal(undefined);
+    expect(String(caught.message)).to.include(errorName);
+  }
+
   it("gives the deployer ADMIN only", async function () {
     expect(await reg.hasRole(ADMIN, admin.address)).to.equal(true);
     expect(await reg.hasRole(PROCESSOR, admin.address)).to.equal(false);
@@ -266,12 +280,14 @@ describe("AnchorRegistry", function () {
       .withArgs(PROCESSOR);
   });
 
-  it("accepts grantRole to the zero address", async function () {
-    await expect(reg.grantRole(PROCESSOR, ethers.ZeroAddress))
-      .to.emit(reg, "RoleGranted")
-      .withArgs(PROCESSOR, ethers.ZeroAddress, admin.address);
+  it("rejects grantRole to the zero address", async function () {
+    await expectNamedRevert(
+      reg.grantRole(PROCESSOR, ethers.ZeroAddress),
+      "ZeroAddress",
+      "grantRole stored the zero address"
+    );
 
-    expect(await reg.hasRole(PROCESSOR, ethers.ZeroAddress)).to.equal(true);
+    expect(await reg.hasRole(PROCESSOR, ethers.ZeroAddress)).to.equal(false);
   });
 
   it("emits a second RoleGranted when the role is already held", async function () {
@@ -302,20 +318,67 @@ describe("AnchorRegistry", function () {
   });
 
 
-  it("lets the last ADMIN revoke itself and leave zero admins", async function () {
+  it("rejects the last admin revoking itself", async function () {
+    // A second grant of ADMIN to the same account must not open a way out.
+    await reg.grantRole(ADMIN, admin.address);
+
+    await expectNamedRevert(
+      reg.revokeRole(ADMIN, admin.address),
+      "LastAdmin",
+      "the last admin revoked itself"
+    );
+
+    expect(await reg.hasRole(ADMIN, admin.address)).to.equal(true);
+
+    await expect(reg.grantRole(PROCESSOR, outsider.address)).to.emit(
+      reg,
+      "RoleGranted"
+    );
+    expect(await reg.hasRole(PROCESSOR, outsider.address)).to.equal(true);
+  });
+
+  it("lets an admin step down when another admin remains", async function () {
+    await reg.grantRole(ADMIN, outsider.address);
+
     await expect(reg.revokeRole(ADMIN, admin.address))
       .to.emit(reg, "RoleRevoked")
       .withArgs(ADMIN, admin.address, admin.address);
 
     expect(await reg.hasRole(ADMIN, admin.address)).to.equal(false);
+    expect(await reg.hasRole(ADMIN, outsider.address)).to.equal(true);
 
-    for (const caller of [admin, processor, inspector, outsider]) {
-      await expect(
-        reg.connect(caller).grantRole(PROCESSOR, outsider.address)
-      )
-        .to.be.revertedWithCustomError(reg, "NotAuthorized")
-        .withArgs(ADMIN);
-    }
+    await expectNamedRevert(
+      reg.connect(outsider).revokeRole(ADMIN, outsider.address),
+      "LastAdmin",
+      "the remaining admin revoked itself"
+    );
+    expect(await reg.hasRole(ADMIN, outsider.address)).to.equal(true);
+  });
+
+  it("rejects an empty cid", async function () {
+    await expectNamedRevert(
+      reg.connect(processor).anchor(recordId, DIGEST, ""),
+      "EmptyCid",
+      "empty cid was stored"
+    );
+
+    await expect(reg.connect(processor).anchor(recordId, DIGEST, CID)).to.emit(
+      reg,
+      "RecordAnchored"
+    );
+    expect((await reg.get(recordId)).cid).to.equal(CID);
+  });
+
+  it("rejects a zero recordId", async function () {
+    await expectNamedRevert(
+      reg.connect(processor).anchor(ethers.ZeroHash, DIGEST, CID),
+      "EmptyRecordId",
+      "bytes32(0) was stored"
+    );
+
+    const empty = await reg.get(ethers.ZeroHash);
+    expect(empty.submittedAt).to.equal(0n);
+    expect(empty.digest).to.equal(ethers.ZeroHash);
 
     await expect(reg.connect(processor).anchor(recordId, DIGEST, CID)).to.emit(
       reg,
@@ -323,50 +386,36 @@ describe("AnchorRegistry", function () {
     );
   });
 
-  it("accepts an empty cid", async function () {
-    await reg.connect(processor).anchor(recordId, DIGEST, "");
+  it("rejects a cid longer than the maximum", async function () {
+    // 128 matches MAX_CID_LENGTH. 1024 is the length the audit stored.
+    // The old contract accepts 1024, so this test fails there.
+    const atMax = "x".repeat(128);
+    await reg.connect(processor).anchor(recordId, DIGEST, atMax);
+    expect((await reg.get(recordId)).cid).to.equal(atMax);
 
-    await expect(reg.connect(inspector).verify(recordId)).to.emit(
-      reg,
-      "RecordVerified"
+    const tooLong = "x".repeat(1024);
+    const otherId = ethers.keccak256(ethers.toUtf8Bytes("BB-2026-015"));
+    await expectNamedRevert(
+      reg.connect(processor).anchor(otherId, DIGEST, tooLong),
+      "CidTooLong",
+      "1024-character cid was stored"
     );
-
-    const r = await reg.get(recordId);
-    expect(r.cid).to.equal("");
-    expect(r.digest).to.equal(DIGEST);
-    expect(r.submitter).to.equal(processor.address);
-    expect(r.verifier).to.equal(inspector.address);
-    expect(r.verifiedAt).to.be.greaterThan(0n);
-    expect(r.submittedAt).to.be.greaterThan(0n);
-
-    await expect(
-      reg.connect(processor).anchor(recordId, DIGEST, CID)
-    ).to.be.revertedWithCustomError(reg, "AlreadyAnchored");
+    expect((await reg.get(otherId)).submittedAt).to.equal(0n);
   });
 
-  it("accepts a zero recordId", async function () {
-    await reg.connect(processor).anchor(ethers.ZeroHash, DIGEST, CID);
+  it("rejects a cid that is not a bare identifier", async function () {
+    const gateway =
+      "https://gateway.didlab.org/ipfs/QmYE3zK8Kov7vHQpSaETDqXyjUHnHHt9WBvTWKL5MVP1mG";
+    const filename = "mock-boxed-beef-lot-BB-2026-014.pdf";
 
-    const r = await reg.get(ethers.ZeroHash);
-    expect(r.digest).to.equal(DIGEST);
-    expect(r.cid).to.equal(CID);
-    expect(r.submitter).to.equal(processor.address);
+    for (const bad of [gateway, filename]) {
+      await expectNamedRevert(
+        reg.connect(processor).anchor(recordId, DIGEST, bad),
+        "InvalidCid",
+        "a gateway URL or filename was stored"
+      );
+    }
 
-    // Zero is a real key, so the next anchor of the default id is permanent.
-    await expect(
-      reg.connect(processor).anchor(ethers.ZeroHash, DIGEST, CID)
-    ).to.be.revertedWithCustomError(reg, "AlreadyAnchored");
-  });
-
-  it("accepts a very long cid", async function () {
-    // A portal CIDv0 is 46 characters. anchor stores whatever string it is given.
-    const longCid = "x".repeat(1024);
-    await reg.connect(processor).anchor(recordId, DIGEST, longCid);
-
-    const r = await reg.get(recordId);
-    expect(r.cid).to.equal(longCid);
-    expect(r.cid.length).to.equal(1024);
-    expect(r.digest).to.equal(DIGEST);
-    expect(r.submittedAt).to.be.greaterThan(0n);
+    expect((await reg.get(recordId)).submittedAt).to.equal(0n);
   });
 });

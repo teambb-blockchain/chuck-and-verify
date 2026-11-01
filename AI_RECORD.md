@@ -375,3 +375,21 @@ This file is a different shape from `SafeVault` and `VulnerableVault` in the sam
 - **Verification:** `npx hardhat test test/AnchorRegistry.test.js` — 26 passing (was 23). The race assertion `receiptB.index < receiptA.index` passed, so B was ordered ahead of A in that block.
 - **What it got wrong:** Nothing found. The first run passed.
 
+### 2026-11-01 — AnchorRegistry activity 10 fixes, no redeploy
+
+- **Tool:** Cursor agent
+- **Request:** Activity 10 of the adversarial audit: fix the real findings in `AnchorRegistry`. Do not redeploy.
+- **Outcome:** `contracts/AnchorRegistry.sol` now reverts the five findings that are checks on the existing functions. The last `ADMIN` revoke reverts `LastAdmin`; a second admin can still step down. `grantRole` to `address(0)` reverts `ZeroAddress`. `anchor` reverts `EmptyRecordId` for `bytes32(0)`, `EmptyCid` for `""`, `CidTooLong` above 128 characters, and `InvalidCid` for a gateway URL or a filename. A failed anchor leaves `submittedAt` at 0, so the lot id can still be anchored with the real CID. Not redeployed. DIDLab still serves `0x5dcEde6EFeBE6592874b263456232fD2328f89B2`. The frontend ABI and address were left on that deployment.
+
+  Left as they are, for the residual-risk section: any `PROCESSOR` can still anchor any `recordId`, and revoking the role leaves the record; two processors can still race, and the first mined anchor wins; `verify` still compares addresses, so two keys in one organization can anchor and attest. A misspelled role id still grants only that id. A repeat `grantRole` and a `revokeRole` of a role not held still emit.
+- **Verification:** The seven regression tests were run against `HEAD`'s `AnchorRegistry.sol`, then against the fixed source. On the old source, 0 passing and 7 failing, each because the call succeeded: zero-address grant stored, the last admin revoked itself, the remaining admin revoked itself, empty cid stored, `bytes32(0)` stored, 1024-character cid stored, gateway URL stored. On the fixed source, `npx hardhat test test/AnchorRegistry.test.js` — 28 passing. `npx hardhat test` — 61 passing, 1 failing. The failure is `VulnerableVault` reentrancy: Solidity 0.8 reverts the balance subtraction with panic `0x11` on the way out of the reentrant calls, so the drain transaction reverts. Those files were not part of this change.
+- **What it got wrong:** The first regression asserts used `revertedWithCustomError`. That matcher looks the error name up on the contract before sending, so the old-source run failed with "doesn't have a custom error named …" and never showed that the call succeeded. The tests now send first and fail when the transaction is mined. The activity 9 tests that expected the holes (`accepts an empty cid`, and the same shape for zero id, long cid, zero address, and last-admin revoke) were replaced. Those pass on the old contract, so they are not the guards.
+
+### 2026-11-01 — Security review document (activity 11)
+
+- **Tool:** Cursor agent
+- **Request:** Write `docs/SECURITY_REVIEW.md` in the activity 11 structure, using the audit, the regression tests, the notes, and the redeploy.
+- **Outcome:** Added `docs/SECURITY_REVIEW.md` with scope, method, findings, the AI verification table, fixes, residual risk, and key management. The reviewed address is `0xF732E7E09fa34f451ef04AbB51891E98265E7eeF`. Findings 1, 4, 5, 6, and 7 are fixed. Findings 2, 3, and 8 are accepted. Reentrancy and unchecked calls are not applicable. The frontend still points at `0x5dcEde6EFeBE6592874b263456232fD2328f89B2`.
+- **Verification:** Compared the document to `contracts/AnchorRegistry.sol`, `docs/references/notes.md`, the unedited audit in this file, and `frontend/public/app.js` line 260. No tests run.
+- **What it got wrong:** Nothing found in the draft. The fee-race row is limited to Hardhat, matching the test comment.
+
