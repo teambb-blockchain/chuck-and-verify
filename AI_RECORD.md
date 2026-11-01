@@ -367,3 +367,11 @@ This file is a different shape from `SafeVault` and `VulnerableVault` in the sam
 - **Verification:** Compared this entry to the prior reply and to `contracts/AnchorRegistry.sol` lines 68–71, 77–78, and 92–96. No tests run. The contract is unchanged.
 - **What it got wrong:** Not judged here. All eight findings are kept, including any that a later pass disproves. The empty reentrancy and unchecked-call sections are kept too.
 
+### 2026-11-01 — AnchorRegistry tests for Activity 9 rows 2, 3, 4, and 10
+
+- **Tool:** Cursor agent
+- **Request:** Add the Activity 9 tests in `test/AnchorRegistry.test.js`. Extend the empty-cid case so an inspector verifies `""`, `get` returns that verified record, and a repair anchor reverts `AlreadyAnchored`. Add the squat: processor B anchors first, A's anchor reverts, admin revokes B's `PROCESSOR`, `get` still returns B's digest and submitter, and the inspector can still verify (row 14(a) as well). Add the Hardhat mempool race with `evm_setAutomine` false, A's anchor then B's at a higher fee, one mined block, B stored and A reverted, without claiming DIDLab orders by fee. Add the optional misspelled role: `grantRole(keccak256("PROCESOR"), p)` succeeds and `anchor` from p reverts `NotAuthorized(PROCESSOR)`.
+- **Outcome:** `AnchorRegistry.sol` is unchanged. `accepts an empty cid` now verifies from the inspector and expects the repair anchor to revert. New tests: `keeps a squatter's record after PROCESSOR is revoked and an inspector verifies it`, `mines the higher-fee anchor and reverts the earlier one in the Hardhat mempool`, and `accepts a misspelled role id that does not let the account anchor`. The race sends plant A first with a 1 wei tip and plant B second with a 2 gwei tip, mines one block, and turns automine back on in a `finally`. The account `p` is the outsider, who does not already hold `PROCESSOR`. The comment on the race test says this is Hardhat's mempool only.
+- **Verification:** `npx hardhat test test/AnchorRegistry.test.js` — 26 passing (was 23). The race assertion `receiptB.index < receiptA.index` passed, so B was ordered ahead of A in that block.
+- **What it got wrong:** Nothing found. The first run passed.
+
