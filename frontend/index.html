@@ -317,7 +317,9 @@
     createWalletClient,
     custom,
     http,
-    stringToHex
+    stringToHex,
+    BaseError,
+    ContractFunctionRevertedError
   } from "https://esm.sh/viem@2";
 
   // Addresses and chain ID live in the Deployed contracts markup once;
@@ -563,7 +565,12 @@
         { name: "processor", type: "address", indexed: true },
         { name: "weightLbs", type: "uint256", indexed: false }
       ]
-    }
+    },
+    // Custom errors registerBatch can revert with. Listing them lets the
+    // pre-flight simulation name the reason instead of a raw revert.
+    { type: "error", name: "Unauthorized", inputs: [] },
+    { type: "error", name: "EmptyBatchId", inputs: [] },
+    { type: "error", name: "BatchAlreadyExists", inputs: [] }
   ];
 
   registerButton.onclick = async () => {
@@ -607,16 +614,24 @@
         transport: custom(window.ethereum)
       });
 
+      // Simulate first. A call that would revert (no PROCESSOR credential,
+      // duplicate batch id) is reported here, before MetaMask opens and
+      // before any gas is spent.
       transactionStatus.textContent =
-        "Waiting for MetaMask approval. No transaction sent yet.";
+        "Simulating against DIDLab. No transaction sent yet.";
 
-      const hash = await walletClient.writeContract({
+      const { request } = await publicClient.simulateContract({
         address: beefSupplyChainAddress,
         abi: registerAbi,
         functionName: "registerBatch",
         args: [batchId, weight],
         account: accounts[0]
       });
+
+      transactionStatus.textContent =
+        "Waiting for MetaMask approval. No transaction sent yet.";
+
+      const hash = await walletClient.writeContract(request);
 
       transactionStatus.textContent =
         "PENDING: Transaction sent. Waiting for blockchain confirmation.";
@@ -651,10 +666,20 @@
       document.getElementById("verifyBatch").click();
 
     } catch (error) {
+      const reverted =
+        error instanceof BaseError
+          ? error.walk((e) => e instanceof ContractFunctionRevertedError)
+          : null;
+
       if (error.code === 4001 ||
           error.name === "UserRejectedRequestError") {
         transactionStatus.textContent =
           "REJECTED: You declined in MetaMask. No transaction was sent and no gas was used.";
+      } else if (reverted) {
+        transactionStatus.textContent =
+          "WOULD REVERT: " +
+          (reverted.data?.errorName || reverted.shortMessage) +
+          ". No transaction was sent and no gas was used.";
       } else {
         transactionStatus.textContent =
           "Transaction not completed: " +

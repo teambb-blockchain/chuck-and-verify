@@ -26,6 +26,18 @@ async function main() {
   console.log("CredentialRegistry:", registryAddress);
   console.log("Registry deployment TX:", registryTx.hash);
 
+  // Read back from the chain: the deployer must be the registry admin,
+  // otherwise setupCredentials.js cannot call setIssuer later.
+  const admin = await registry.admin();
+
+  if (admin.toLowerCase() !== deployer.address.toLowerCase()) {
+    throw new Error(
+      `admin() mismatch: expected ${deployer.address}, got ${admin}`
+    );
+  }
+
+  console.log("Registry admin:", admin);
+
   // Deploy the supply chain contract using the registry address.
   const SupplyChain = await hre.ethers.getContractFactory(
     "BeefSupplyChain"
@@ -39,6 +51,18 @@ async function main() {
 
   console.log("BeefSupplyChain:", supplyChainAddress);
   console.log("SupplyChain deployment TX:", supplyChainTx.hash);
+
+  // Read back from the chain: the supply chain must point at the registry
+  // we just deployed, not at a stale address from an earlier run.
+  const linkedRegistry = await supplyChain.registry();
+
+  if (linkedRegistry.toLowerCase() !== registryAddress.toLowerCase()) {
+    throw new Error(
+      `registry() mismatch: expected ${registryAddress}, got ${linkedRegistry}`
+    );
+  }
+
+  console.log("SupplyChain registry:", linkedRegistry);
 
   console.log("Deployment completed successfully!");
 }
