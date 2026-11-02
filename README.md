@@ -29,11 +29,46 @@ Confidential business information such as pricing, sales data, employee informat
 3. Compile: `npm run compile`
 4. Test: `npm test`
 
+## Deploy to DIDLab
+
+Deploying costs TRUST for gas on chain 252501. Use a disposable DIDLab lab wallet. `DEPLOYER_KEY` is a private key (64 hex characters after `0x`), not a wallet address, and it lives only in your local `.env`.
+
+```bash
+npm run compile
+
+# 1) Deploy CredentialRegistry, then BeefSupplyChain pointing at it.
+#    The script refuses any chain other than 252501 and checks admin()
+#    and registry() after each deployment.
+npm run deploy:didlab
+
+# 2) Make the deployer the issuer for every credential type and grant the
+#    demo credentials. Point it at the new registry from step 1.
+export CREDENTIAL_REGISTRY_ADDRESS=0x...   # "CredentialRegistry:" line above
+npm run setup:credentials
+
+# 3) Register the sample batch BEEF-001.
+npm run register:batch
+```
+
+Each script prints the addresses and transaction hashes it produced. Confirm them in the [DIDLab explorer](https://explorer.didlab.org).
+
+By default every demo credential goes to the deployer wallet. To show role separation on chain, set a different wallet for each role before step 2:
+
+```bash
+export DEMO_PROCESSOR=0x...
+export DEMO_INSPECTOR=0x...
+export DEMO_CUSTODIAN=0x...
+```
+
+The processor also receives the CUSTODIAN credential so it can ship a batch after registering it. Credentials expire after 30 days unless `CREDENTIAL_TTL_SECONDS` is set. Re-running step 2 is safe: it skips issuers and credentials that are already in place.
+
+After a redeploy, update the addresses in `frontend/index.html` (Deployed contracts section) and `scripts/registerBatch.js`.
+
 ## Run the project page locally
 
-Open `frontend/index.html` in a browser.
+Open `frontend/index.html` in a browser, or run `npm start` and open `http://localhost:3000`.
 
-On the DIDLab host, nginx serves the repo checkout. Today `/frontend/index.html` works; `/` is still 403 until the root `index.html` redirect is deployed.
+On the DIDLab host, nginx serves the repo checkout: `/` redirects to `/frontend/index.html`.
 
 ## Environment
 
@@ -41,6 +76,12 @@ See `.env.example` for required variables:
 
 - `DIDLAB_RPC` — RPC endpoint
 - `DEPLOYER_KEY` — deployer private key (never commit the real value)
+
+Optional, read by `scripts/setupCredentials.js` only:
+
+- `CREDENTIAL_REGISTRY_ADDRESS` — registry to configure (defaults to the CP2 deployment)
+- `DEMO_PROCESSOR`, `DEMO_INSPECTOR`, `DEMO_CUSTODIAN` — credential holders (default to the deployer)
+- `CREDENTIAL_TTL_SECONDS` — credential lifetime (default 30 days)
 
 ## Team docs
 
