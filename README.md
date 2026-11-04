@@ -19,8 +19,8 @@ Confidential business information such as pricing, sales data, employee informat
 | `docs/` | Proposal and team charter |
 | `docs/architecture/` | High-level system design notes |
 | `docs/decisions/` | Architecture Decision Records (one file per decision) |
-| `frontend/` | Public project page (`/frontend/` on the DIDLab host) |
-| `index.html` | Tiny redirect from `/` to `/frontend/index.html` (nginx web root is the repo root) |
+| `index.html` | Public project page (served at `/` on the DIDLab host; nginx web root is the repo root) |
+| `frontend/index.html` | Redirect from `/frontend/index.html` to `/` for old links |
 
 ## Setup
 
@@ -62,13 +62,13 @@ export DEMO_CUSTODIAN=0x...
 
 The processor also receives the CUSTODIAN credential so it can ship a batch after registering it. Credentials expire after 30 days unless `CREDENTIAL_TTL_SECONDS` is set. Re-running step 2 is safe: it skips issuers and credentials that are already in place.
 
-After a redeploy, update the addresses in `frontend/index.html` (Deployed contracts section) and `scripts/registerBatch.js`.
+After a redeploy, update the addresses in `index.html` (Deployed contracts section) and `scripts/registerBatch.js`.
 
 ## Run the project page locally
 
-Open `frontend/index.html` in a browser, or run `npm start` and open `http://localhost:3000`.
+Run `npm start` and open `http://localhost:3000`. The same page is repo-root `index.html`.
 
-On the DIDLab host, nginx serves the repo checkout: `/` redirects to `/frontend/index.html`.
+On the DIDLab host, nginx serves the repo checkout: `/` is the DApp. `/frontend/index.html` redirects to `/`.
 
 ## Environment
 

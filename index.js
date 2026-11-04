@@ -2,7 +2,9 @@ const http = require("http");
 const fs = require("fs");
 const path = require("path");
 
-const root = path.join(__dirname, "frontend");
+// Repo root is the nginx docroot on DIDLab. Only the public page paths are
+// exposed here so `npm start` does not serve .env, contracts, or node_modules.
+const root = __dirname;
 const port = Number(process.env.PORT) || 3000;
 
 const types = {
@@ -17,9 +19,20 @@ const types = {
   ".webp": "image/webp",
 };
 
+const PUBLIC_FILES = new Map([
+  ["/", "index.html"],
+  ["/index.html", "index.html"],
+  ["/frontend", path.join("frontend", "index.html")],
+  ["/frontend/", path.join("frontend", "index.html")],
+  ["/frontend/index.html", path.join("frontend", "index.html")],
+]);
+
 function resolveFile(urlPath) {
-  const decoded = decodeURIComponent(urlPath.split("?")[0]);
-  const relative = decoded === "/" ? "index.html" : decoded.replace(/^\/+/, "");
+  const decoded = decodeURIComponent((urlPath || "/").split("?")[0]);
+  const relative = PUBLIC_FILES.get(decoded);
+  if (!relative) {
+    return null;
+  }
   const filePath = path.resolve(root, relative);
   if (filePath !== root && !filePath.startsWith(root + path.sep)) {
     return null;
@@ -38,31 +51,26 @@ function serve(req, res) {
   }
 
   if (!filePath) {
-    res.writeHead(403, { "Content-Type": "text/plain; charset=utf-8" });
-    res.end("Forbidden");
+    res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+    res.end("Not found");
     return;
   }
 
-  fs.stat(filePath, (statErr, stat) => {
-    const target =
-      !statErr && stat.isDirectory() ? path.join(filePath, "index.html") : filePath;
+  fs.readFile(filePath, (err, data) => {
+    if (err) {
+      res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+      res.end("Not found");
+      return;
+    }
 
-    fs.readFile(target, (err, data) => {
-      if (err) {
-        res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
-        res.end("Not found");
-        return;
-      }
-
-      const type = types[path.extname(target)] || "application/octet-stream";
-      res.writeHead(200, { "Content-Type": type });
-      res.end(data);
-    });
+    const type = types[path.extname(filePath)] || "application/octet-stream";
+    res.writeHead(200, { "Content-Type": type });
+    res.end(data);
   });
 }
 
 const server = http.createServer(serve);
 
 server.listen(port, "0.0.0.0", () => {
-  console.log(`Serving frontend on port ${port}`);
+  console.log(`Serving project page on port ${port}`);
 });
