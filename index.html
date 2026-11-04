@@ -183,6 +183,17 @@
       outline: 2px solid var(--seal);
       outline-offset: 2px;
     }
+
+    #events {
+      margin: 0.5rem 0 0;
+      padding-left: 1.25rem;
+    }
+
+    #events li {
+      margin: 0.35rem 0;
+      font-size: 0.95rem;
+      overflow-wrap: anywhere;
+    }
   </style>
 </head>
 <body>
@@ -294,6 +305,10 @@
     No transaction submitted.
     </p>
     <p id="transactionDetails"></p>
+
+    <h3>Activity</h3>
+    <p>New registrations appear here when <code>BatchRegistered</code> is observed on chain — not when Register is clicked.</p>
+    <ul id="events" aria-live="polite"></ul>
   </div>
 
   <p id="verificationStatus" role="status"></p>
@@ -319,6 +334,7 @@
     custom,
     http,
     stringToHex,
+    hexToString,
     BaseError,
     ContractFunctionRevertedError
   } from "https://esm.sh/viem@2";
@@ -374,7 +390,31 @@
         { name: "recallNoticeHash", type: "bytes32" },
         { name: "recallClassification", type: "uint8" }
       ]
-    }
+    },
+    {
+      type: "function",
+      name: "registerBatch",
+      stateMutability: "nonpayable",
+      inputs: [
+        { name: "batchId", type: "bytes32" },
+        { name: "weightLbs", type: "uint256" }
+      ],
+      outputs: []
+    },
+    {
+      type: "event",
+      name: "BatchRegistered",
+      inputs: [
+        { name: "batchId", type: "bytes32", indexed: true },
+        { name: "processor", type: "address", indexed: true },
+        { name: "weightLbs", type: "uint256", indexed: false }
+      ]
+    },
+    // Custom errors registerBatch can revert with. Listing them lets the
+    // pre-flight simulation name the reason instead of a raw revert.
+    { type: "error", name: "Unauthorized", inputs: [] },
+    { type: "error", name: "EmptyBatchId", inputs: [] },
+    { type: "error", name: "BatchAlreadyExists", inputs: [] }
   ];
 
   const publicClient = createPublicClient({
@@ -504,8 +544,7 @@
     });
   }
 
-  document.getElementById("verifyBatch").onclick = async () => {
-    const batchName = document.getElementById("batchId").value.trim();
+  async function loadBatch(batchName) {
     const result = document.getElementById("batchResult");
 
     result.hidden = true;
@@ -541,38 +580,54 @@
         "Unable to verify batch. Check the ID or network connection.";
       console.error(error);
     }
+  }
+
+  document.getElementById("verifyBatch").onclick = () => {
+    loadBatch(document.getElementById("batchId").value.trim());
   };
-  
+
+  const eventList = document.getElementById("events");
+
+  function decodeBatchId(value) {
+    try {
+      return hexToString(value, { size: 32 });
+    } catch {
+      return value;
+    }
+  }
+
+  publicClient.watchContractEvent({
+    address: beefSupplyChainAddress,
+    abi,
+    eventName: "BatchRegistered",
+    onLogs: async (logs) => {
+      for (const log of logs) {
+        const batchName = decodeBatchId(log.args.batchId);
+        const args = {
+          batchId: batchName,
+          processor: log.args.processor,
+          weightLbs:
+            typeof log.args.weightLbs === "bigint"
+              ? log.args.weightLbs.toString()
+              : log.args.weightLbs
+        };
+        const item = document.createElement("li");
+        item.textContent =
+          "block " + log.blockNumber + " · " + JSON.stringify(args);
+        eventList.prepend(item);
+
+        document.getElementById("batchId").value = batchName;
+        await loadBatch(batchName);
+      }
+    },
+    onError: (error) => {
+      console.error(error);
+    }
+  });
+
   const registerButton = document.getElementById("registerBatch");
   const transactionStatus = document.getElementById("transactionStatus");
   const transactionDetails = document.getElementById("transactionDetails");
-
-  const registerAbi = [
-    {
-      type: "function",
-      name: "registerBatch",
-      stateMutability: "nonpayable",
-      inputs: [
-        { name: "batchId", type: "bytes32" },
-        { name: "weightLbs", type: "uint256" }
-      ],
-      outputs: []
-    },
-    {
-      type: "event",
-      name: "BatchRegistered",
-      inputs: [
-        { name: "batchId", type: "bytes32", indexed: true },
-        { name: "processor", type: "address", indexed: true },
-        { name: "weightLbs", type: "uint256", indexed: false }
-      ]
-    },
-    // Custom errors registerBatch can revert with. Listing them lets the
-    // pre-flight simulation name the reason instead of a raw revert.
-    { type: "error", name: "Unauthorized", inputs: [] },
-    { type: "error", name: "EmptyBatchId", inputs: [] },
-    { type: "error", name: "BatchAlreadyExists", inputs: [] }
-  ];
 
   registerButton.onclick = async () => {
     registerButton.disabled = true;
@@ -623,7 +678,7 @@
 
       const { request } = await publicClient.simulateContract({
         address: beefSupplyChainAddress,
-        abi: registerAbi,
+        abi,
         functionName: "registerBatch",
         args: [batchId, weight],
         account: accounts[0]
@@ -658,13 +713,12 @@
       transactionStatus.textContent =
         "CONFIRMED: Batch successfully registered on DIDLab.";
 
+      // Do not loadBatch here. The BatchRegistered watcher refreshes
+      // the record after the log is observed on chain.
       transactionDetails.textContent =
         "Transaction: " + hash +
         " | Block: " + receipt.blockNumber +
         " | Gas used: " + receipt.gasUsed;
-
-      document.getElementById("batchId").value = batchName;
-      document.getElementById("verifyBatch").click();
 
     } catch (error) {
       const reverted =

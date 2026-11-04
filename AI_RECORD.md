@@ -127,3 +127,11 @@ Add an entry whenever AI tools help with architecture, code, docs, or debugging 
 - **Outcome:** Diagnosed the redirect as root `index.html` (intentional stub), not MetaMask; Cursor’s embedded browser has no `window.ethereum` so status stays “No Wallet Detected.” Killed stale local servers that still pointed at a deleted `frontend/public/` tree. Moved the live page to repo-root `index.html`; `frontend/index.html` now redirects to `/` for old links. Updated `index.js` to serve only `/` and `/frontend/index.html` from the repo root (no `.env` / contracts exposure). Updated README structure and run notes. Live host still serves the old layout until redeploy.
 - **Verification:** `PORT=3456 node index.js`: `/` returns the Connect MetaMask page (~22KB); `/frontend/index.html` redirects to `/`; `package.json` and `.env` return 404. Browser: `/frontend/index.html` ends at `http://127.0.0.1:3456/` with the full DApp.
 - **What it got wrong:** Nothing found in this pass; earlier same-day vertical-slice work under `frontend/public/` had left orphan Express processes that 404’d after that tree was removed
+
+### 2026-11-04 — BatchRegistered watcher drives the batch record
+
+- **Tool:** Cursor agent
+- **Request:** Implement the planned `BatchRegistered` watcher so the live page updates from the contract event, not from the Register click
+- **Outcome:** Root `index.html` watches `BatchRegistered` once at module scope. Each log prepends an Activity list item (decoded batch id, processor, weight) and calls `loadBatch`. Register still simulates, sends, and reports receipt status, but no longer clicks Verify or reads `getBatch`. Manual Verify Batch still looks up the id in the input. Wallet `chainChanged` / `accountsChanged` listeners are unchanged.
+- **Verification:** Local `PORT=3457`: Verify Batch still reads `BEEF-001` (processor `0xb323…393F`, 500 lbs). Register with no wallet reports the failure and leaves Activity empty and the BEEF-001 record unchanged. Source watches `BatchRegistered` at module scope; Register success does not call `loadBatch`. A live `registerBatch` was not sent (embedded browser has no wallet).
+- **What it got wrong:** Nothing found in this pass
