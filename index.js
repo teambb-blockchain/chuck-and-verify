@@ -2,9 +2,8 @@ const http = require("http");
 const fs = require("fs");
 const path = require("path");
 
-// Repo root is the nginx docroot on DIDLab. Only the public page paths are
-// exposed here so `npm start` does not serve .env, contracts, or node_modules.
 const root = __dirname;
+const publicDir = path.join(root, "frontend", "public");
 const port = Number(process.env.PORT) || 3000;
 
 const types = {
@@ -19,25 +18,38 @@ const types = {
   ".webp": "image/webp",
 };
 
-const PUBLIC_FILES = new Map([
-  ["/", "index.html"],
-  ["/index.html", "index.html"],
-  ["/frontend", path.join("frontend", "index.html")],
-  ["/frontend/", path.join("frontend", "index.html")],
-  ["/frontend/index.html", path.join("frontend", "index.html")],
-]);
+function isInside(dir, filePath) {
+  const resolved = path.resolve(filePath);
+  return resolved === dir || resolved.startsWith(dir + path.sep);
+}
 
-function resolveFile(urlPath) {
-  const decoded = decodeURIComponent((urlPath || "/").split("?")[0]);
-  const relative = PUBLIC_FILES.get(decoded);
-  if (!relative) {
-    return null;
+function fileInPublic(requestPath) {
+  let rel = requestPath;
+  if (rel === "/frontend/public" || rel === "/frontend/public/") {
+    rel = "/index.html";
+  } else if (rel.startsWith("/frontend/public/")) {
+    rel = rel.slice("/frontend/public".length) || "/index.html";
   }
-  const filePath = path.resolve(root, relative);
-  if (filePath !== root && !filePath.startsWith(root + path.sep)) {
+  if (rel.endsWith("/")) {
+    rel += "index.html";
+  }
+  const filePath = path.resolve(publicDir, "." + rel);
+  if (!isInside(publicDir, filePath)) {
     return null;
   }
   return filePath;
+}
+
+function resolveFile(urlPath) {
+  const decoded = decodeURIComponent((urlPath || "/").split("?")[0]);
+  const candidate = fileInPublic(decoded);
+  if (!candidate) {
+    return null;
+  }
+  if (!fs.existsSync(candidate) || !fs.statSync(candidate).isFile()) {
+    return null;
+  }
+  return candidate;
 }
 
 function serve(req, res) {
