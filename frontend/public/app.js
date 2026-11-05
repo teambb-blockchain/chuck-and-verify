@@ -130,6 +130,21 @@ async function switchToDidLab() {
   await updateNetworkStatus();
 }
 
+function isUserRejection(error) {
+  let current = error;
+  while (current) {
+    if (
+      current.code === 4001 ||
+      current.name === "UserRejectedRequestError"
+    ) {
+      return true;
+    }
+    current = current.cause;
+  }
+  const text = `${error?.shortMessage || ""} ${error?.message || ""}`;
+  return /user rejected the request/i.test(text);
+}
+
 document.getElementById("connectWallet").onclick = async () => {
   if (!window.ethereum) {
     await updateNetworkStatus();
@@ -145,6 +160,11 @@ document.getElementById("connectWallet").onclick = async () => {
     await walletClient.requestAddresses();
     await updateNetworkStatus();
   } catch (error) {
+    if (isUserRejection(error)) {
+      networkStatus.textContent =
+        "Connection cancelled by user. No transaction was sent and no gas was used.";
+      return;
+    }
     networkStatus.textContent =
       "Wallet connection failed: " + error.message;
   }
