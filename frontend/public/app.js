@@ -1,8 +1,6 @@
 import {
-  createPublicClient,
   createWalletClient,
   custom,
-  http,
   stringToHex,
   hexToString,
   BaseError,
@@ -10,17 +8,29 @@ import {
 } from "https://esm.sh/viem@2";
 import { abi } from "./abi.js";
 import {
+  fetchSession,
+  signIn,
+  signOut,
+  applyPermissions,
+  SIGNED_OUT
+} from "./session.js";
+import { loadAdmin } from "./admin.js";
+import {
   gatewayUrlForCid,
   publishEncryptedForm
 } from "./ipfs.js";
+import {
+  EXPLORER_BASE,
+  REQUIRED_CHAIN_ID,
+  beefSupplyChainAddress,
+  credentialRegistryAddress,
+  chain,
+  publicClient,
+  isUserRejection
+} from "./chain.js";
 
-// beefSupplyChainAddress is the contract every read and write uses, and it
-// fills that contract's explorer link. The registry address is display-only.
-const EXPLORER_BASE = "https://explorer.didlab.org";
-const REQUIRED_CHAIN_ID = 252501;
-const beefSupplyChainAddress = "0x20bA1c398CD59b05dA4427162bdA7F26d5AB802e";
-const credentialRegistryAddress = "0x9ef5cb328aE86C968dDcb1Fd60887bd021D7AB2E";
-
+// BeefSupplyChain carries batch reads and writes here. CredentialRegistry
+// writes (grant/revoke) happen on the admin page, in admin.js.
 document.getElementById("deployedChainId").textContent = String(REQUIRED_CHAIN_ID);
 document.getElementById("addrBeefSupplyChain").textContent = beefSupplyChainAddress;
 document.getElementById("addrCredentialRegistry").textContent = credentialRegistryAddress;
@@ -29,31 +39,19 @@ document.getElementById("linkBeefSupplyChain").href =
 document.getElementById("linkCredentialRegistry").href =
   EXPLORER_BASE + "/address/" + credentialRegistryAddress;
 
-const chain = {
-  id: REQUIRED_CHAIN_ID,
-  name: "DIDLab Blockchain",
-  nativeCurrency: {
-    name: "TRUST",
-    symbol: "TRUST",
-    decimals: 18
-  },
-  rpcUrls: {
-    default: { http: ["https://eth.didlab.org"] }
-  }
-};
-
-const publicClient = createPublicClient({
-  chain,
-  transport: http()
-});
-
 const networkStatus = document.getElementById("networkStatus");
 const switchNetworkBtn = document.getElementById("switchNetwork");
 const verificationStatus =
   document.getElementById("verificationStatus");
 const connectWalletBtn = document.getElementById("connectWallet");
 const walletNotice = document.getElementById("walletNotice");
-const registerSection = document.getElementById("registerSection");
+const signOutBtn = document.getElementById("signOut");
+const sessionRoles = document.getElementById("sessionRoles");
+
+// Server-side portal session. A wallet is "signed in" only when the
+// connected account matches the address that signed the login message.
+let session = SIGNED_OUT;
+let adminLoaded = false;
 
 function shortAddress(address) {
   return address.slice(0, 6) + "…" + address.slice(-4);
@@ -63,19 +61,46 @@ const LOGGED_OUT_LABEL = "Connect Wallet";
 
 function syncWalletChrome(accounts) {
   const account = accounts && accounts[0];
+  const signedIn =
+    Boolean(account && session.address) &&
+    session.address === account.toLowerCase();
+
+  signOutBtn.hidden = !signedIn;
+  sessionRoles.hidden = !signedIn;
+  sessionRoles.replaceChildren(
+    ...(signedIn ? session.roles : []).map((role) =>
+      Object.assign(document.createElement("span"), {
+        className: "role-chip",
+        textContent: role
+      })
+    )
+  );
+  applyPermissions(signedIn ? session.permissions : []);
+
+  if (signedIn && session.permissions.includes("users.manage") && !adminLoaded) {
+    adminLoaded = true;
+    loadAdmin();
+  }
+
   if (!account) {
     connectWalletBtn.textContent = LOGGED_OUT_LABEL;
     connectWalletBtn.setAttribute("aria-label", LOGGED_OUT_LABEL);
-    registerSection.hidden = true;
     return;
   }
 
   const label = shortAddress(account);
-  connectWalletBtn.textContent = label;
-  connectWalletBtn.setAttribute("aria-label", "Logged in as " + label);
-  registerSection.hidden = false;
-  walletNotice.hidden = true;
-  walletNotice.textContent = "";
+  if (signedIn) {
+    connectWalletBtn.textContent = label;
+    connectWalletBtn.setAttribute("aria-label", "Signed in as " + label);
+    walletNotice.hidden = true;
+    walletNotice.textContent = "";
+  } else {
+    connectWalletBtn.textContent = "Sign in";
+    connectWalletBtn.setAttribute(
+      "aria-label",
+      "Sign in as " + label + " with a wallet signature"
+    );
+  }
 }
 
 async function updateNetworkStatus() {
@@ -165,23 +190,8 @@ async function switchToDidLab() {
   await updateNetworkStatus();
 }
 
-function isUserRejection(error) {
-  let current = error;
-  while (current) {
-    if (
-      current.code === 4001 ||
-      current.name === "UserRejectedRequestError"
-    ) {
-      return true;
-    }
-    current = current.cause;
-  }
-  const text = `${error?.shortMessage || ""} ${error?.message || ""}`;
-  return /user rejected the request/i.test(text);
-}
-
-// Login is the wallet connection. The selected account is the session.
-// TODO(auth): there is no separate account service behind this button.
+// Login = connect the wallet, then sign a one-time message so the server
+// can map this address to its portal roles. Signing costs no gas.
 connectWalletBtn.onclick = async () => {
   if (!window.ethereum) {
     walletNotice.hidden = false;
@@ -192,30 +202,59 @@ connectWalletBtn.onclick = async () => {
   }
 
   try {
-    await window.ethereum.request({ method: "eth_requestAccounts" });
+    const accounts = await window.ethereum.request({
+      method: "eth_requestAccounts"
+    });
+    const account = accounts[0].toLowerCase();
+    if (session.address !== account) {
+      walletNotice.hidden = false;
+      walletNotice.textContent =
+        "Check your wallet: sign the login message (no gas, no transaction).";
+      session = await signIn(accounts[0]);
+      walletNotice.hidden = true;
+      if (session.roles.length === 0) {
+        walletNotice.hidden = false;
+        walletNotice.textContent =
+          "Signed in. This wallet has no portal roles yet; ask an admin to assign one.";
+      }
+    }
     await updateNetworkStatus();
   } catch (error) {
     if (isUserRejection(error)) {
-      networkStatus.textContent =
-        "Connection cancelled by user. No transaction was sent and no gas was used.";
+      walletNotice.hidden = false;
+      walletNotice.textContent =
+        "Sign-in cancelled. No transaction was sent and no gas was used.";
       return;
     }
-    networkStatus.textContent =
-      "Wallet connection failed: " + error.message;
+    walletNotice.hidden = false;
+    walletNotice.textContent = "Sign-in failed: " + error.message;
   }
+};
+
+signOutBtn.onclick = async () => {
+  session = await signOut();
+  adminLoaded = false;
+  await updateNetworkStatus();
 };
 
 switchNetworkBtn.onclick = () => {
   switchToDidLab();
 };
 
+session = await fetchSession();
 updateNetworkStatus();
 
 if (window.ethereum && window.ethereum.on) {
   window.ethereum.on("chainChanged", () => {
     updateNetworkStatus();
   });
-  window.ethereum.on("accountsChanged", () => {
+  window.ethereum.on("accountsChanged", async (accounts) => {
+    // Switching wallets ends the portal session for the old address.
+    const next = accounts && accounts[0] && accounts[0].toLowerCase();
+    if (session.address && session.address !== next) {
+      session = await signOut();
+      adminLoaded = false;
+    }
     updateNetworkStatus();
   });
 }

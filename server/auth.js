@@ -1,0 +1,276 @@
+"use strict";
+
+// Wallet sign-in (Sign-In with Ethereum style) and portal API routes.
+// The server writes the exact message to sign and stores it with a one-time
+// nonce, so it never parses a message the client wrote.
+
+const crypto = require("crypto");
+const { recoverPersonalSignAddress } = require("./ethsig");
+const {
+  ROLES,
+  PERMISSIONS,
+  normalizeAddress,
+  upsertUser,
+  deleteUser,
+  accessFor,
+  listUsers,
+} = require("./db");
+
+const CHAIN_ID = 252501;
+const COOKIE = "cv_session";
+const CHALLENGE_TTL_MS = 5 * 60 * 1000;
+const SESSION_TTL_MS = 8 * 60 * 60 * 1000;
+const MAX_LIVE_CHALLENGES = 10000;
+const MAX_JSON_BYTES = 16 * 1024;
+
+function sha256(text) {
+  return crypto.createHash("sha256").update(text).digest("hex");
+}
+
+function sendJson(res, status, body, headers = {}) {
+  res.writeHead(status, {
+    "Content-Type": "application/json; charset=utf-8",
+    "Cache-Control": "no-store",
+    ...headers,
+  });
+  res.end(JSON.stringify(body));
+}
+
+function readJson(req) {
+  return new Promise((resolve, reject) => {
+    // Requiring a JSON content type means a plain cross-site <form> cannot
+    // reach these routes.
+    if (!/^application\/json\b/i.test(req.headers["content-type"] || "")) {
+      reject(Object.assign(new Error("Expected application/json."), { status: 415 }));
+      return;
+    }
+    const chunks = [];
+    let size = 0;
+    req.on("data", (chunk) => {
+      size += chunk.length;
+      if (size > MAX_JSON_BYTES) {
+        reject(Object.assign(new Error("Body too large."), { status: 413 }));
+        req.destroy();
+      } else {
+        chunks.push(chunk);
+      }
+    });
+    req.on("end", () => {
+      try {
+        resolve(chunks.length ? JSON.parse(Buffer.concat(chunks).toString("utf8")) : {});
+      } catch {
+        reject(Object.assign(new Error("Invalid JSON."), { status: 400 }));
+      }
+    });
+    req.on("error", reject);
+  });
+}
+
+function parseCookies(header) {
+  const out = {};
+  for (const part of String(header || "").split(";")) {
+    const i = part.indexOf("=");
+    if (i > 0) out[part.slice(0, i).trim()] = part.slice(i + 1).trim();
+  }
+  return out;
+}
+
+function requestHost(req) {
+  return String(req.headers["x-forwarded-host"] || req.headers.host || "localhost")
+    .split(",")[0]
+    .trim();
+}
+
+function isLocalHost(host) {
+  return /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/.test(host);
+}
+
+function sessionCookie(req, token, maxAgeSeconds) {
+  const parts = [
+    `${COOKIE}=${token}`,
+    "Path=/",
+    "HttpOnly",
+    "SameSite=Strict",
+    `Max-Age=${maxAgeSeconds}`,
+  ];
+  if (!isLocalHost(requestHost(req))) parts.push("Secure");
+  return parts.join("; ");
+}
+
+function createAuth(db) {
+  // Returns { address, roles, permissions } for the request, or a signed-out
+  // shape. Roles are read from the database on every request, so a change
+  // made by an admin applies immediately to sessions that are already open.
+  function currentUser(req) {
+    const token = parseCookies(req.headers.cookie)[COOKIE];
+    if (token) {
+      const row = db
+        .prepare("SELECT address FROM sessions WHERE token_hash = ? AND expires_at > ?")
+        .get(sha256(token), Date.now());
+      if (row) return { address: row.address, ...accessFor(db, row.address) };
+    }
+    return { address: null, roles: [], permissions: [] };
+  }
+
+  function can(user, permission) {
+    return user.permissions.includes(permission);
+  }
+
+  function challenge(req, body) {
+    const address = normalizeAddress(body.address);
+    const now = Date.now();
+    db.prepare("DELETE FROM login_challenges WHERE expires_at <= ?").run(now);
+    const live = db.prepare("SELECT COUNT(*) AS n FROM login_challenges").get().n;
+    if (live >= MAX_LIVE_CHALLENGES) {
+      throw Object.assign(new Error("Too many sign-in attempts. Try again shortly."), {
+        status: 503,
+      });
+    }
+    const host = requestHost(req);
+    const scheme = isLocalHost(host) ? "http" : "https";
+    const nonce = crypto.randomBytes(16).toString("hex");
+    // EIP-4361 layout, so wallets that understand SIWE can check the domain.
+    const message = [
+      `${host} wants you to sign in with your Ethereum account:`,
+      address,
+      "",
+      "Sign in to Chuck and Verify. This does not send a transaction or cost gas.",
+      "",
+      `URI: ${scheme}://${host}`,
+      "Version: 1",
+      `Chain ID: ${CHAIN_ID}`,
+      `Nonce: ${nonce}`,
+      `Issued At: ${new Date(now).toISOString()}`,
+      `Expiration Time: ${new Date(now + CHALLENGE_TTL_MS).toISOString()}`,
+    ].join("\n");
+    db.prepare(
+      "INSERT INTO login_challenges (nonce, address, message, expires_at) VALUES (?, ?, ?, ?)"
+    ).run(nonce, address, message, now + CHALLENGE_TTL_MS);
+    return { nonce, message };
+  }
+
+  function verify(body) {
+    const nonce = String(body.nonce || "");
+    const row = db
+      .prepare("SELECT address, message, expires_at FROM login_challenges WHERE nonce = ?")
+      .get(nonce);
+    // Single use: delete before checking anything else.
+    db.prepare("DELETE FROM login_challenges WHERE nonce = ?").run(nonce);
+    if (!row || row.expires_at <= Date.now()) {
+      throw Object.assign(new Error("Sign-in request expired. Try again."), { status: 401 });
+    }
+    let signer;
+    try {
+      signer = recoverPersonalSignAddress(row.message, body.signature);
+    } catch {
+      throw Object.assign(new Error("Signature could not be verified."), { status: 401 });
+    }
+    if (signer !== row.address) {
+      throw Object.assign(new Error("Signature is from a different wallet."), {
+        status: 401,
+      });
+    }
+    const token = crypto.randomBytes(32).toString("base64url");
+    const now = Date.now();
+    db.prepare("DELETE FROM sessions WHERE expires_at <= ?").run(now);
+    db.prepare(
+      "INSERT INTO sessions (token_hash, address, expires_at) VALUES (?, ?, ?)"
+    ).run(sha256(token), signer, now + SESSION_TTL_MS);
+    return { token, user: { address: signer, ...accessFor(db, signer) } };
+  }
+
+  function logout(req) {
+    const token = parseCookies(req.headers.cookie)[COOKIE];
+    if (token) db.prepare("DELETE FROM sessions WHERE token_hash = ?").run(sha256(token));
+  }
+
+  // Handles /api/auth/*, /api/me and /api/admin/*. Returns false when the
+  // path is not one of these, so the caller can keep routing.
+  async function handle(req, res, urlPath) {
+    try {
+      if (urlPath === "/api/me" && req.method === "GET") {
+        sendJson(res, 200, currentUser(req));
+        return true;
+      }
+      if (urlPath === "/api/auth/challenge" && req.method === "POST") {
+        sendJson(res, 200, challenge(req, await readJson(req)));
+        return true;
+      }
+      if (urlPath === "/api/auth/verify" && req.method === "POST") {
+        const { token, user } = verify(await readJson(req));
+        sendJson(res, 200, user, {
+          "Set-Cookie": sessionCookie(req, token, SESSION_TTL_MS / 1000),
+        });
+        return true;
+      }
+      if (urlPath === "/api/auth/logout" && req.method === "POST") {
+        logout(req);
+        sendJson(res, 200, { address: null, roles: [], permissions: [] }, {
+          "Set-Cookie": sessionCookie(req, "", 0),
+        });
+        return true;
+      }
+
+      if (urlPath === "/api/admin/users" || urlPath.startsWith("/api/admin/users/")) {
+        const user = currentUser(req);
+        if (!user.address) return sendJson(res, 401, { error: "Sign in first." }), true;
+        if (!can(user, "users.manage")) {
+          return sendJson(res, 403, { error: "Requires the ADMIN role." }), true;
+        }
+        const target = urlPath.slice("/api/admin/users/".length);
+
+        if (urlPath === "/api/admin/users" && req.method === "GET") {
+          sendJson(res, 200, {
+            users: listUsers(db),
+            roles: Object.entries(ROLES).map(([name, description]) => ({
+              name,
+              description,
+              permissions: Object.keys(PERMISSIONS).filter((p) =>
+                PERMISSIONS[p].roles.includes(name)
+              ),
+            })),
+          });
+          return true;
+        }
+        if (target && req.method === "PUT") {
+          const body = await readJson(req);
+          const address = normalizeAddress(target);
+          const roles = Array.isArray(body.roles) ? body.roles.map(String) : [];
+          if (address === user.address && !roles.includes("ADMIN")) {
+            return sendJson(res, 400, { error: "You cannot remove your own ADMIN role." }), true;
+          }
+          upsertUser(db, {
+            address,
+            label: body.label,
+            roles,
+            grantedBy: user.address,
+            replaceRoles: true,
+          });
+          sendJson(res, 200, { users: listUsers(db) });
+          return true;
+        }
+        if (target && req.method === "DELETE") {
+          const address = normalizeAddress(target);
+          if (address === user.address) {
+            return sendJson(res, 400, { error: "You cannot delete yourself." }), true;
+          }
+          deleteUser(db, address);
+          sendJson(res, 200, { users: listUsers(db) });
+          return true;
+        }
+        sendJson(res, 405, { error: "Method not allowed." });
+        return true;
+      }
+    } catch (error) {
+      const status = error.status || (/valid 0x address|Unknown role/.test(error.message) ? 400 : 500);
+      if (status === 500) console.error(error);
+      sendJson(res, status, { error: status === 500 ? "Server error." : error.message });
+      return true;
+    }
+    return false;
+  }
+
+  return { handle, currentUser, can, sendJson };
+}
+
+module.exports = { createAuth };

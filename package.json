@@ -9,6 +9,7 @@
   },
   "scripts": {
     "start": "node index.js",
+    "seed:portal": "node scripts/seed-portal.js",
     "test": "hardhat test",
     "compile": "hardhat compile",
     "deploy:didlab": "hardhat run scripts/deploy.js --network didlab",

@@ -70,6 +70,31 @@ Run `npm start` and open `http://localhost:3000`. That serves `frontend/public/`
 
 On the DIDLab host, nginx serves the repo checkout. `/` redirects to `/frontend/public/index.html`. Dependencies stay in the root `package.json`.
 
+## Portal roles (SQLite)
+
+`index.js` keeps portal roles in SQLite using Node's built-in `node:sqlite` (Node 22.5 or newer, no npm package). Login is a wallet signature: the server issues a one-time message, the wallet signs it (no gas), and the server sets an HttpOnly session cookie. Each wallet's roles decide which sections it sees and which server routes it may call.
+
+| Role | Permissions |
+|------|-------------|
+| `ADMIN` | `users.manage` (Portal users card, `/api/admin/users`) |
+| `PROCESSOR` | `batch.register`, `batch.recall` (own batches only), `form.upload` |
+| `INSPECTOR` | `batch.inspect`, `form.upload` |
+| `CUSTODIAN` | `custody.transfer` |
+
+The catalog lives in `server/db.js`. The database stores only who holds which role. Hide or show UI with `data-requires="<permission>"`. This layer does not replace `CredentialRegistry`: the contracts still check on-chain credentials for every write.
+
+**Seed once, then upload the database.** The running app does not read a seed file. Create `data/seed.json` locally (that folder is gitignored):
+
+```json
+{ "users": [ { "address": "0xYourWallet", "label": "Britt", "roles": ["ADMIN"] } ] }
+```
+
+Run `npm run seed:portal`. That writes `data/portal.db` and records that this file has been seeded. Upload `data/portal.db` to `/srv/data/portal.db` before the app starts, and do not upload `seed.json`. Delete the local seed file when you no longer need it.
+
+A second `npm run seed:portal` does not add those roles again, so a role removed in the Portal users card stays removed. To start over before the upload, delete `data/portal.db` and run the command again. If the app has already created an empty `/srv/data/portal.db`, stop it and replace that file with the seeded one.
+
+Locally, `npm start` uses `./data/portal.db`. Set `DATA_DIR` to override.
+
 ## Environment
 
 See `.env.example` for required variables:

@@ -320,3 +320,114 @@ a:hover { color: var(--accent-hover); }
 
   .verify-row .btn { width: 100%; }
 }
+
+/* Portal roles */
+.role-chips { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+.role-chip {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  background: var(--surface);
+}
+.admin-list { list-style: none; padding: 0; margin: var(--space-2) 0; }
+.admin-user {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-1) 0;
+  border-bottom: 1px solid var(--line);
+}
+.admin-user code { word-break: break-all; }
+.admin-user .role-chips { display: flex; margin-top: 6px; }
+.admin-actions { display: flex; gap: 4px; flex-shrink: 0; }
+.btn-small { padding: 4px 10px; font-size: 0.85rem; }
+.role-options {
+  border: 0;
+  padding: 0;
+  margin: 0 0 var(--space-3);
+  min-width: 0;
+}
+.role-options legend {
+  padding: 0;
+  margin-bottom: var(--space-1);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+.role-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--space-1);
+}
+.role-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin: 0;
+  padding: 12px var(--space-2) 12px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  font-weight: 400;
+  cursor: pointer;
+  transition: border-color 0.15s, background-color 0.15s;
+}
+.role-option:hover { border-color: var(--accent); }
+.role-option:has(input:checked) {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 6%, var(--surface));
+}
+.role-option:has(input:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.role-option input {
+  width: auto;
+  flex: 0 0 auto;
+  margin: 2px 0 0;
+  padding: 0;
+  accent-color: var(--accent);
+}
+.role-option-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.role-option-name { font-size: 0.875rem; font-weight: 600; letter-spacing: 0.02em; }
+.role-option-desc { font-size: 0.8125rem; color: var(--muted); line-height: 1.4; }
+.role-option-tag {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--muted);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  vertical-align: 1px;
+}
+.role-hint { margin: var(--space-1) 0 0; font-size: 0.8125rem; }
+.valid-days { max-width: 220px; margin-bottom: var(--space-2); }
+.role-chip-warn {
+  border-color: #b26b00;
+  color: #8a5300;
+  border-style: dashed;
+}
+.chain-log {
+  list-style: none;
+  margin: var(--space-1) 0 0;
+  padding: 0;
+  font-size: 0.875rem;
+}
+.chain-log li {
+  padding: 6px 0 6px 12px;
+  border-left: 3px solid var(--line);
+  margin-bottom: 4px;
+  word-break: break-word;
+}
+.chain-log li.is-ok { border-left-color: var(--accent); }
+.chain-log li.is-error { border-left-color: #b42318; }
+.chain-log li.is-skipped { border-left-color: #b26b00; }
+@media (max-width: 520px) {
+  .admin-user { flex-direction: column; }
+}

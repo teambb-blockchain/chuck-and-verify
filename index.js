@@ -2,6 +2,8 @@ const http = require("http");
 const https = require("https");
 const fs = require("fs");
 const path = require("path");
+const { openDatabase } = require("./server/db");
+const { createAuth } = require("./server/auth");
 
 const root = __dirname;
 const publicDir = path.join(root, "frontend", "public");
@@ -12,6 +14,11 @@ const port = Number(process.env.PORT) || 3000;
 // path and nothing else.
 const IPFS_ADD_URL = "https://blockchain.didlab.org/api/ipfs/add";
 const MAX_UPLOAD_BYTES = 26 * 1024 * 1024;
+
+// Portal roles live in portal.db. Seed that file once before deploy
+// (npm run seed:portal). Boot does not read a seed file.
+const { db, dbPath } = openDatabase();
+const auth = createAuth(db);
 
 const types = {
   ".html": "text/html; charset=utf-8",
@@ -130,8 +137,20 @@ function proxyIpfsAdd(req, res) {
   });
 }
 
-function serve(req, res) {
-  const urlPath = decodeURIComponent((req.url || "/").split("?")[0]);
+async function serve(req, res) {
+  let urlPath;
+  try {
+    urlPath = decodeURIComponent((req.url || "/").split("?")[0]);
+  } catch {
+    res.writeHead(400, { "Content-Type": "text/plain; charset=utf-8" });
+    res.end("Bad request");
+    return;
+  }
+
+  if (urlPath.startsWith("/api/") && (await auth.handle(req, res, urlPath))) {
+    return;
+  }
+
   if (urlPath === "/api/ipfs/add") {
     if (req.method !== "POST") {
       res.writeHead(405, {
@@ -139,6 +158,16 @@ function serve(req, res) {
         "Content-Type": "text/plain; charset=utf-8",
       });
       res.end("Method not allowed");
+      return;
+    }
+    const user = auth.currentUser(req);
+    if (!auth.can(user, "form.upload")) {
+      auth.sendJson(res, user.address ? 403 : 401, {
+        error: user.address
+          ? "Publishing forms requires the PROCESSOR or INSPECTOR role."
+          : "Sign in before publishing a form.",
+      });
+      req.resume();
       return;
     }
     proxyIpfsAdd(req, res);
@@ -177,4 +206,5 @@ const server = http.createServer(serve);
 
 server.listen(port, "0.0.0.0", () => {
   console.log(`Serving project page on port ${port}`);
+  console.log(`Portal database: ${dbPath}`);
 });

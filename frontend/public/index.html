@@ -13,7 +13,9 @@
       <div class="topbar-inner">
         <a class="brand" href="./">Chuck and Verify</a>
         <div class="topbar-actions">
+          <span id="sessionRoles" class="role-chips" hidden></span>
           <button id="connectWallet" class="btn btn-accent" type="button">Log in</button>
+          <button id="signOut" class="btn btn-ghost" type="button" hidden>Sign out</button>
         </div>
       </div>
       <p id="walletNotice" class="wallet-notice" role="status" hidden></p>
@@ -44,7 +46,7 @@
         </div>
       </section>
 
-      <section id="registerSection" class="card" hidden>
+      <section id="registerSection" class="card" data-requires="batch.register" hidden>
         <h2>Register New Beef Batch</h2>
         <div class="field-row">
           <div class="field">
@@ -73,6 +75,36 @@
         <h3>Activity</h3>
         <p class="muted">New registrations appear here when <code>BatchRegistered</code> is observed on chain — not when Register is clicked.</p>
         <ul id="events" aria-live="polite"></ul>
+      </section>
+
+      <section id="adminSection" class="card" data-requires="users.manage" aria-labelledby="admin-heading" hidden>
+        <h2 id="admin-heading">Portal users</h2>
+        <p class="muted">Roles decide what each wallet sees in this portal. On-chain writes are still checked against the CredentialRegistry.</p>
+        <ul id="adminUsers" class="admin-list"></ul>
+        <form id="adminUserForm" class="admin-form">
+          <div class="field-row">
+            <div class="field">
+              <label for="adminAddress">Wallet address</label>
+              <input id="adminAddress" name="address" required pattern="0x[0-9a-fA-F]{40}" autocomplete="off" spellcheck="false" placeholder="0x…">
+            </div>
+            <div class="field">
+              <label for="adminLabel">Label</label>
+              <input id="adminLabel" name="label" maxlength="80" autocomplete="off" placeholder="Name or organization">
+            </div>
+          </div>
+          <fieldset class="role-options">
+            <legend>Roles</legend>
+            <div id="adminRoleBoxes" class="role-grid"></div>
+            <p class="role-hint muted">On-chain roles are also granted or revoked in CredentialRegistry. Your wallet signs one transaction per change and must be that role's issuer.</p>
+          </fieldset>
+          <div class="field valid-days">
+            <label for="adminValidDays">Credential valid for (days)</label>
+            <input id="adminValidDays" name="validDays" type="number" min="1" max="3650" step="1" value="30">
+          </div>
+          <button class="btn btn-accent" type="submit">Save user</button>
+          <p id="adminStatus" role="status" aria-live="polite"></p>
+          <ul id="adminChainLog" class="chain-log" aria-live="polite" hidden></ul>
+        </form>
       </section>
 
       <section class="card deployed-contracts" aria-labelledby="deployed-contracts-heading">
