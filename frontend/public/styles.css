@@ -154,7 +154,8 @@ select {
 
 #downloadRecovery { margin-top: var(--space-2); }
 
-#registerSection .muted { margin-top: var(--space-2); }
+#registerSection .muted,
+#inspectSection .muted { margin-top: var(--space-2); }
 
 .btn {
   border: 1px solid transparent;

@@ -53,6 +53,7 @@ const sessionRoles = document.getElementById("sessionRoles");
 let session = SIGNED_OUT;
 let adminLoaded = false;
 
+
 function shortAddress(address) {
   return address.slice(0, 6) + "…" + address.slice(-4);
 }
@@ -384,16 +385,17 @@ function showStoredForm(batchName) {
   row.hidden = !showCidLink(link, bundle);
 }
 
-function showFormReceipt(bundle) {
-  const linked = showCidLink(
-    document.getElementById("formCidLink"),
-    bundle
-  );
-  document.getElementById("formDigest").textContent =
-    bundle.ciphertextSha256 || "";
-  formReceipt.hidden = !linked;
-  downloadRecovery.hidden = !linked;
-  downloadRecovery.onclick = () => {
+// Inspection report bundles share the store with lot forms, under their own
+// key so an inspection never replaces the processor's lot form for a batch.
+const reportKey = (batchName) => "inspection:" + batchName;
+
+const reportHashOf = (bundle) => "0x" + bundle.ciphertextSha256;
+
+// The recovery file holds the CID and decryption details; without it the
+// published ciphertext can't be found or opened again.
+function bindRecovery(button, bundle) {
+  button.hidden = !bundle.cid;
+  button.onclick = () => {
     const blob = new Blob([JSON.stringify(bundle, null, 2)], {
       type: "application/json"
     });
@@ -406,15 +408,24 @@ function showFormReceipt(bundle) {
   };
 }
 
-async function selectedForm() {
-  const picked = batchFormFile.files && batchFormFile.files[0];
+function showFormReceipt(bundle) {
+  const linked = showCidLink(document.getElementById("formCidLink"), bundle);
+  document.getElementById("formDigest").textContent =
+    bundle.ciphertextSha256 || "";
+  formReceipt.hidden = !linked;
+  bindRecovery(downloadRecovery, bundle);
+  downloadRecovery.hidden = !linked;
+}
+
+async function selectedForm(input = batchFormFile, what = "lot form") {
+  const picked = input.files && input.files[0];
   if (!picked) {
-    throw new Error("Choose a PDF to publish with this batch.");
+    throw new Error("Choose a PDF for the " + what + ".");
   }
   const pdf =
     picked.type === "application/pdf" ||
     picked.name.toLowerCase().endsWith(".pdf");
-  if (!pdf) throw new Error("The lot form needs to be a PDF.");
+  if (!pdf) throw new Error("The " + what + " needs to be a PDF.");
   return {
     file: picked,
     source: "upload:" + picked.name + ":" + picked.lastModified
@@ -573,5 +584,148 @@ registerButton.onclick = async () => {
     }
   } finally {
     registerButton.disabled = false;
+  }
+};
+
+// --- Record inspection ------------------------------------------------------
+// Same pattern as registration: check, publish the encrypted report, then send
+// recordInspection(batchId, reportHash, passed). reportHash is the SHA-256 of
+// the published ciphertext, so the CID can be checked against the chain
+// without decrypting anything. Messages stay plain; details live in the
+// recovery file and on the explorer.
+
+const inspectButton = document.getElementById("recordInspection");
+const inspectStatus = document.getElementById("inspectStatus");
+const inspectReportFile = document.getElementById("inspectReportFile");
+const inspectRecovery = document.getElementById("inspectRecovery");
+
+const REVERT_MESSAGES = {
+  Unauthorized: "This wallet isn't authorized to record inspections.",
+  BatchNotFound: "No batch found with that ID."
+};
+
+// Plain-language versions of publishEncryptedForm's progress messages.
+function reportProgress(text) {
+  if (text.startsWith("Sign to encrypt")) return "Approve in your wallet to secure the report (no fee).";
+  if (text.startsWith("Encrypting")) return "Securing the report…";
+  if (text.startsWith("Sign to publish")) return "Approve in your wallet to upload the report (no fee).";
+  return "Uploading the report…";
+}
+
+let preparedReport = null;
+
+inspectButton.onclick = async () => {
+  inspectButton.disabled = true;
+  inspectRecovery.hidden = true;
+  let reportPublished = false;
+
+  try {
+    if (!window.ethereum) {
+      throw new Error("No wallet detected.");
+    }
+    const [account] = await window.ethereum.request({
+      method: "eth_requestAccounts"
+    });
+    const walletChainId = Number(
+      await window.ethereum.request({ method: "eth_chainId" })
+    );
+    if (walletChainId !== REQUIRED_CHAIN_ID) {
+      throw new Error("Switch your wallet to DIDLab.");
+    }
+
+    const batchName = document.getElementById("inspectBatchId").value.trim();
+    if (!batchName || new TextEncoder().encode(batchName).length > 31) {
+      throw new Error("Enter a batch ID (up to 31 characters).");
+    }
+    const batchId = stringToHex(batchName, { size: 32 });
+    const passed = document.getElementById("inspectResult").value === "pass";
+    const { file, source } = await selectedForm(inspectReportFile, "inspection report");
+    const reportKeyId = account.toLowerCase() + ":" + source + ":" + file.size;
+
+    // Check with a placeholder hash. The revert conditions (no INSPECTOR
+    // credential, unknown batch) don't depend on the hash, so this catches
+    // them before anything is signed or published.
+    inspectStatus.textContent = "Checking…";
+    await publicClient.simulateContract({
+      address: beefSupplyChainAddress,
+      abi,
+      functionName: "recordInspection",
+      args: [batchId, "0x" + "11".repeat(32), passed],
+      account
+    });
+
+    const walletClient = createWalletClient({
+      chain,
+      transport: custom(window.ethereum)
+    });
+
+    let bundle = preparedReport && preparedReport.key === reportKeyId
+      ? preparedReport.bundle
+      : null;
+    if (!bundle) {
+      bundle = await publishEncryptedForm({
+        file,
+        account,
+        onStatus: (text) => {
+          inspectStatus.textContent = reportProgress(text);
+        },
+        signMessage: (message) => walletClient.signMessage({ account, message })
+      });
+      preparedReport = { key: reportKeyId, bundle };
+    }
+    reportPublished = true;
+    saveFormBundle(reportKey(batchName), bundle);
+    bindRecovery(inspectRecovery, bundle);
+
+    const { request } = await publicClient.simulateContract({
+      address: beefSupplyChainAddress,
+      abi,
+      functionName: "recordInspection",
+      args: [batchId, reportHashOf(bundle), passed],
+      account
+    });
+
+    inspectStatus.textContent = "Approve the inspection in your wallet.";
+    const hash = await walletClient.writeContract(request);
+
+    inspectStatus.textContent = "Recording…";
+    const receipt = await publicClient.waitForTransactionReceipt({
+      hash,
+      confirmations: 1
+    });
+    const txLink = Object.assign(document.createElement("a"), {
+      href: EXPLORER_BASE + "/tx/" + hash,
+      target: "_blank",
+      rel: "noopener noreferrer",
+      textContent: "View transaction"
+    });
+    if (receipt.status !== "success") {
+      inspectStatus.replaceChildren("The inspection could not be recorded. ", txLink);
+      return;
+    }
+    inspectStatus.replaceChildren(
+      "Inspection recorded: " + batchName + " " + (passed ? "passed" : "failed") + ". ",
+      txLink
+    );
+    document.getElementById("batchId").value = batchName;
+    await loadBatch(batchName);
+  } catch (error) {
+    const reverted =
+      error instanceof BaseError
+        ? error.walk((e) => e instanceof ContractFunctionRevertedError)
+        : null;
+    if (isUserRejection(error)) {
+      inspectStatus.textContent = reportPublished
+        ? "Cancelled. Your report is uploaded; click Record Inspection to finish."
+        : "Cancelled. Nothing was recorded.";
+    } else if (reverted) {
+      inspectStatus.textContent =
+        REVERT_MESSAGES[reverted.data?.errorName] ||
+        "The inspection can't be recorded for this batch.";
+    } else {
+      inspectStatus.textContent = error.shortMessage || error.message;
+    }
+  } finally {
+    inspectButton.disabled = false;
   }
 };

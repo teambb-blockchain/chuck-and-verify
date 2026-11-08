@@ -5,7 +5,22 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Chuck and Verify</title>
   <link rel="canonical" href="/">
-  <link rel="stylesheet" href="./styles.css">
+  <link rel="stylesheet" href="./styles.css?v=88b90f6f0c">
+  <!-- asset-versions:start -->
+  <script type="importmap">
+  {
+    "imports": {
+      "./abi.js": "./abi.js?v=ea90b77b45",
+      "./admin.js": "./admin.js?v=c2fd321850",
+      "./app.js": "./app.js?v=476f58b5a8",
+      "./chain.js": "./chain.js?v=4ca413c9b9",
+      "./ipfs.js": "./ipfs.js?v=1bbf16bae9",
+      "./registryAbi.js": "./registryAbi.js?v=3f9db4a2f2",
+      "./session.js": "./session.js?v=2ccf39cfcb"
+    }
+  }
+  </script>
+  <!-- asset-versions:end -->
 </head>
 <body>
   <div class="app">
@@ -75,6 +90,31 @@
         <h3>Activity</h3>
         <p class="muted">New registrations appear here when <code>BatchRegistered</code> is observed on chain — not when Register is clicked.</p>
         <ul id="events" aria-live="polite"></ul>
+      </section>
+
+      <section id="inspectSection" class="card" data-requires="batch.inspect" aria-labelledby="inspect-heading" hidden>
+        <h2 id="inspect-heading">Record Inspection</h2>
+        <div class="field-row">
+          <div class="field">
+            <label for="inspectBatchId">Batch ID</label>
+            <input id="inspectBatchId" value="BEEF-001" maxlength="31" autocomplete="off" spellcheck="false">
+          </div>
+          <div class="field">
+            <label for="inspectResult">Result</label>
+            <select id="inspectResult">
+              <option value="pass">Passed</option>
+              <option value="fail">Failed</option>
+            </select>
+          </div>
+        </div>
+        <div class="field">
+          <label for="inspectReportFile">Inspection report</label>
+          <input id="inspectReportFile" class="form-file" type="file" accept="application/pdf,.pdf">
+        </div>
+        <p class="muted">Your report is kept private. Only a fingerprint of it is saved on the blockchain.</p>
+        <button id="recordInspection" class="btn btn-accent" type="button">Record Inspection</button>
+        <p id="inspectStatus" role="status" aria-live="polite"></p>
+        <button id="inspectRecovery" class="btn btn-ghost" type="button" hidden>Download receipt</button>
       </section>
 
       <section id="adminSection" class="card" data-requires="users.manage" aria-labelledby="admin-heading" hidden>
@@ -153,6 +193,6 @@
     </footer>
   </div>
 
-  <script type="module" src="./app.js"></script>
+  <script type="module" src="./app.js?v=476f58b5a8"></script>
 </body>
 </html>
