@@ -104,10 +104,8 @@ function createAuth(db) {
   function currentUser(req) {
     const token = parseCookies(req.headers.cookie)[COOKIE];
     if (token) {
-      const row = db
-        .prepare("SELECT address FROM sessions WHERE token_hash = ? AND expires_at > ?")
-        .get(sha256(token), Date.now());
-      if (row) return { address: row.address, ...accessFor(db, row.address) };
+      const address = db.sessionAddress(sha256(token), Date.now());
+      if (address) return { address, ...accessFor(db, address) };
     }
     return { address: null, roles: [], permissions: [] };
   }
@@ -119,9 +117,7 @@ function createAuth(db) {
   function challenge(req, body) {
     const address = normalizeAddress(body.address);
     const now = Date.now();
-    db.prepare("DELETE FROM login_challenges WHERE expires_at <= ?").run(now);
-    const live = db.prepare("SELECT COUNT(*) AS n FROM login_challenges").get().n;
-    if (live >= MAX_LIVE_CHALLENGES) {
+    if (db.liveChallenges(now) >= MAX_LIVE_CHALLENGES) {
       throw Object.assign(new Error("Too many sign-in attempts. Try again shortly."), {
         status: 503,
       });
@@ -143,20 +139,15 @@ function createAuth(db) {
       `Issued At: ${new Date(now).toISOString()}`,
       `Expiration Time: ${new Date(now + CHALLENGE_TTL_MS).toISOString()}`,
     ].join("\n");
-    db.prepare(
-      "INSERT INTO login_challenges (nonce, address, message, expires_at) VALUES (?, ?, ?, ?)"
-    ).run(nonce, address, message, now + CHALLENGE_TTL_MS);
+    db.addChallenge(nonce, { address, message, expiresAt: now + CHALLENGE_TTL_MS });
     return { nonce, message };
   }
 
   function verify(body) {
     const nonce = String(body.nonce || "");
-    const row = db
-      .prepare("SELECT address, message, expires_at FROM login_challenges WHERE nonce = ?")
-      .get(nonce);
-    // Single use: delete before checking anything else.
-    db.prepare("DELETE FROM login_challenges WHERE nonce = ?").run(nonce);
-    if (!row || row.expires_at <= Date.now()) {
+    // Single use: removed before checking anything else.
+    const row = db.takeChallenge(nonce);
+    if (!row || row.expiresAt <= Date.now()) {
       throw Object.assign(new Error("Sign-in request expired. Try again."), { status: 401 });
     }
     let signer;
@@ -172,16 +163,13 @@ function createAuth(db) {
     }
     const token = crypto.randomBytes(32).toString("base64url");
     const now = Date.now();
-    db.prepare("DELETE FROM sessions WHERE expires_at <= ?").run(now);
-    db.prepare(
-      "INSERT INTO sessions (token_hash, address, expires_at) VALUES (?, ?, ?)"
-    ).run(sha256(token), signer, now + SESSION_TTL_MS);
+    db.addSession(sha256(token), signer, now + SESSION_TTL_MS, now);
     return { token, user: { address: signer, ...accessFor(db, signer) } };
   }
 
   function logout(req) {
     const token = parseCookies(req.headers.cookie)[COOKIE];
-    if (token) db.prepare("DELETE FROM sessions WHERE token_hash = ?").run(sha256(token));
+    if (token) db.deleteSession(sha256(token));
   }
 
   // Handles /api/auth/*, /api/me and /api/admin/*. Returns false when the
@@ -243,7 +231,6 @@ function createAuth(db) {
             address,
             label: body.label,
             roles,
-            grantedBy: user.address,
             replaceRoles: true,
           });
           sendJson(res, 200, { users: listUsers(db) });

@@ -1,17 +1,14 @@
 "use strict";
 
-// Portal role storage. The role/permission catalog below lives in git and is
-// re-synced into SQLite on every boot. The database stores only who holds
-// which role, plus login nonces and sessions.
+// Portal role storage. The role/permission catalog below lives in git. The
+// JSON file portal.db stores only who holds which role, plus sessions.
 //
 // This is a portal layer: it decides what each wallet sees and which server
 // routes it may call. It does not replace CredentialRegistry, which still
 // decides who may write on chain (ADR 0003).
 
 const fs = require("fs");
-const os = require("os");
 const path = require("path");
-const { DatabaseSync } = require("node:sqlite");
 
 const ROLES = {
   ADMIN: "Manages portal users and their roles.",
@@ -65,48 +62,12 @@ function resolveDataDir() {
   return path.join(__dirname, "..", "data");
 }
 
-const SCHEMA = `
-CREATE TABLE IF NOT EXISTS roles (
-  name        TEXT PRIMARY KEY,
-  description TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS permissions (
-  name        TEXT PRIMARY KEY,
-  description TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS role_permissions (
-  role       TEXT NOT NULL REFERENCES roles(name) ON DELETE CASCADE,
-  permission TEXT NOT NULL REFERENCES permissions(name) ON DELETE CASCADE,
-  PRIMARY KEY (role, permission)
-);
-CREATE TABLE IF NOT EXISTS users (
-  address    TEXT PRIMARY KEY CHECK (length(address) = 42 AND address GLOB '0x*'),
-  label      TEXT NOT NULL DEFAULT '',
-  created_at INTEGER NOT NULL
-);
-CREATE TABLE IF NOT EXISTS user_roles (
-  address    TEXT NOT NULL REFERENCES users(address) ON DELETE CASCADE,
-  role       TEXT NOT NULL REFERENCES roles(name) ON DELETE CASCADE,
-  granted_by TEXT NOT NULL,
-  granted_at INTEGER NOT NULL,
-  PRIMARY KEY (address, role)
-);
-CREATE TABLE IF NOT EXISTS login_challenges (
-  nonce      TEXT PRIMARY KEY,
-  address    TEXT NOT NULL,
-  message    TEXT NOT NULL,
-  expires_at INTEGER NOT NULL
-);
-CREATE TABLE IF NOT EXISTS sessions (
-  token_hash TEXT PRIMARY KEY,
-  address    TEXT NOT NULL,
-  expires_at INTEGER NOT NULL
-);
-CREATE TABLE IF NOT EXISTS app_state (
-  key   TEXT PRIMARY KEY,
-  value TEXT NOT NULL
-);
-`;
+// portal.db is plain JSON, written whole on every change:
+//   { "seeded": "<ISO time>",
+//     "users": [ { "address": "0x...", "label": "...", "createdAt": 0, "roles": ["ADMIN"] } ],
+//     "sessions": [ { "tokenHash": "...", "address": "0x...", "expiresAt": 0 } ] }
+// A pasted seed is the same shape without "seeded". Sign-in challenges stay in
+// memory because they last five minutes.
 
 const SQLITE_HEADER = Buffer.from("SQLite format 3\0");
 
@@ -124,103 +85,132 @@ function isSqliteFile(filePath) {
   }
 }
 
-function connectDatabase(dbPath) {
-  const db = new DatabaseSync(dbPath);
-  db.exec("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;");
-  db.exec(SCHEMA);
-  syncCatalog(db);
-  return db;
-}
-
-// The DIDLab Files tab stores text. A pasted portal.db is JSON, not a
-// database. The first boot builds the real database from that text and
-// replaces the file. A later boot sees SQLite and does not read it again.
-function adoptPastedSeed(dbPath) {
-  if (!fs.existsSync(dbPath) || isSqliteFile(dbPath)) return;
-
-  const text = fs.readFileSync(dbPath, "utf8").trim();
-  if (!text.startsWith("{")) {
+function readState(dbPath) {
+  if (!fs.existsSync(dbPath)) return { users: [], sessions: [] };
+  if (isSqliteFile(dbPath)) {
     throw new Error(
-      "portal.db is not a database. Paste the portal JSON into that file, then start again."
+      "portal.db is an old SQLite file. Replace it with the portal JSON, then start again."
     );
   }
-
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "portal-seed-"));
+  const text = fs.readFileSync(dbPath, "utf8").trim();
+  let parsed;
   try {
-    const seedPath = path.join(dir, "seed.json");
-    const builtPath = path.join(dir, "portal.db");
-    fs.writeFileSync(seedPath, text);
-    const db = connectDatabase(builtPath);
-    try {
-      const result = seedOnce(db, seedPath);
-      if (!result.applied) throw new Error("Pasted portal JSON was not applied.");
-      db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
-    } finally {
-      db.close();
-    }
-    fs.copyFileSync(builtPath, dbPath);
-  } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
+    parsed = JSON.parse(text);
+  } catch {
+    parsed = null;
   }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error(
+      "portal.db is not valid JSON. Paste the portal JSON into that file, then start again."
+    );
+  }
+  return {
+    seeded: parsed.seeded,
+    users: Array.isArray(parsed.users) ? parsed.users : [],
+    sessions: Array.isArray(parsed.sessions) ? parsed.sessions : [],
+  };
+}
+
+function createStore(dbPath) {
+  const state = readState(dbPath);
+  const challenges = new Map();
+
+  function save() {
+    const tmp = dbPath + ".tmp";
+    fs.writeFileSync(tmp, JSON.stringify(state, null, 2) + "\n");
+    fs.renameSync(tmp, dbPath);
+  }
+
+  function findUser(address) {
+    return state.users.find((user) => user.address === address);
+  }
+
+  function pruneSessions(now) {
+    const before = state.sessions.length;
+    state.sessions = state.sessions.filter((s) => s.expiresAt > now);
+    return state.sessions.length !== before;
+  }
+
+  return {
+    state,
+    save,
+    findUser,
+
+    sessionAddress(tokenHash, now) {
+      const session = state.sessions.find(
+        (s) => s.tokenHash === tokenHash && s.expiresAt > now
+      );
+      return session ? session.address : null;
+    },
+    addSession(tokenHash, address, expiresAt, now) {
+      pruneSessions(now);
+      state.sessions.push({ tokenHash, address, expiresAt });
+      save();
+    },
+    deleteSession(tokenHash) {
+      const before = state.sessions.length;
+      state.sessions = state.sessions.filter((s) => s.tokenHash !== tokenHash);
+      if (state.sessions.length !== before) save();
+    },
+
+    liveChallenges(now) {
+      for (const [nonce, c] of challenges) {
+        if (c.expiresAt <= now) challenges.delete(nonce);
+      }
+      return challenges.size;
+    },
+    addChallenge(nonce, challenge) {
+      challenges.set(nonce, challenge);
+    },
+    // Single use: removed as soon as it is read.
+    takeChallenge(nonce) {
+      const challenge = challenges.get(nonce);
+      challenges.delete(nonce);
+      return challenge || null;
+    },
+  };
+}
+
+// Normalize what was read from disk: lower-case addresses, drop roles that
+// were removed from the catalog in code, and apply a pasted seed once.
+function prepareState(db) {
+  const { state } = db;
+  let changed = false;
+  for (const user of state.users) {
+    const address = normalizeAddress(user.address);
+    const roles = [...new Set((user.roles || []).filter((role) => role in ROLES))].sort();
+    const label = String(user.label || "").slice(0, 80);
+    const createdAt = Number(user.createdAt) || Date.now();
+    if (
+      address !== user.address ||
+      label !== user.label ||
+      createdAt !== user.createdAt ||
+      JSON.stringify(roles) !== JSON.stringify(user.roles)
+    ) {
+      Object.assign(user, { address, label, createdAt, roles });
+      changed = true;
+    }
+  }
+  if (!state.seeded && state.users.length > 0) {
+    state.seeded = new Date().toISOString();
+    changed = true;
+  }
+  if (changed) db.save();
 }
 
 function openDatabase(dataDir = resolveDataDir()) {
   fs.mkdirSync(dataDir, { recursive: true });
   const dbPath = path.join(dataDir, "portal.db");
-  adoptPastedSeed(dbPath);
-  const db = connectDatabase(dbPath);
+  const db = createStore(dbPath);
+  prepareState(db);
   return { db, dbPath, dataDir };
 }
 
-function syncCatalog(db) {
-  db.exec("BEGIN");
-  try {
-    const upsertRole = db.prepare(
-      "INSERT INTO roles (name, description) VALUES (?, ?) " +
-        "ON CONFLICT(name) DO UPDATE SET description = excluded.description"
-    );
-    const upsertPerm = db.prepare(
-      "INSERT INTO permissions (name, description) VALUES (?, ?) " +
-        "ON CONFLICT(name) DO UPDATE SET description = excluded.description"
-    );
-    for (const [name, description] of Object.entries(ROLES)) {
-      upsertRole.run(name, description);
-    }
-    for (const [name, { description }] of Object.entries(PERMISSIONS)) {
-      upsertPerm.run(name, description);
-    }
-    // Drop catalog entries that were removed from code.
-    const roleNames = Object.keys(ROLES);
-    const permNames = Object.keys(PERMISSIONS);
-    db.prepare(
-      `DELETE FROM roles WHERE name NOT IN (${roleNames.map(() => "?").join(",")})`
-    ).run(...roleNames);
-    db.prepare(
-      `DELETE FROM permissions WHERE name NOT IN (${permNames.map(() => "?").join(",")})`
-    ).run(...permNames);
-
-    db.exec("DELETE FROM role_permissions");
-    const link = db.prepare(
-      "INSERT INTO role_permissions (role, permission) VALUES (?, ?)"
-    );
-    for (const [perm, { roles }] of Object.entries(PERMISSIONS)) {
-      for (const role of roles) link.run(role, perm);
-    }
-    db.exec("COMMIT");
-  } catch (error) {
-    db.exec("ROLLBACK");
-    throw error;
-  }
-}
-
 // Apply seed.json once into this database file. A later run, and every boot,
-// leave the rows alone, so removing a role in the portal stays removed.
+// leave the users alone, so removing a role in the portal stays removed.
 //   { "users": [ { "address": "0x...", "label": "Contract deployer", "roles": ["ADMIN"] } ] }
 function seedOnce(db, seedPath) {
-  const existing = db.prepare(
-    "SELECT value FROM app_state WHERE key = 'seeded'"
-  ).get();
-  if (existing) return { applied: false };
+  if (db.state.seeded) return { applied: false };
 
   if (!fs.existsSync(seedPath)) {
     throw new Error("Seed file not found: " + seedPath);
@@ -239,79 +229,61 @@ function seedOnce(db, seedPath) {
       address: user.address,
       label: user.label,
       roles: user.roles || [],
-      grantedBy: "seed",
       replaceRoles: false,
+      deferSave: true,
     });
   }
-  db.prepare("INSERT INTO app_state (key, value) VALUES ('seeded', ?)").run(
-    new Date().toISOString()
-  );
+  db.state.seeded = new Date().toISOString();
+  db.save();
   return { applied: true, count: users.length };
 }
 
-function upsertUser(db, { address, label, roles, grantedBy, replaceRoles }) {
+function upsertUser(db, { address, label, roles, replaceRoles, deferSave }) {
   const addr = normalizeAddress(address);
   const unknown = roles.filter((role) => !(role in ROLES));
   if (unknown.length) throw new Error("Unknown role(s): " + unknown.join(", "));
-  const now = Date.now();
 
-  db.exec("BEGIN");
-  try {
-    db.prepare(
-      "INSERT INTO users (address, label, created_at) VALUES (?, ?, ?) " +
-        "ON CONFLICT(address) DO UPDATE SET label = " +
-        "CASE WHEN excluded.label = '' THEN users.label ELSE excluded.label END"
-    ).run(addr, String(label || "").slice(0, 80), now);
-    if (replaceRoles) {
-      db.prepare("DELETE FROM user_roles WHERE address = ?").run(addr);
-    }
-    const grant = db.prepare(
-      "INSERT OR IGNORE INTO user_roles (address, role, granted_by, granted_at) " +
-        "VALUES (?, ?, ?, ?)"
-    );
-    for (const role of roles) grant.run(addr, role, grantedBy, now);
-    db.exec("COMMIT");
-  } catch (error) {
-    db.exec("ROLLBACK");
-    throw error;
+  const cleanLabel = String(label || "").slice(0, 80);
+  let user = db.findUser(addr);
+  if (!user) {
+    user = { address: addr, label: cleanLabel, createdAt: Date.now(), roles: [] };
+    db.state.users.push(user);
+  } else if (cleanLabel) {
+    user.label = cleanLabel;
   }
+  const kept = replaceRoles ? [] : user.roles;
+  user.roles = [...new Set([...kept, ...roles])].sort();
+  if (!deferSave) db.save();
   return addr;
 }
 
 function deleteUser(db, address) {
-  return db.prepare("DELETE FROM users WHERE address = ?").run(normalizeAddress(address))
-    .changes;
+  const addr = normalizeAddress(address);
+  const before = db.state.users.length;
+  db.state.users = db.state.users.filter((user) => user.address !== addr);
+  const changes = before - db.state.users.length;
+  if (changes) db.save();
+  return changes;
 }
 
 function accessFor(db, address) {
-  const roles = db
-    .prepare("SELECT role FROM user_roles WHERE address = ? ORDER BY role")
-    .all(address)
-    .map((row) => row.role);
-  const permissions = db
-    .prepare(
-      "SELECT DISTINCT rp.permission FROM user_roles ur " +
-        "JOIN role_permissions rp ON rp.role = ur.role " +
-        "WHERE ur.address = ? ORDER BY rp.permission"
-    )
-    .all(address)
-    .map((row) => row.permission);
+  const user = db.findUser(address);
+  const roles = user ? [...user.roles] : [];
+  const permissions = Object.keys(PERMISSIONS)
+    .filter((perm) => PERMISSIONS[perm].roles.some((role) => roles.includes(role)))
+    .sort();
   return { roles, permissions };
 }
 
 function listUsers(db) {
-  const users = db
-    .prepare("SELECT address, label, created_at FROM users ORDER BY created_at")
-    .all();
-  const rolesStmt = db.prepare(
-    "SELECT role FROM user_roles WHERE address = ? ORDER BY role"
-  );
-  return users.map((user) => ({
-    address: user.address,
-    label: user.label,
-    createdAt: user.created_at,
-    roles: rolesStmt.all(user.address).map((row) => row.role),
-  }));
+  return [...db.state.users]
+    .sort((a, b) => a.createdAt - b.createdAt)
+    .map((user) => ({
+      address: user.address,
+      label: user.label,
+      createdAt: user.createdAt,
+      roles: [...user.roles],
+    }));
 }
 
 module.exports = {

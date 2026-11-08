@@ -83,7 +83,7 @@ On the DIDLab host, nginx serves the repo checkout. `/` redirects to `/frontend/
 
 The catalog lives in `server/db.js`. The database stores only who holds which role. Hide or show UI with `data-requires="<permission>"`. This layer does not replace `CredentialRegistry`: the contracts still check on-chain credentials for every write.
 
-**DIDLab.** In the Files tab, create `/srv/data/portal.db` and paste the portal JSON. The file is text. The first boot turns it into the database and does not read that text again, so a role removed in the Portal users card stays removed. Do not paste it a second time. Keep the real addresses and labels out of this repository.
+**DIDLab.** In the Files tab, create `/srv/data/portal.db` and paste the portal JSON. `portal.db` is a plain JSON file, so no SQLite or Node version requirement applies. The first boot marks it as seeded, and the server then keeps users, roles and sessions in it, so a role removed in the Portal users card stays removed. Do not paste the seed a second time, since that would overwrite the current roles. Keep the real addresses and labels out of this repository.
 
 ```json
 { "users": [ { "address": "0x...", "label": "role label", "roles": ["ADMIN"] } ] }
