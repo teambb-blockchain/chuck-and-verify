@@ -9,6 +9,7 @@
 // decides who may write on chain (ADR 0003).
 
 const fs = require("fs");
+const os = require("os");
 const path = require("path");
 const { DatabaseSync } = require("node:sqlite");
 
@@ -107,13 +108,67 @@ CREATE TABLE IF NOT EXISTS app_state (
 );
 `;
 
-function openDatabase(dataDir = resolveDataDir()) {
-  fs.mkdirSync(dataDir, { recursive: true });
-  const dbPath = path.join(dataDir, "portal.db");
+const SQLITE_HEADER = Buffer.from("SQLite format 3\0");
+
+function isSqliteFile(filePath) {
+  let fd;
+  try {
+    fd = fs.openSync(filePath, "r");
+    const header = Buffer.alloc(16);
+    const n = fs.readSync(fd, header, 0, 16, 0);
+    return n === 16 && header.equals(SQLITE_HEADER);
+  } catch {
+    return false;
+  } finally {
+    if (fd !== undefined) fs.closeSync(fd);
+  }
+}
+
+function connectDatabase(dbPath) {
   const db = new DatabaseSync(dbPath);
   db.exec("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;");
   db.exec(SCHEMA);
   syncCatalog(db);
+  return db;
+}
+
+// The DIDLab Files tab stores text. A pasted portal.db is JSON, not a
+// database. The first boot builds the real database from that text and
+// replaces the file. A later boot sees SQLite and does not read it again.
+function adoptPastedSeed(dbPath) {
+  if (!fs.existsSync(dbPath) || isSqliteFile(dbPath)) return;
+
+  const text = fs.readFileSync(dbPath, "utf8").trim();
+  if (!text.startsWith("{")) {
+    throw new Error(
+      "portal.db is not a database. Paste the portal JSON into that file, then start again."
+    );
+  }
+
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "portal-seed-"));
+  try {
+    const seedPath = path.join(dir, "seed.json");
+    const builtPath = path.join(dir, "portal.db");
+    fs.writeFileSync(seedPath, text);
+    const db = connectDatabase(builtPath);
+    try {
+      const result = seedOnce(db, seedPath);
+      if (!result.applied) throw new Error("Pasted portal JSON was not applied.");
+      db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+    } finally {
+      db.close();
+    }
+    fs.copyFileSync(builtPath, dbPath);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+function openDatabase(dataDir = resolveDataDir()) {
+  fs.mkdirSync(dataDir, { recursive: true });
+  const dbPath = path.join(dataDir, "portal.db");
+  adoptPastedSeed(dbPath);
+  const db = connectDatabase(dbPath);
   return { db, dbPath, dataDir };
 }
 
@@ -160,7 +215,7 @@ function syncCatalog(db) {
 
 // Apply seed.json once into this database file. A later run, and every boot,
 // leave the rows alone, so removing a role in the portal stays removed.
-//   { "users": [ { "address": "0x...", "label": "Britt", "roles": ["ADMIN"] } ] }
+//   { "users": [ { "address": "0x...", "label": "Contract deployer", "roles": ["ADMIN"] } ] }
 function seedOnce(db, seedPath) {
   const existing = db.prepare(
     "SELECT value FROM app_state WHERE key = 'seeded'"

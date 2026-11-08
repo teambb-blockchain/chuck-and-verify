@@ -32,6 +32,11 @@ export const abi = [
   },
   {
     "inputs": [],
+    "name": "NotBatchProcessor",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "NotCurrentHolder",
     "type": "error"
   },

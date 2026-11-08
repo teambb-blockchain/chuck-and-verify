@@ -65,6 +65,7 @@ contract BeefSupplyChain {
     error NotPendingReceiver();
     error ZeroAddress();
     error EmptyBatchId();
+    error NotBatchProcessor();
 
     constructor(address registryAddress) {
         if (registryAddress == address(0)) revert ZeroAddress();
@@ -134,13 +135,16 @@ contract BeefSupplyChain {
         emit ReceiptConfirmed(batchId, msg.sender);
     }
 
+    /// @notice Record a recall. Only the processor that registered the batch,
+    /// holding a valid PROCESSOR credential, may recall it.
     function recordRecall(
         bytes32 batchId,
         bytes32 noticeHash,
         uint8 classification
     ) external {
-        if (!registry.isValid(msg.sender, CRED_INSPECTOR)) revert Unauthorized();
+        if (!registry.isValid(msg.sender, CRED_PROCESSOR)) revert Unauthorized();
         Batch storage batch = _requireBatch(batchId);
+        if (batch.processor != msg.sender) revert NotBatchProcessor();
 
         batch.recalled = true;
         batch.recallNoticeHash = noticeHash;

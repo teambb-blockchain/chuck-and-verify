@@ -205,17 +205,38 @@ describe("BeefSupplyChain", function () {
       await supplyChain.connect(processor).registerBatch(batchId, 1000);
     });
 
-    it("allows a credentialed inspector", async function () {
+    it("allows the processor that registered the batch", async function () {
       await expect(
-        supplyChain.connect(inspector).recordRecall(batchId, noticeHash, 1)
+        supplyChain.connect(processor).recordRecall(batchId, noticeHash, 1)
       )
         .to.emit(supplyChain, "RecallRecorded")
-        .withArgs(batchId, inspector.address, noticeHash, 1);
+        .withArgs(batchId, processor.address, noticeHash, 1);
 
       const batch = await supplyChain.getBatch(batchId);
       expect(batch.recalled).to.equal(true);
       expect(batch.recallNoticeHash).to.equal(noticeHash);
       expect(batch.recallClassification).to.equal(1);
+    });
+
+    it("rejects an inspector", async function () {
+      await expect(
+        supplyChain.connect(inspector).recordRecall(batchId, noticeHash, 1)
+      ).to.be.revertedWithCustomError(supplyChain, "Unauthorized");
+    });
+
+    it("rejects a different credentialed processor", async function () {
+      const expiresAt = (await time.latest()) + ONE_YEAR;
+      await registry.grant(custodianB.address, CRED_PROCESSOR, expiresAt);
+      await expect(
+        supplyChain.connect(custodianB).recordRecall(batchId, noticeHash, 1)
+      ).to.be.revertedWithCustomError(supplyChain, "NotBatchProcessor");
+    });
+
+    it("rejects the registering processor once its credential is revoked", async function () {
+      await registry.revoke(processor.address, CRED_PROCESSOR);
+      await expect(
+        supplyChain.connect(processor).recordRecall(batchId, noticeHash, 1)
+      ).to.be.revertedWithCustomError(supplyChain, "Unauthorized");
     });
 
     it("rejects an unauthorized caller", async function () {
@@ -227,7 +248,7 @@ describe("BeefSupplyChain", function () {
     it("rejects recalling a batch that does not exist", async function () {
       const missingId = ethers.keccak256(ethers.toUtf8Bytes("missing-batch"));
       await expect(
-        supplyChain.connect(inspector).recordRecall(missingId, noticeHash, 1)
+        supplyChain.connect(processor).recordRecall(missingId, noticeHash, 1)
       ).to.be.revertedWithCustomError(supplyChain, "BatchNotFound");
     });
   });
@@ -245,7 +266,7 @@ describe("BeefSupplyChain", function () {
       .connect(custodianA)
       .recordShipment(batchId, custodianB.address);
     await supplyChain.connect(custodianB).confirmReceipt(batchId);
-    await supplyChain.connect(inspector).recordRecall(batchId, noticeHash, 1);
+    await supplyChain.connect(processor).recordRecall(batchId, noticeHash, 1);
 
     const batch = await supplyChain.getBatch(batchId);
     expect(batch.currentHolder).to.equal(custodianB.address);

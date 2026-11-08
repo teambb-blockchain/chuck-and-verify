@@ -83,17 +83,13 @@ On the DIDLab host, nginx serves the repo checkout. `/` redirects to `/frontend/
 
 The catalog lives in `server/db.js`. The database stores only who holds which role. Hide or show UI with `data-requires="<permission>"`. This layer does not replace `CredentialRegistry`: the contracts still check on-chain credentials for every write.
 
-**Seed once, then upload the database.** The running app does not read a seed file. Create `data/seed.json` locally (that folder is gitignored):
+**DIDLab.** In the Files tab, create `/srv/data/portal.db` and paste the portal JSON. The file is text. The first boot turns it into the database and does not read that text again, so a role removed in the Portal users card stays removed. Do not paste it a second time. Keep the real addresses and labels out of this repository.
 
 ```json
-{ "users": [ { "address": "0xYourWallet", "label": "Britt", "roles": ["ADMIN"] } ] }
+{ "users": [ { "address": "0x...", "label": "role label", "roles": ["ADMIN"] } ] }
 ```
 
-Run `npm run seed:portal`. That writes `data/portal.db` and records that this file has been seeded. Upload `data/portal.db` to `/srv/data/portal.db` before the app starts, and do not upload `seed.json`. Delete the local seed file when you no longer need it.
-
-A second `npm run seed:portal` does not add those roles again, so a role removed in the Portal users card stays removed. To start over before the upload, delete `data/portal.db` and run the command again. If the app has already created an empty `/srv/data/portal.db`, stop it and replace that file with the seeded one.
-
-Locally, `npm start` uses `./data/portal.db`. Set `DATA_DIR` to override.
+Locally, `npm start` uses `./data/portal.db`. Set `DATA_DIR` to override. `npm run seed:portal` builds that file from `data/seed.json` once.
 
 ## Environment
 
