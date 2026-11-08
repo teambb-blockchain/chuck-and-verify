@@ -75,14 +75,44 @@ function parseCookies(header) {
   return out;
 }
 
-function requestHost(req) {
-  return String(req.headers["x-forwarded-host"] || req.headers.host || "localhost")
-    .split(",")[0]
-    .trim();
-}
+// Public sites the portal is served from. Override with a comma-separated
+// PORTAL_ORIGINS, e.g. "https://teambb.didlab.org,https://other.example".
+// Entries that are not a valid http(s) origin are dropped.
+const PUBLIC_ORIGINS = (process.env.PORTAL_ORIGINS || "https://teambb.didlab.org")
+  .split(",")
+  .map((entry) => {
+    try {
+      const url = new URL(entry.trim());
+      return /^https?:$/.test(url.protocol) ? url.origin : null;
+    } catch {
+      return null;
+    }
+  })
+  .filter(Boolean);
 
 function isLocalHost(host) {
   return /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/.test(host);
+}
+
+// The site the browser is on, as { host, scheme }. Used for the domain in the
+// sign-in message and for the cookie's Secure flag.
+//
+// The DIDLab container's nginx proxies without forwarding Host, so requests
+// arrive as Host: 127.0.0.1:3000. In that case the browser's Origin header
+// names the real site, but it is only trusted when it is on PUBLIC_ORIGINS.
+// Otherwise a look-alike site relaying requests here could get a message
+// carrying its own domain, which the wallet would then not warn about.
+function requestSite(req) {
+  const host = String(req.headers["x-forwarded-host"] || req.headers.host || "localhost")
+    .split(",")[0]
+    .trim();
+  if (!isLocalHost(host)) return { host, scheme: "https" };
+  const origin = String(req.headers.origin || "");
+  if (PUBLIC_ORIGINS.includes(origin)) {
+    const url = new URL(origin); // safe: equal to a parsed entry above
+    return { host: url.host, scheme: url.protocol.slice(0, -1) };
+  }
+  return { host, scheme: "http" };
 }
 
 function sessionCookie(req, token, maxAgeSeconds) {
@@ -93,7 +123,7 @@ function sessionCookie(req, token, maxAgeSeconds) {
     "SameSite=Strict",
     `Max-Age=${maxAgeSeconds}`,
   ];
-  if (!isLocalHost(requestHost(req))) parts.push("Secure");
+  if (requestSite(req).scheme === "https") parts.push("Secure");
   return parts.join("; ");
 }
 
@@ -122,8 +152,7 @@ function createAuth(db) {
         status: 503,
       });
     }
-    const host = requestHost(req);
-    const scheme = isLocalHost(host) ? "http" : "https";
+    const { host, scheme } = requestSite(req);
     const nonce = crypto.randomBytes(16).toString("hex");
     // EIP-4361 layout, so wallets that understand SIWE can check the domain.
     const message = [

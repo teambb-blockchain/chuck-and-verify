@@ -1,35 +1,46 @@
-# chuck-and-verify
+# Chuck and Verify
 
-Team project for smart contracts, tests, scripts, and docs.
-## Project Overview
+Team BB's blockchain project for tracking beef batches through the supply chain. Live at [teambb.didlab.org](https://teambb.didlab.org) on DIDLab (chain 252501).
 
-This project focuses on tracking beef batches through the supply chain. The Beef Supply Chain Contract records important information about batch registration, USDA inspection, custody handoffs, and recalls.
+## Overview
 
-Authorized participants include processors, USDA inspectors, logistics partners, and retailers. Consumers can view the recorded information to verify a beef batch's inspection status, custody history, and recall status.
+The `BeefSupplyChain` contract records batch registration, USDA inspection, custody handoffs, and recalls. Processors, USDA inspectors, logistics partners, and retailers write to it, each with a credential from `CredentialRegistry`. Consumers can read a batch's inspection status, custody history, and recall status.
 
-Confidential business information such as pricing, sales data, employee information, shipping details, and complete inspection documents is kept off-chain.
+Confidential business information stays off chain: pricing, sales data, employee information, shipping details, and complete inspection documents. A batch's lot form (a PDF) is encrypted in the browser and published to IPFS when the batch is registered. Only the batch facts go on chain.
 
-## Structure
+## Repository layout
 
 | Path | Purpose |
 |------|---------|
-| `contracts/` | Solidity (or other) smart contracts 
-| `test/` | Contract and integration tests |
-| `scripts/` | Deploy and utility scripts |
-| `docs/` | Proposal and team charter |
-| `docs/architecture/` | High-level system design notes |
-| `docs/decisions/` | Architecture Decision Records (one file per decision) |
-| `frontend/public/` | DApp page (`index.html`, `app.js`, generated `abi.js`) |
-| `index.html` | nginx redirect from `/` to `/frontend/public/index.html` |
+| `contracts/` | `BeefSupplyChain` and `CredentialRegistry` (Solidity) |
+| `test/` | Hardhat contract tests |
+| `scripts/` | Deploy, credential setup, sample batch, and portal seed scripts |
+| `frontend/public/` | DApp page (`index.html`, `app.js`, generated `abi.js`, portal session and admin modules) |
+| `index.js` | Node server: static page, wallet sign-in, portal roles, IPFS upload proxy |
+| `server/` | Sign-in (`auth.js`), role storage (`db.js`), signature recovery (`ethsig.js`) |
+| `index.html` | Redirects `/` to `/frontend/public/index.html` |
+| `docs/` | Proposal, team charter, checkpoint report |
+| `docs/architecture/` | Architecture and trust-boundary diagrams |
+| `docs/decisions/` | Architecture Decision Records, one file per decision |
+| `docs/examples/forms/` | Sample PDFs for testing form upload (not served by the app) |
 
 ## Setup
 
-1. Copy `.env.example` to `.env` and fill in `DEPLOYER_KEY` when you need to deploy. Leave it empty for local compile and test.
-2. Install dependencies: `npm install`
-3. Compile: `npm run compile`
-4. Test: `npm test`
+1. Install dependencies: `npm install`
+2. Compile: `npm run compile`
+3. Test: `npm test`
 
-## Deploy to DIDLab
+Compiling and testing need no `.env`. To deploy, copy `.env.example` to `.env` and fill in `DEPLOYER_KEY` (see [Environment](#environment)).
+
+## Run locally
+
+```bash
+npm start
+```
+
+Open `http://localhost:3000`. The server serves `frontend/public/` and the `/api/` routes, and keeps portal roles in `./data/portal.db`.
+
+## Deploy contracts to DIDLab
 
 Deploying costs TRUST for gas on chain 252501. Use a disposable DIDLab lab wallet. `DEPLOYER_KEY` is a private key (64 hex characters after `0x`), not a wallet address, and it lives only in your local `.env`.
 
@@ -62,17 +73,11 @@ export DEMO_CUSTODIAN=0x...
 
 The processor also receives the CUSTODIAN credential so it can ship a batch after registering it. Credentials expire after 30 days unless `CREDENTIAL_TTL_SECONDS` is set. Re-running step 2 is safe: it skips issuers and credentials that are already in place.
 
-After a redeploy, update the addresses in `frontend/public/app.js` and `scripts/registerBatch.js`. Regenerate `frontend/public/abi.js` from the BeefSupplyChain artifact if the contract interface changes.
+After a redeploy, update the addresses in `frontend/public/app.js` and `scripts/registerBatch.js`. If the contract interface changes, regenerate `frontend/public/abi.js` from the BeefSupplyChain artifact.
 
-## Run the project page locally
+## Portal roles
 
-Run `npm start` and open `http://localhost:3000`. That serves `frontend/public/`.
-
-On the DIDLab host, nginx serves the repo checkout. `/` redirects to `/frontend/public/index.html`. Dependencies stay in the root `package.json`.
-
-## Portal roles (SQLite)
-
-`index.js` keeps portal roles in SQLite using Node's built-in `node:sqlite` (Node 22.5 or newer, no npm package). Login is a wallet signature: the server issues a one-time message, the wallet signs it (no gas), and the server sets an HttpOnly session cookie. Each wallet's roles decide which sections it sees and which server routes it may call.
+Login is a wallet signature. The server issues a one-time message, the wallet signs it (no gas, no transaction), and the server sets an HttpOnly session cookie. Each wallet's portal roles decide which sections of the page it sees and which server routes it may call.
 
 | Role | Permissions |
 |------|-------------|
@@ -81,31 +86,66 @@ On the DIDLab host, nginx serves the repo checkout. `/` redirects to `/frontend/
 | `INSPECTOR` | `batch.inspect`, `form.upload` |
 | `CUSTODIAN` | `custody.transfer` |
 
-The catalog lives in `server/db.js`. The database stores only who holds which role. Hide or show UI with `data-requires="<permission>"`. This layer does not replace `CredentialRegistry`: the contracts still check on-chain credentials for every write.
+The role and permission catalog lives in `server/db.js`. In the page, an element with `data-requires="<permission>"` is shown only to wallets holding that permission. Roles are re-read on every request, so a change made in the Portal users card applies to open sessions right away.
 
-**DIDLab.** In the Files tab, create `/srv/data/portal.db` and paste the portal JSON. `portal.db` is a plain JSON file, so no SQLite or Node version requirement applies. The first boot marks it as seeded, and the server then keeps users, roles and sessions in it, so a role removed in the Portal users card stays removed. Do not paste the seed a second time, since that would overwrite the current roles. Keep the real addresses and labels out of this repository.
+This layer controls the portal only. It does not replace `CredentialRegistry` ([ADR 0003](./docs/decisions/0003-simulated-administrative-chain.md)): the contracts still check on-chain credentials on every write.
+
+### The roles file
+
+`portal.db` is a plain JSON file holding who has which role, plus sessions. The server finds it in this order: `DATA_DIR` if set, `/srv/data` if that folder exists (DIDLab), otherwise `./data` (gitignored).
+
+To give the first users their roles, use this shape:
 
 ```json
 { "users": [ { "address": "0x...", "label": "role label", "roles": ["ADMIN"] } ] }
 ```
 
-Locally, `npm start` uses `./data/portal.db`. Set `DATA_DIR` to override. `npm run seed:portal` builds that file from `data/seed.json` once.
+- **Locally:** put it in `data/seed.json` and run `npm run seed:portal`. That builds `data/portal.db` once; later runs leave existing roles alone.
+- **On DIDLab:** in the Files tab, create `/srv/data/portal.db` and paste the JSON. The first boot marks the file as seeded. From then on, manage roles in the Portal users card. Pasting the seed again would overwrite the current roles.
+
+Keep real addresses and labels out of this repository.
+
+## Hosting on DIDLab
+
+In the container, nginx answers the public site. It serves the page as static files and forwards `/api/` to Node on port 3000, which runs from `/srv/app`. The nginx config can't be changed from the repo, so the server works around two of its behaviors:
+
+- **Stripped prefix.** `proxy_pass http://127.0.0.1:3000/;` removes `/api`, so `/api/me` arrives as `/me`. `index.js` adds `/api` back for its own routes (`/me`, `/auth/*`, `/admin/users`, `/ipfs/add`).
+- **No forwarded `Host`.** Node sees `Host: 127.0.0.1:3000`. For the domain in the sign-in message and the cookie's `Secure` flag, the server uses the browser's `Origin` instead, but only if it is listed in `PORTAL_ORIGINS`. An unlisted origin falls back to `127.0.0.1`, so a look-alike site can't get a message carrying its own domain.
+
+nginx also keeps its default 1 MB request limit, so a form upload larger than that is rejected before it reaches Node.
+
+**Updating the server.** `/srv/app` is a deployed copy, not a git checkout. After pushing, redeploy so it gets the new files, then restart Node:
+
+```bash
+ss -ltnp | grep :3000    # note the pid
+kill <pid>               # the supervisor starts it again on the new code
+```
+
+Then confirm that `https://teambb.didlab.org/api/me` returns JSON.
 
 ## Environment
 
-See `.env.example` for required variables:
+**Hardhat** reads these from `.env` (see `.env.example`):
 
-- `DIDLAB_RPC` — RPC endpoint
-- `DEPLOYER_KEY` — deployer private key (never commit the real value)
+- `DIDLAB_RPC`: RPC endpoint (default `https://eth.didlab.org`)
+- `DEPLOYER_KEY`: deployer private key. Never commit the real value.
 
-Optional, read by `scripts/setupCredentials.js` only:
+Optional, read only by `scripts/setupCredentials.js`:
 
-- `CREDENTIAL_REGISTRY_ADDRESS` — registry to configure (defaults to the CP2 deployment)
-- `DEMO_PROCESSOR`, `DEMO_INSPECTOR`, `DEMO_CUSTODIAN` — credential holders (default to the deployer)
-- `CREDENTIAL_TTL_SECONDS` — credential lifetime (default 30 days)
+- `CREDENTIAL_REGISTRY_ADDRESS`: registry to configure (defaults to the CP2 deployment)
+- `DEMO_PROCESSOR`, `DEMO_INSPECTOR`, `DEMO_CUSTODIAN`: credential holders (default to the deployer)
+- `CREDENTIAL_TTL_SECONDS`: credential lifetime (default 30 days)
+
+**The Node server** reads these from the process environment. It does not load `.env`.
+
+- `PORT`: listen port (default `3000`)
+- `DATA_DIR`: folder holding `portal.db` (default `/srv/data` if it exists, otherwise `./data`)
+- `PORTAL_ORIGINS`: comma-separated public URLs trusted for the sign-in domain (default `https://teambb.didlab.org`)
 
 ## Team docs
 
-- [docs/TEAM_CHARTER.md](./docs/TEAM_CHARTER.md) — roles, norms, and process
-- [docs/PROPOSAL.md](./docs/PROPOSAL.md) — project proposal
-- [AI_RECORD.md](./AI_RECORD.md) — record of AI-assisted work
+- [docs/TEAM_CHARTER.md](./docs/TEAM_CHARTER.md): roles, norms, and process
+- [docs/PROPOSAL.md](./docs/PROPOSAL.md): project proposal
+- [docs/CHECKPOINT_REPORT.md](./docs/CHECKPOINT_REPORT.md): checkpoint report
+- [docs/decisions/](./docs/decisions/): Architecture Decision Records
+- [AI_RECORD.md](./AI_RECORD.md): record of AI-assisted work

@@ -15,7 +15,14 @@ async function api(path, options = {}) {
   });
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw Object.assign(new Error(body.error || "Request failed."), {
+    // A non-JSON error (e.g. a plain "Not found") means the request never
+    // reached a portal route: Node is down, running older code, or the proxy
+    // in front of it is sending the request to the wrong path.
+    const fallback =
+      response.status === 404
+        ? "The sign-in server did not answer (HTTP 404)."
+        : `Request failed (HTTP ${response.status}).`;
+    throw Object.assign(new Error(body.error || fallback), {
       status: response.status
     });
   }

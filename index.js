@@ -137,10 +137,19 @@ function proxyIpfsAdd(req, res) {
   });
 }
 
+// The DIDLab container's nginx forwards /api/ with `proxy_pass .../;`, which
+// strips the prefix: /api/me arrives here as /me. Put it back for the API
+// routes only. None of these collide with a file in frontend/public.
+const STRIPPED_API_ROUTE = /^\/(me|auth\/[a-z]+|admin\/users(\/.*)?|ipfs\/add)$/;
+
+function withApiPrefix(urlPath) {
+  return STRIPPED_API_ROUTE.test(urlPath) ? "/api" + urlPath : urlPath;
+}
+
 async function serve(req, res) {
   let urlPath;
   try {
-    urlPath = decodeURIComponent((req.url || "/").split("?")[0]);
+    urlPath = withApiPrefix(decodeURIComponent((req.url || "/").split("?")[0]));
   } catch {
     res.writeHead(400, { "Content-Type": "text/plain; charset=utf-8" });
     res.end("Bad request");
