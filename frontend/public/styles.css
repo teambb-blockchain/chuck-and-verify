@@ -428,6 +428,19 @@ a:hover { color: var(--accent-hover); }
 .chain-log li.is-ok { border-left-color: var(--accent); }
 .chain-log li.is-error { border-left-color: #b42318; }
 .chain-log li.is-skipped { border-left-color: #b26b00; }
+.issuer-list { list-style: none; padding: 0; margin: var(--space-2) 0; }
+.issuer-list li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px var(--space-2);
+  padding: var(--space-1) 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 0.875rem;
+}
+.issuer-list strong { min-width: 96px; }
+.issuer-list code { word-break: break-all; }
+.issuer-unset { color: #8a5300; }
+#registryAdmin { word-break: break-all; }
 @media (max-width: 520px) {
   .admin-user { flex-direction: column; }
 }

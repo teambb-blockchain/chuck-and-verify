@@ -105,6 +105,28 @@
           <p id="adminStatus" role="status" aria-live="polite"></p>
           <ul id="adminChainLog" class="chain-log" aria-live="polite" hidden></ul>
         </form>
+
+        <h3 id="issuers-heading">Credential issuers</h3>
+        <p class="muted">Each on-chain role has one issuer, the only wallet that can grant or revoke it. Only the registry admin <code id="registryAdmin">…</code> can change an issuer.</p>
+        <ul id="issuerList" class="issuer-list" aria-labelledby="issuers-heading"></ul>
+        <form id="issuerForm" class="admin-form">
+          <div class="field-row">
+            <div class="field">
+              <label for="issuerRole">Role</label>
+              <select id="issuerRole" name="role">
+                <option>PROCESSOR</option>
+                <option>INSPECTOR</option>
+                <option>CUSTODIAN</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="issuerAddress">Issuer wallet</label>
+              <input id="issuerAddress" name="issuer" required pattern="0x[0-9a-fA-F]{40}" autocomplete="off" spellcheck="false" placeholder="0x…">
+            </div>
+          </div>
+          <button class="btn btn-accent" type="submit">Set issuer</button>
+          <p id="issuerStatus" role="status" aria-live="polite"></p>
+        </form>
       </section>
 
       <section class="card deployed-contracts" aria-labelledby="deployed-contracts-heading">

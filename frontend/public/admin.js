@@ -258,7 +258,7 @@ async function syncCredentials(address, plan) {
     if (issuers[i] === zeroAddress) {
       set(
         "skipped, no " + change.role + " issuer is set in CredentialRegistry " +
-          "(the registry admin must call setIssuer first)",
+          "(the registry admin can set one under Credential issuers)",
         null,
         "is-skipped"
       );
@@ -348,8 +348,115 @@ form.onsubmit = async (event) => {
   }
 };
 
+// --- Credential issuers -----------------------------------------------------
+// setIssuer is onlyAdmin (registry admin(), not issuerOf), so this form checks
+// the connected wallet against admin() before asking it to sign.
+
+const issuerList = document.getElementById("issuerList");
+const issuerForm = document.getElementById("issuerForm");
+const issuerStatus = document.getElementById("issuerStatus");
+const registryAdminEl = document.getElementById("registryAdmin");
+const issuerButton = issuerForm.querySelector("button[type=submit]");
+
+let registryAdmin = null;
+
+async function loadIssuers() {
+  const [admin, ...issuers] = await Promise.all([
+    registryRead("admin", []),
+    ...CHAIN_ROLES.map((role) => registryRead("issuerOf", [credentialType(role)]))
+  ]);
+  registryAdmin = admin;
+  registryAdminEl.textContent = admin;
+  if (!issuerForm.issuer.value) {
+    // First load: prefill the usual setup (admin issues every type, as in
+    // scripts/setupCredentials.js) and point at the first role still unset.
+    issuerForm.issuer.value = admin;
+    const unset = CHAIN_ROLES.find((_, i) => issuers[i] === zeroAddress);
+    if (unset) issuerForm.role.value = unset;
+  }
+  issuerList.replaceChildren(
+    ...CHAIN_ROLES.map((role, i) =>
+      el(
+        "li",
+        {},
+        el("strong", {}, role),
+        issuers[i] === zeroAddress
+          ? el("span", { className: "issuer-unset" }, "No issuer set. Grants for this role are blocked.")
+          : el("code", {}, issuers[i])
+      )
+    )
+  );
+  return issuers;
+}
+
+issuerForm.onsubmit = async (event) => {
+  event.preventDefault();
+  const role = issuerForm.role.value;
+  const issuer = issuerForm.issuer.value.trim();
+  issuerButton.disabled = true;
+  try {
+    if (!window.ethereum) {
+      issuerStatus.textContent = "No wallet detected.";
+      return;
+    }
+    const [account] = await window.ethereum.request({ method: "eth_requestAccounts" });
+    const walletChainId = Number(await window.ethereum.request({ method: "eth_chainId" }));
+    if (walletChainId !== REQUIRED_CHAIN_ID) {
+      issuerStatus.textContent = "Switch your wallet to DIDLab and try again.";
+      return;
+    }
+    const issuers = await loadIssuers();
+    if (account.toLowerCase() !== registryAdmin.toLowerCase()) {
+      issuerStatus.textContent =
+        "Only the registry admin " + registryAdmin + " can set issuers. Connected: " + account + ".";
+      return;
+    }
+    const current = issuers[CHAIN_ROLES.indexOf(role)];
+    if (current.toLowerCase() === issuer.toLowerCase()) {
+      issuerStatus.textContent = role + " issuer is already " + current + ".";
+      return;
+    }
+
+    issuerStatus.textContent = "Simulating setIssuer(" + role + ")…";
+    const { request } = await publicClient.simulateContract({
+      address: credentialRegistryAddress,
+      abi: registryAbi,
+      functionName: "setIssuer",
+      args: [credentialType(role), issuer],
+      account
+    });
+    issuerStatus.textContent = "Approve setIssuer(" + role + ") in your wallet…";
+    const walletClient = createWalletClient({ chain, transport: custom(window.ethereum) });
+    const hash = await walletClient.writeContract(request);
+    issuerStatus.replaceChildren("Pending ", txLink(hash));
+    const receipt = await publicClient.waitForTransactionReceipt({ hash, confirmations: 1 });
+    issuerStatus.replaceChildren(
+      receipt.status === "success"
+        ? role + " issuer set to " + issuer + ". "
+        : "setIssuer reverted on chain (gas used). ",
+      txLink(hash)
+    );
+    await loadIssuers();
+  } catch (error) {
+    if (isUserRejection(error)) {
+      issuerStatus.textContent = "Rejected in wallet, nothing sent.";
+    } else {
+      const name = revertName(error);
+      issuerStatus.textContent = name
+        ? "Would revert (" + name + "), nothing sent."
+        : "Failed: " + (error.shortMessage || error.message);
+    }
+  } finally {
+    issuerButton.disabled = false;
+  }
+};
+
 export async function loadAdmin() {
   status.textContent = "";
+  issuerStatus.textContent = "";
+  loadIssuers().catch((error) => {
+    issuerStatus.textContent = "Could not read issuers: " + (error.shortMessage || error.message);
+  });
   try {
     const data = await api("/api/admin/users");
     catalog = data.roles;
