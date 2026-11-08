@@ -114,7 +114,9 @@ In the container, nginx answers the public site. It serves the page as static fi
 
 nginx also keeps its default 1 MB request limit, so a form upload larger than that is rejected before it reaches Node.
 
-**Updating the server.** `/srv/app` is a deployed copy, not a git checkout. After pushing, redeploy so it gets the new files, then restart Node:
+- **Cached scripts.** nginx sends no `Cache-Control`, so Cloudflare caches `.js` and `.css` for 4 hours (in the browser and at its edge) while `index.html` is always fresh. A deploy could then run new HTML against old modules, and a hard refresh doesn't clear Cloudflare's copy. `npm run stamp` gives `styles.css`, `app.js` and every module in the import map a `?v=<content hash>` URL, so any changed file gets a URL no cache has seen.
+
+**Updating the server.** `/srv/app` is a deployed copy, not a git checkout. Run `npm run stamp` after any change in `frontend/public/` and commit the stamped `index.html`. After pushing, redeploy so it gets the new files, then restart Node:
 
 ```bash
 ss -ltnp | grep :3000    # note the pid
