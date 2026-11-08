@@ -67,8 +67,79 @@ function multiply(point, k) {
   return result;
 }
 
+// Keccak-256 as Ethereum uses it (original Keccak padding 0x01, not the
+// SHA3-256 padding 0x06). OpenSSL only ships it from 3.2, so Node 20
+// (OpenSSL 3.0) has no "keccak-256" digest. Use it when present, otherwise
+// the small pure-JS version below. Inputs here are a few hundred bytes.
+const MASK64 = (1n << 64n) - 1n;
+const KECCAK_ROT = [
+  0, 1, 62, 28, 27, 36, 44, 6, 55, 20, 3, 10, 43, 25, 39,
+  41, 45, 15, 21, 8, 18, 2, 61, 56, 14,
+];
+// Round constants from the Keccak LFSR (x^8 + x^6 + x^5 + x^4 + 1).
+const KECCAK_RC = (() => {
+  let r = 1;
+  const bit = () => {
+    const out = r & 1;
+    r = r & 0x80 ? ((r << 1) ^ 0x171) & 0xff : r << 1;
+    return out;
+  };
+  return Array.from({ length: 24 }, () => {
+    let rc = 0n;
+    for (let j = 0; j < 7; j++) if (bit()) rc |= 1n << BigInt((1 << j) - 1);
+    return rc;
+  });
+})();
+
+function rotl64(v, n) {
+  return n === 0 ? v : ((v << BigInt(n)) | (v >> BigInt(64 - n))) & MASK64;
+}
+
+function keccakF(A) {
+  const C = new Array(5);
+  const B = new Array(25);
+  for (let round = 0; round < 24; round++) {
+    for (let x = 0; x < 5; x++) C[x] = A[x] ^ A[x + 5] ^ A[x + 10] ^ A[x + 15] ^ A[x + 20];
+    for (let x = 0; x < 5; x++) {
+      const D = C[(x + 4) % 5] ^ rotl64(C[(x + 1) % 5], 1);
+      for (let y = 0; y < 25; y += 5) A[x + y] ^= D;
+    }
+    for (let x = 0; x < 5; x++) {
+      for (let y = 0; y < 5; y++) {
+        B[y + 5 * ((2 * x + 3 * y) % 5)] = rotl64(A[x + 5 * y], KECCAK_ROT[x + 5 * y]);
+      }
+    }
+    for (let y = 0; y < 25; y += 5) {
+      for (let x = 0; x < 5; x++) {
+        A[x + y] = B[x + y] ^ (~B[((x + 1) % 5) + y] & MASK64 & B[((x + 2) % 5) + y]);
+      }
+    }
+    A[0] ^= KECCAK_RC[round];
+  }
+}
+
+function keccak256Js(buf) {
+  const RATE = 136;
+  const padded = Buffer.alloc((Math.floor(buf.length / RATE) + 1) * RATE);
+  buf.copy(padded);
+  padded[buf.length] ^= 0x01;
+  padded[padded.length - 1] ^= 0x80;
+  const A = new Array(25).fill(0n);
+  for (let off = 0; off < padded.length; off += RATE) {
+    for (let i = 0; i < RATE / 8; i++) A[i] ^= padded.readBigUInt64LE(off + i * 8);
+    keccakF(A);
+  }
+  const out = Buffer.alloc(32);
+  for (let i = 0; i < 4; i++) out.writeBigUInt64LE(A[i], i * 8);
+  return out;
+}
+
+const HAS_NATIVE_KECCAK = crypto.getHashes().includes("keccak-256");
+
 function keccak256(buf) {
-  return crypto.createHash("keccak-256").update(buf).digest();
+  return HAS_NATIVE_KECCAK
+    ? crypto.createHash("keccak-256").update(buf).digest()
+    : keccak256Js(buf);
 }
 
 function toBigInt(buf) {
@@ -124,4 +195,4 @@ function recoverPersonalSignAddress(message, signatureHex) {
   return "0x" + keccak256(pub).subarray(12).toString("hex");
 }
 
-module.exports = { recoverPersonalSignAddress, hashPersonalMessage };
+module.exports = { recoverPersonalSignAddress, hashPersonalMessage, keccak256Js };
