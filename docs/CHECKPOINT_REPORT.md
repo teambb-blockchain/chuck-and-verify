@@ -234,7 +234,41 @@ Clean findings:
 
 ## 10. Performance measurements
 
-_Due at Checkpoint 3._
+Measured on 2026-11-08. Gas comes from DIDLab transaction receipts on chain 252501. DIDLab has no base fee: every transaction below paid a flat 1 gwei, so the fee in TRUST is gas used × 10⁻⁹. Writes not yet sent to v2 were measured on the local Hardhat network with the same compiler settings (solc 0.8.24, optimizer 200 runs). For the two writes measured both ways, local and on-chain gas differ by less than 0.4%.
+
+### Gas per write on DIDLab
+
+| Write | Sent by | Gas used | Fee (TRUST) | Transaction |
+| :--- | :--- | ---: | ---: | :--- |
+| `registerBatch` (v2) | processor, wallet A | 153,047 | 0.000153 | [`0x3fe1…ca52`](https://explorer.didlab.org/tx/0x3fe163cbf7bc5029ff2d85293af077a507880d7e3109895a7e6f549b5272ca52) |
+| `recordInspection` (v2) | inspector, wallet B | 64,264 | 0.000064 | [`0xd171…fd53`](https://explorer.didlab.org/tx/0xd1718894205be6af1fb5e44caccdf9ac548a007701acc616c3d751cbc200fd53) |
+| `grant` (registry) | issuer | 71,456–71,468 | 0.000071 | [`0xd9c8…5efa`](https://explorer.didlab.org/tx/0xd9c8e1cc7807ee6418d2c22661ba3aea6de0304facaa1d02ec631fd81b7a5efa) and 3 others |
+| `setIssuer` (registry) | admin | 46,542–46,554 | 0.000047 | [`0x2759…466f`](https://explorer.didlab.org/tx/0x2759a41fb9895676559b3cf1241d75e8c15777acd4e7d9aac9f832eaa576466f) and 2 others |
+| Deploy `BeefSupplyChain` v2 | deployer | 841,913 | 0.000842 | [`0xe97d…b3f1`](https://explorer.didlab.org/tx/0xe97d465f82f1d64e266373674545e30cf50732a49d3938339cf780d10ad6b3f1) |
+| Deploy `CredentialRegistry` | admin | 372,522 | 0.000373 | [`0x0666…56da`](https://explorer.didlab.org/tx/0x0666fbae85959f573ce04400a072ffce7506f05db951a09b22a63dcc959056da) |
+
+### Gas per write, local Hardhat (not yet sent to v2)
+
+| Write | Gas used | Note |
+| :--- | ---: | :--- |
+| `recordShipment` | 39,658 | Holder names the receiver |
+| `confirmReceipt` | 41,858 | Custody moves only here |
+| `recordRecall` | 95,765 | Average over first recalls and escalations |
+| `revoke` (registry) | 31,772 | |
+
+**One batch, end to end on v2:** register, inspect, ship and confirm come to about 298,800 gas, or 0.0003 TRUST. A recall adds about 95,800. The largest single write, `registerBatch`, uses 3.3% of DIDLab's 4,700,000 block gas limit.
+
+**The cost of the v2 security fixes.** The same inspection costs 59,778 gas on v1 ([`0x4c78…acfb`](https://explorer.didlab.org/tx/0x4c7840776bdbebbd227773c8a3706d0b168fecb65b1daf739c7601a57c9dacfb)) and 64,264 on v2, 4,486 more (+7.5%), for the checks that make an inspection final, refuse one after a recall, and refuse the batch's own processor. Registration is unchanged (152,988 on v1, 153,047 on v2). Deploying v2 cost 38,749 more gas than v1 (+4.8%).
+
+### Latency
+
+| Measurement | Result | Method |
+| :--- | :--- | :--- |
+| Block interval | 2.0 s | Average over the 1,000 blocks before block 7,278,442 |
+| `getBatch` read over the DIDLab RPC | median 35 ms, 90th percentile 80 ms | 20 calls for `BEEF-A1-014` from a development machine; depends on the reader's network |
+| Fetch the encrypted report from the IPFS gateway | 0.14–0.26 s for 563,134 bytes | 6 downloads of `QmRQskDg…CtaYCnzD`; the first was slowest |
+
+A write is final once it is in a block, so a confirmed transaction appears on chain within about one 2-second block of being accepted. Not measured yet: the time to encrypt and upload a report, and the time a user spends approving wallet prompts. Both need the user's wallet and are carried with §14, row 3.
 
 ## 11. AI development record
 
@@ -295,7 +329,7 @@ Commit counts are non-merge commits on `main` since the Checkpoint 2 report comm
 | 6 | Full batch history on the site | Not started. Carried (row 8). |
 | 7 | Update PROPOSAL.md and README to current scope | Not done: the README still lists no contract addresses. Carried (row 10). |
 | 8 | Security and privacy review (§9) | Done. [`SECURITY_REVIEW.md`](SECURITY_REVIEW.md), adversarial suites, and the v2 fixes; 104 tests passing. |
-| 9 | Performance measurements (§10) | Partly done. v2 gas so far: `registerBatch` 153,047, `recordInspection` 64,264. Carried (row 3). |
+| 9 | Performance measurements (§10) | Mostly done. §10 has DIDLab gas for every write sent on v2 and the registry, local gas for ship, confirm and recall, and latency. On-chain gas for ship, confirm and recall, and upload timing, are carried (row 3). |
 
 ### Checkpoint 4 plan (release candidate, November 29)
 
