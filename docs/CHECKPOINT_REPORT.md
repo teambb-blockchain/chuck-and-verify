@@ -5,8 +5,8 @@ Cumulative report, maintained across the semester. Sections appear as they becom
 | Checkpoint | Deadline | Question |
 | :--- | :--- | :--- |
 | 1 — Foundation | Sunday, October 4, 2026 | Is this project real, and can this team ship? |
-| **2 — On Chain** | Sunday, October 18, 2026 | Does it actually touch the blockchain? |
-| 3 — Functional | Sunday, November 8, 2026 | Can someone who is not on your team actually use it? |
+| 2 — On Chain | Sunday, October 18, 2026 | Does it actually touch the blockchain? |
+| **3 — Functional** | Sunday, November 8, 2026 | Can someone who is not on your team actually use it? |
 | 4 — Release Candidate | Sunday, November 29, 2026 | Is it finished? |
 
 ---
@@ -54,7 +54,7 @@ The suitability analysis completed led to three changes to our original design:
 
 - Retail sales data was removed from the chain, so confidential business data is never public (M1-D1). See [decision record 0001](decisions/0001-keep-retail-sales-off-chain.md).
 - Inspection and temperature reports stay off chain and are represented on chain only by their hash (M1-Q5).
-- A custody handoff is recorded only when the receiving party scans the batch's QR code, instead of the sender reporting it alone (M1-D4).
+- A custody handoff is recorded only when the receiving party confirms it, instead of the sender reporting it alone (M1-D4). The design used a QR scan; 0004 defers the scanner, and the receiver's own `confirmReceipt` call stands in for it.
 
 A third party with no access to any participant's private systems can verify that a beef batch passed USDA inspection, which parties held it and in what quantities, whether safe temperatures have been maintained to FSIS standards during storage and transport, whether temperature readings are consistent across comparisons between the dock and carriers, and whether it has been recalled. This is done by confirming each entry was submitted by an address certified from the administrative chain that is not expired or revoked, by reading temperature and lineage records against the event history and checking inspection and temperature reports against the on-chain hashes on the public chain.
 
@@ -74,7 +74,7 @@ A third party with no access to any participant's private systems can verify tha
 ### Operational Chain
 
 - **Responsibility:** Records what happened to each beef batch from processing to final receipt: batch registration, inspection, custody handoffs, lot splits, temperature summaries, and recalls.
-- **Inputs and outputs:** Inputs are writes from credentialed parties: the processor (batch registration, recall initiation), the FSIS inspector (inspection result and report hash, recall classification), each receiving custodian (receipt confirmation and dock reading), the distributor (lot splits by weight), and cold storage and carriers (relayed signed temperature summaries). The output is a timestamped, attributable lineage for each batch that anyone can read.
+- **Inputs and outputs:** Inputs are writes from credentialed parties: the processor (batch registration, and recalls of its own batches with their USDA class), the FSIS inspector (inspection result and report hash), each receiving custodian (receipt confirmation and dock reading), the distributor (lot splits by weight), and cold storage and carriers (relayed signed temperature summaries). The output is a timestamped, attributable lineage for each batch that anyone can read.
 - **On-chain or off-chain:** The records are on-chain; the parties and their business records are off-chain.
 - **Who controls it:** Each credentialed party controls only its own writes and cannot alter another party's records. The consumer reads but cannot write.
 - **What it guarantees, and what it doesn't:** It guarantees that each record was written by a party credentialed at the time, cannot be altered afterward, and that custody changes are confirmed by the receiver rather than reported by the sender alone. It does not guarantee the records are accurate. The chain establishes accountability, not accuracy.
@@ -91,6 +91,8 @@ A third party with no access to any participant's private systems can verify tha
 
 ## 5. On-chain / off-chain data decisions
 
+This table is the target design. The deployed `BeefSupplyChain` v2 stores a subset: batch id, weight, processor and holder addresses, inspection pass/fail with the encrypted report's hash, and recall class with the notice's hash. Dates come from block timestamps. Grade, recall number, processing and departure dates, and temperature are not stored yet, recalls are recorded by the processor that registered the batch, and custody is confirmed by the receiver's `confirmReceipt` call rather than a scan (0004).
+
 | Element | On chain | Off chain | Justification |
 | :--- | :--- | :--- | :--- |
 | Production and batch records (processors) | Stakeholder, Batch #, lbs, processing date, date left facility | Business operations details — employee IDs, processes used, pricing | Recording the batch information on-chain creates the starting point for tracking the beef throughout the supply chain. The batch number identifies the product, while the weight helps track the quantity as the batch moves between parties or is divided into smaller lots. The processing and departure dates provide timestamped information for the batch's history. Employee IDs, processing methods, and pricing remain off-chain because they are internal business information and are not necessary to verify the batch's lineage. |
@@ -103,7 +105,7 @@ A third party with no access to any participant's private systems can verify tha
 
 ## 6. Deployment record — contract addresses, deployment transactions, chain 252501
 
-Both contracts are live on DIDLab chain **252501**. Deploy script: `scripts/deploy.js` (refuses any chain other than 252501). Commit: [`83d7418`](https://github.com/teambb-blockchain/chuck-and-verify/commit/83d7418). Live page: <https://teambb.didlab.org/> (Deployed contracts section).
+Both contracts are live on DIDLab chain **252501**. Deploy script: `scripts/deploy.js` (refuses any chain other than 252501). v2 commit: [`022bc9b`](https://github.com/teambb-blockchain/chuck-and-verify/commit/022bc9b); the v1 deployment was [`83d7418`](https://github.com/teambb-blockchain/chuck-and-verify/commit/83d7418). Live page: <https://teambb.didlab.org/> (Deployed contracts section). The live page still shows and calls v1 until the host is redeployed (§14, row 1).
 
 | Contract | Address | Deployment transaction |
 | :--- | :--- | :--- |
@@ -119,29 +121,34 @@ Transaction hash: [`0x8f33623a90575c56720bf36ad627ed668784ac5113ea82a7eeee3f6b93
 
 We also checked the registered batch through the live website and confirmed that its information could be retrieved from the blockchain.
 
+**Sample batch on v2.** `BEEF-A1-014` was registered by wallet A `0xc2Ad…351E` (PROCESSOR) in [`0x3fe163cb…72ca52`](https://explorer.didlab.org/tx/0x3fe163cbf7bc5029ff2d85293af077a507880d7e3109895a7e6f549b5272ca52), block 7271926, and inspected by wallet B `0x2710…3b5b` (INSPECTOR) in [`0xd1718894…00fd53`](https://explorer.didlab.org/tx/0xd1718894205be6af1fb5e44caccdf9ac548a007701acc616c3d751cbc200fd53), block 7271954, using the v2 frontend from a local server.
+
 ## 7. Features completed, with evidence
 
 | Feature | What it does | Evidence |
 | :--- | :--- | :--- |
 | CredentialRegistry (simulated administrative chain) | Admin assigns one issuer per credential type (PROCESSOR, INSPECTOR, CUSTODIAN). That issuer alone may grant or revoke credentials of that type. `isValid` returns false when a credential is missing, revoked, or past `expiresAt`. | Contract: `contracts/CredentialRegistry.sol`, `contracts/ICredentialRegistry.sol`. Tests: `test/CredentialRegistry.test.js` — issuer-per-type isolation, revoke, and expiry. Commit: [`00680e9`](https://github.com/teambb-blockchain/chuck-and-verify/commit/00680e9) |
-| BeefSupplyChain write path | Credential-gated writes for the operational chain: `registerBatch` (processor), `recordInspection` (inspector; stores report hash + pass/fail), `recordShipment` / `confirmReceipt` (custodian; custody completes only when the pending receiver confirms), `recordRecall` (inspector; stores notice hash + classification). Unauthorized callers revert with `Unauthorized`. | Contract: `contracts/BeefSupplyChain.sol`. Tests: `test/BeefSupplyChain.test.js` — authorized and unauthorized cases for each write, plus an end-to-end register → inspect → ship → confirm → recall path and custom-error failure paths. Commits: [`00680e9`](https://github.com/teambb-blockchain/chuck-and-verify/commit/00680e9), [`845007e`](https://github.com/teambb-blockchain/chuck-and-verify/commit/845007e) |
+| BeefSupplyChain write path | Credential-gated writes for the operational chain: `registerBatch` (processor), `recordInspection` (inspector; stores report hash + pass/fail), `recordShipment` / `confirmReceipt` (custodian; custody completes only when the pending receiver confirms), `recordRecall` (the processor that registered the batch; stores notice hash + USDA class I–III, and a later recall can only escalate). Unauthorized callers revert with `Unauthorized`. v2 adds: an inspection is final (`AlreadyInspected`), none after a recall (`BatchRecalled`), and the batch's own processor cannot inspect it (`SelfInspection`). | Contract: `contracts/BeefSupplyChain.sol`. Tests: `test/BeefSupplyChain.test.js` — authorized and unauthorized cases for each write, plus an end-to-end register → inspect → ship → confirm → recall path and custom-error failure paths. Commits: [`00680e9`](https://github.com/teambb-blockchain/chuck-and-verify/commit/00680e9), [`845007e`](https://github.com/teambb-blockchain/chuck-and-verify/commit/845007e), [`ccee520`](https://github.com/teambb-blockchain/chuck-and-verify/commit/ccee520), v2 [`022bc9b`](https://github.com/teambb-blockchain/chuck-and-verify/commit/022bc9b) |
 | Receiver-confirmed custody handoff | A shipment sets `pendingReceiver`; `currentHolder` updates only when that receiver calls `confirmReceipt`. Sender-only delivery claims are rejected (`NotCurrentHolder`, `NotPendingReceiver`, `NoPendingShipment`). | Same contract and tests as above (`recordShipment` / `confirmReceipt` describe blocks). |
-| Deployed on DIDLab (chain 252501) | Both contracts are live on the course chain and referenced by the public page. | Live page: <https://teambb.didlab.org/> (Deployed contracts section). Addresses and deployment TXs in §6. Deploy script: `scripts/deploy.js`. Commit: [`83d7418`](https://github.com/teambb-blockchain/chuck-and-verify/commit/83d7418) |
-| Demo credential setup and sample batch | Scripts grant demo credentials and register batch `BEEF-001` against the deployed addresses so the verify UI has an on-chain record to read. | `scripts/setupCredentials.js`, `scripts/registerBatch.js` (hard-coded deployed addresses matching the frontend). Commit: [`83d7418`](https://github.com/teambb-blockchain/chuck-and-verify/commit/83d7418) |
+| Deployed on DIDLab (chain 252501) | CredentialRegistry and BeefSupplyChain v2 are live on the course chain. The repository's frontend and scripts point at v2; the public page still points at v1 until the host is redeployed. | Addresses and deployment TXs in §6. Deploy script: `scripts/deploy.js`. Commits: v1 [`83d7418`](https://github.com/teambb-blockchain/chuck-and-verify/commit/83d7418), v2 [`022bc9b`](https://github.com/teambb-blockchain/chuck-and-verify/commit/022bc9b) |
+| Demo credential setup and sample batch | Scripts grant demo credentials and register a sample batch so the verify UI has an on-chain record to read (`BEEF-001` on v1; `BEEF-A1-014` on v2, §6). | `scripts/setupCredentials.js`, `scripts/registerBatch.js` (address now v2). Commits: [`83d7418`](https://github.com/teambb-blockchain/chuck-and-verify/commit/83d7418), [`022bc9b`](https://github.com/teambb-blockchain/chuck-and-verify/commit/022bc9b) |
 | Live beef batch verification (read path) | Anyone can look up a batch on DIDLab via the project page: wallet/network status for chain 252501, optional Switch to DIDLab, and `getBatch` over the DIDLab RPC showing processor, weight, current holder, inspection flags, and recall status. | Live: <https://teambb.didlab.org/> — section Live Beef Batch Verification; default batch id `BEEF-001`. Source: `frontend/public/index.html`, `frontend/public/app.js`. Commits: [`83d7418`](https://github.com/teambb-blockchain/chuck-and-verify/commit/83d7418), [`de66ed3`](https://github.com/teambb-blockchain/chuck-and-verify/commit/de66ed3) |
+| Portal sign-in and roles | Wallet sign-in with a signed message, sessions, and portal roles (ADMIN, PROCESSOR, INSPECTOR, CUSTODIAN) that decide which cards a wallet sees. The portal grants nothing on chain; the contracts check credentials. | `server/auth.js`, `server/db.js`, `frontend/public/session.js`; `test/portal.adversarial.test.js`. Commits: [`8a69070`](https://github.com/teambb-blockchain/chuck-and-verify/commit/8a69070), [`4c1fd14`](https://github.com/teambb-blockchain/chuck-and-verify/commit/4c1fd14), [`f557d66`](https://github.com/teambb-blockchain/chuck-and-verify/commit/f557d66), [`75acdd9`](https://github.com/teambb-blockchain/chuck-and-verify/commit/75acdd9) |
+| Encrypted document upload | The lot form (at registration) and the inspection report (at inspection) are encrypted in the browser and published to DIDLab IPFS. Only the ciphertext's SHA-256 goes on chain, as the inspection's `reportHash`; the CID stays in the uploader's receipt. | `frontend/public/ipfs.js`, `frontend/public/app.js`. Evidence: `BEEF-A1-014` (§6), where the on-chain hash equals the SHA-256 of the bytes the gateway serves (Assignment 2 A1–A3). Commits: [`574e3f9`](https://github.com/teambb-blockchain/chuck-and-verify/commit/574e3f9), [`0dbc924`](https://github.com/teambb-blockchain/chuck-and-verify/commit/0dbc924) |
+| Credential issuer admin | The registry admin can see and set the issuer for each credential type from the portal, and issuers grant credentials there. | `frontend/public/admin.js`, `frontend/public/registryAbi.js`. Commit: [`fc2c04b`](https://github.com/teambb-blockchain/chuck-and-verify/commit/fc2c04b) |
 
 ## 8. Testing evidence
 
 | Suite | What it covers | Result |
 | :--- | :--- | :--- |
 | `test/CredentialRegistry.test.js` | Admin/`setIssuer`, issuer-per-type grant/revoke isolation, expiry and revocation making `isValid` false, zero-address and unauthorized issuer rejections | Passing under `npm test` |
-| `test/BeefSupplyChain.test.js` | Authorized and unauthorized writes for register, inspect, ship, confirm, recall; end-to-end path; custom-error failure paths (`EmptyBatchId`, `BatchAlreadyExists`, `BatchNotFound`, `ZeroAddress`, `NotCurrentHolder`, `NoPendingShipment`, `NotPendingReceiver`) | Passing under `npm test` |
+| `test/BeefSupplyChain.test.js` | Authorized and unauthorized writes for register, inspect, ship, confirm, recall; end-to-end path; custom-error failure paths, including the v2 rules (`SelfInspection`, `AlreadyInspected`, `ZeroWeight`, `EmptyReportHash`, `NotBatchProcessor`, `RecallNotEscalated`) and an action refused after its credential is revoked | 31 passing ([docs/evidence/D1_test_output.txt](evidence/D1_test_output.txt)) |
+| `test/CredentialRegistry.adversarial.test.js`, `test/BeefSupplyChain.adversarial.test.js` | Every role boundary, hostile inputs, out-of-order calls; `FINDING` tests document accepted defects ([SECURITY_REVIEW](SECURITY_REVIEW.md)) | Passing under `npm test` |
+| `test/portal.adversarial.test.js` | Runs the real portal server: sign-in domain, nonce replay, malleated signatures, session cookies, role checks on admin and upload routes, path traversal, framing | Passing under `npm test` |
 
-`npm test` currently reports **32 passing** (CredentialRegistry + BeefSupplyChain) after the course scaffold contracts and `ProjectAnchor` tests were removed [`008233c`]. Earlier in the checkpoint the same suites passed at 21, then 28, then 36 (including scaffold) as contracts and failure-path tests landed.
+`npm test` currently reports **104 passing** across all five suites. At Checkpoint 2 it was 32 (CredentialRegistry + BeefSupplyChain), after the course scaffold contracts and `ProjectAnchor` tests were removed [`008233c`].
 
-On-chain smoke check: sample batch `BEEF-001` is readable via Live Beef Batch Verification on <https://teambb.didlab.org/> against chain 252501 and the §6 addresses.
-
-We ran npm test after updating the repository and confirmed that all 32 tests passed without errors.
+On-chain checks: sample batch `BEEF-001` is readable via Live Beef Batch Verification on <https://teambb.didlab.org/> against v1. On v2, `BEEF-A1-014` was registered and inspected from separate wallets, and a direct call from a wallet with no credential was refused (§9, **v2 checked on chain**).
 
 ## 9. Security and privacy review
 
@@ -157,7 +164,8 @@ Full review: [`docs/SECURITY_REVIEW.md`](SECURITY_REVIEW.md) (Guided Lab 3, 2026
 - Every state-changing function was checked against the five classes: access control, input validation, reentrancy, unchecked external calls and state-ordering.
 - Adversarial test suites probe every role boundary, feed hostile inputs and call functions out of order: `test/CredentialRegistry.adversarial.test.js`, `test/BeefSupplyChain.adversarial.test.js` and `test/portal.adversarial.test.js`. The portal suite runs the real server.
 - An AI-assisted audit (Claude Code) made claims. Each one was confirmed by a test or refuted with a reason; four were false positives.
-- Deployed bytecode was compared with the source builds.
+- Deployed bytecode was compared with the source builds, and checked again for v2 on 2026-11-08: it matches the current source.
+- The v2 access rules were exercised on chain 252501 with separate wallets and a direct-call probe (see **v2 checked on chain** below).
 - `npm test`: **104 passing**.
 
 **Main results.**
@@ -184,13 +192,24 @@ Clean findings:
 **v2 redeploy.**
 
 - Tx [`0xe97d…b3f1`](https://explorer.didlab.org/tx/0xe97d465f82f1d64e266373674545e30cf50732a49d3938339cf780d10ad6b3f1), block 7269167. It reuses the existing registry.
-- The frontend and scripts now point at v2.
+- The frontend and scripts in the repository point at v2. **The live site still serves the v1 address and ABI** until the host is redeployed (§14, row 1), so v2 was exercised from a local `npm start`.
 - Records written to v1 (including `BEEF-001`) did not migrate.
+
+**v2 checked on chain (2026-11-08).**
+
+| Check | Wallet | Result |
+| :--- | :--- | :--- |
+| Register batch `BEEF-A1-014` | wallet A `0xc2Ad…351E` (PROCESSOR) | Succeeded, [`0x3fe1…ca52`](https://explorer.didlab.org/tx/0x3fe163cbf7bc5029ff2d85293af077a507880d7e3109895a7e6f549b5272ca52), block 7271926 |
+| Record its inspection with the encrypted report's hash | wallet B `0x2710…3b5b` (INSPECTOR) | Succeeded, [`0xd171…fd53`](https://explorer.didlab.org/tx/0xd1718894205be6af1fb5e44caccdf9ac548a007701acc616c3d751cbc200fd53), block 7271954. The on-chain hash equals the SHA-256 of the bytes the IPFS gateway serves. |
+| Call `recordInspection` and `registerBatch` directly from the browser console, with the portal hiding both cards | a wallet with no credential | Both refused with `Unauthorized`. Simulated, nothing sent. Hiding a control protects nothing; the contract's credential check is the boundary. |
+| Wallet A inspects its own batch | wallet A | Refused with `Unauthorized`, because wallet A holds no INSPECTOR and that check runs first. `SelfInspection` (BSC-2) is covered by tests but not yet shown on chain; showing it needs a short-lived INSPECTOR grant to wallet A. |
 
 **Privacy.**
 
 - Public on chain, by design (ADR 0001): lot codes, weights, custody addresses, inspection result and recall class.
 - Inspection reports are encrypted in the browser before upload. Only a hash of the encrypted file goes on chain, so a report cannot be recovered by guessing its contents.
+- The report's CID is not written on chain. It stays in the uploader's browser and downloaded receipt, so the chain holds no permanent public pointer to the encrypted file. The cost: anyone who loses the receipt cannot find the report from the chain alone.
+- Wallet addresses are pseudonymous, not anonymous. Each address that acts in a role becomes that party's public identity, so role credentials should go to an organization's wallet, never an employee's personal one.
 - Remaining privacy risks:
   - The encryption key comes from a wallet signature over a predictable message (P-2). This is DIDLab's required scheme, so it is accepted, with user guidance not to sign that message on any other site.
   - The saved upload details keep the original file name (P-3, open).
@@ -198,7 +217,7 @@ Clean findings:
 
 **Residual risk and key management.**
 
-- **One key controls the registry permanently.** The registry admin `0xb323…393F` is a single wallet that can never be replaced, and it is also the PROCESSOR and INSPECTOR issuer. If it leaks, every record can be forged, and recovery means redeploying both contracts. We accept this for a course deployment; a real system would use a multisig admin.
+- **One key controls the registry permanently.** The registry admin `0xb323…393F` is a single wallet that can never be replaced, and it is also the issuer for all three credential types (PROCESSOR, INSPECTOR and CUSTODIAN) and itself holds PROCESSOR. If it leaks, every record can be forged, and recovery means redeploying both contracts. We accept this for a course deployment; a real system would use a multisig admin.
 - **Also accepted:**
   - Lot-code squatting by a rival plant (BSC-3).
   - Inspections cannot be corrected once recorded.
@@ -207,10 +226,11 @@ Clean findings:
 
 **Open before Checkpoint 4.**
 
-1. Deploy the portal fixes and the v2 frontend to the DIDLab host.
-2. Set a CUSTODIAN issuer and grant CUSTODIAN credentials. None is set, so no batch can ship yet.
-3. Fix P-3 and P-5.
-4. Complete the team's own five-class audit of both contracts and record what the AI audit missed.
+1. Deploy the portal fixes and the v2 frontend to the DIDLab host (§14, row 1).
+2. Grant CUSTODIAN to a second wallet. The CUSTODIAN issuer is set ([`0x2759…466f`](https://explorer.didlab.org/tx/0x2759a41fb9895676559b3cf1241d75e8c15777acd4e7d9aac9f832eaa576466f)) and wallet A holds CUSTODIAN ([`0x7fcd…4305`](https://explorer.didlab.org/tx/0x7fcdbb722303dad2450567b213f66ef67a9708a3f1ceab949cfe1b5ab2ab4305)), but a handoff needs a second custodian to confirm receipt (§14, row 2).
+3. Move each issuer to a wallet other than the admin (§14, row 2).
+4. Fix P-3 and P-5, match the page's upload limit to nginx's 1 MB, and verify the v2 source on the explorer (§14, row 9).
+5. Complete the team's own five-class audit of both contracts and record what the AI audit missed.
 
 ## 10. Performance measurements
 
@@ -218,24 +238,24 @@ _Due at Checkpoint 3._
 
 ## 11. AI development record
 
-See also [AI_RECORD.md](../AI_RECORD.md) for the running log.
+See also [AI_RECORD.md](../AI_RECORD.md) for the running log. This section covers Checkpoint 3, since the Checkpoint 2 report on 2026-10-18.
 
-| Field                  | Entry                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| :--------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Tools used (or "none") | Cursor, Claude, ChatGPT                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| What you asked for     | **Cursor agent:** implement the CP1 plan's contract deliverables: the supply-chain contract with a minimal credential registry (item 3), then issuer-per-type grant and revoke (item 2); add failure-path tests for every custom error in BeefSupplyChain; add the deployed-contract addresses and a live network status line to the site. **Claude:** audit the repository against our CP1 commitments; order the CP2 rubric by implementation cost and build a day-by-day schedule; critique the CP1 plans for decision records 0002–0004; give a staged test plan, as pseudocode, for the ESP32 signing feasibility test; draft decision records 0002–0004, the CP3 plan (§14), and this change log (§15) from our decisions. **ChatGPT:** We asked for clarification on DIDLab deployment steps, MetaMask configuration, blockchain connectivity, and GitHub commands when needed. |
-| What it produced       | **Cursor agent:** drafts of the code: ICredentialRegistry, CredentialRegistry, and BeefSupplyChain with their Hardhat tests; eight failure-path tests; the site's Deployed contracts section and network status logic. **Claude:** a status table comparing the repo to CP1 §14; a prioritized schedule; review questions on each decision record; the four-stage signing test outline; drafts of 0002–0004, §14, §15, and this section. Claude wrote these from our answers to its questions and from summaries of our earlier conversations, and left placeholders wherever it lacked facts. **ChatGPT:** Explanations, example commands, and suggestions for resolving technical issues                                                                                                                                                                                             |
-| How you verified it    | We ran `npm test` after each contract and test change (21, then 28, then 36 passing, before the scaffold ProjectAnchor tests were removed). We read the site locally at desktop width and checked each network state. We checked every factual claim in Claude's drafts against the code and git history; that check confirmed the deployed contract has no temperature write and that the DIDLab setup uses one wallet for every role. We filled in the facts Claude left as placeholders (hardware status, cut dates, the reasons for the deferral and the item 3 reassignment) and checked every cited commit hash against `git log`. Scope, ownership, and cut dates were decided by the team. **ChatGPT:** We reviewed the suggestions against our project code, ran commands in VS Code, checked blockchain transactions, and tested the live application ourselves.             |
-| What it got wrong      | **Cursor agent:** the first registry gave a single admin the power to grant every credential type, which did not meet CP1 item 2 until we asked for issuer-per-type; the site's no-wallet message used different wording from what we specified. **Claude:** its first draft of 0004 claimed the hardware "proved more involved than we planned," although no stage of the signing test had run; we replaced it with the actual reason (prioritization). Its §15 draft added a rationale for the item 3 reassignment beyond the one we gave, and assumed 0004 was merged before we had confirmed it. **ChatGPT:** Some suggestions did not match our existing setup. We identified the differences, reviewed the repository, and made the necessary corrections.                                                                                                                       |
+| Field | Entry |
+| :--- | :--- |
+| Tools used (or "none") | Cursor agent, Claude Code, Claude |
+| What you asked for | **Cursor agent:** Serve the page at the site root without the `/frontend/` bounce, update it from `BatchRegistered`, add the lab frontend under `frontend/` with an ABI generated from the artifact, and publish a form uploaded from this device when a batch is registered. **Claude Code:** Bring the relevant lab deploy and credential scripts onto main; add portal roles with wallet sign-in; record recalls as the registering plant; fix sign-in on the DIDLab host; add issuer setup, asset stamping, and the Record Inspection card; write the security and privacy review; produce the on-chain evidence table; and base the mock inspection record on FSIS Form 6200-14. **Claude:** Clean up and review the Checkpoint 3 report. |
+| What it produced | **Cursor agent:** The page under `frontend/public`, the `BatchRegistered` watcher, and browser encryption that publishes only the ciphertext. **Claude Code:** `scripts/deploy.js` and `scripts/setupCredentials.js`, the portal (sign-in, roles, issuer setup, the inspection card, and `npm run stamp`), the change so only the registering plant can recall, [`SECURITY_REVIEW.md`](SECURITY_REVIEW.md) with the three adversarial suites, the on-chain evidence tables, and the mock 6200-14 disposition records. In the review session the contract fixes were proposed, not applied. **Claude:** A cleanup and review of this checkpoint report. |
+| How you verified it | **Cursor agent:** The page was loaded locally and batch `BEEF-001` was read from DIDLab. A missing wallet left that record unchanged. No live `registerBatch` or signed upload was sent in those sessions. **Claude Code:** `npm test` after the migration (32 passing), the recall change (35), and the security review (92). Portal checks ran on a local server, including a stand-in proxy that strips `/api`. Issuer setup was simulated locally; the team sent the signed grant. The review compared deployed bytecode with local builds: the registry matched HEAD, and the supply chain matched commit `83d7418`. The inspection transaction that would anchor a report hash had not been sent. **Claude:** The revised checkpoint text was read against the sections it cites and against [AI_RECORD.md](../AI_RECORD.md). |
+| What it got wrong | **Cursor agent:** The first upload pass hardcoded sample form filenames and offered them as a menu. That catalog was removed. On the lab-layout pass, a newly connected address was presented as able to register a batch, and the server resolved pages from an allowlist that would not serve the script and styles. **Claude Code:** Sign-in was first blamed only on a stale Node process. That process was holding the port, and the remaining cause was the nginx `proxy_pass` slash stripping `/api`. A hard refresh was said to fix the stale scripts; it clears the browser cache only. The inspection card first showed hashes and CIDs, and that copy was cut. The security review first counted a custody move after a recall as a defect, and its first Host-header test passed because `fetch` ignores `Host`. The first evidence table left out the digest and CID lines. The first mock disposition record used its own layout, and the passed fill counted one carcass twice. **Claude:** Nothing noted for the document review. |
 
 ## 12. Individual contributions
 
 | Member Name | Number of commits | What they contributed |
 | :--- | :--- | :--- |
-| Britt Huffman | 5 | Both contracts and their tests, CredentialRegistry, ICredentialRegistry and BeefSupplyChain [`00680e9`]. Eight failure-path tests [`845007e`]. The site’s deployed-contracts section and live network status [`de66ed3`]. Decision records 0002–0004 [`8cca1b1`]. Removal of the scaffold contracts and their test [`008233c`]. |
-| Bhavana Sriharika Kondapalli | 2 | The deploy, credential-setup and batch-registration scripts, plus live batch verification on the site [`83d7418`]. A page-title encoding fix [`cd17603`]. |
+| Britt Huffman | 20 | Deploy and credential-setup changes brought onto main, with a pre-flight simulation of `registerBatch` [`ac4dedf`]. The DApp served at the site root [`eda4ab5`]. Live-page handling of `BatchRegistered` [`9fd2f1b`]. The frontend split into contract-interaction files [`f97d598`]. A message when the user cancels the wallet connection [`9d45db2`]. Encrypted IPFS upload of the lot form during batch registration [`574e3f9`]. Portal roles and wallet sign-in [`8a69070`], then the portal store switched from SQLite to JSON [`4c1fd14`]. Recalls limited to the processor that registered the batch [`ccee520`]. Wallet sign-in fixed on the DIDLab host [`f557d66`]. Keccak256 for portal signature recovery [`75acdd9`]. Admin pages for credential issuers [`fc2c04b`]. Content-hashed frontend asset URLs [`32c2f6c`]. Inspection-report upload on the frontend [`0dbc924`]. BeefSupplyChain v2 fixes and the redeploy to chain 252501 [`022bc9b`]. Adversarial tests for both contracts and the portal [`4cca9fe`]. The AI record [`5a343e8`], a frozen copy of the v1 contract for the review [`d2a3cb0`], the security review and this report [`dd2a582`], and saved BeefSupplyChain test output [`59b1114`]. |
+| Bhavana Sriharika Kondapalli | 1 | MetaMask batch registration and transaction-status handling on the live page [`fa3f764`]. |
 
-Commit counts are Checkpoint 2 commits on `main` as of the graded commit (since Checkpoint 1).
+Commit counts are non-merge commits on `main` since the Checkpoint 2 report commit [`ec7d8e5`] (2026-10-18). The merge of that migration [`ec97bb0`] is empty and is not counted.
 
 ## 13. Risks, blockers, and what went wrong
 
@@ -243,45 +263,70 @@ Commit counts are Checkpoint 2 commits on `main` as of the graded commit (since 
 
 | Risk | Impact | Mitigation |
 | :--- | :--- | :--- |
-| Hardware lead time and cost | Late integration | Hardware was acquired early; begin incorporating in first week of CP3 |
-| QR scanner reliability | Handoffs fail during the demo | QR scanners tested, using cell phone cameras remain as backup |
-| DIDLab platform constraints | Deployment surprises | Deployment with cushion from deadlines, run all tests on the local Hardhat network; document platform constraints in the README. |
+| One wallet holds the registry admin role and is the issuer for all three credential types (`0xb323…393F`) | A leaked key can grant any credential and forge any future record. `admin` is immutable, so recovery means redeploying both contracts | Move each issuer to its own wallet (§14, row 2). A multisig admin is noted for production in the security review. |
+| The temperature work (sensor credential, signing path, summary write) has not started, with three weeks to the release candidate | Temperature, one of the three claims in §3, would ship as a design only | Apply the 0004 cut rule: if the software signer misses its date, the hardware path is cut and the software signer stands in for the sensor (§14, rows 4–6). |
+| A report's CID is kept only in the uploader's browser and in the downloaded receipt. The chain stores only the report hash, a choice we kept for privacy | If both are lost, the encrypted report still exists on IPFS but cannot be found from the chain | Users keep the receipt file. Recovery files stay out of the repository (`.gitignore`). An off-chain CID index can be added later without changing the contract. |
+| Commit evidence is uneven between members (§12) | The course grades each member on their own commits | Checkpoint 4 rows are split between both members (§14). |
 
 ### Blockers
 
-- Decisions on architecture for temperature sensors and device authority to write on-chain.
+- **Shipping and receipt cannot be shown on chain yet.** The CUSTODIAN issuer is set, but only wallet A (`0xc2Ad…351E`) holds CUSTODIAN ([`0x7fcd…4305`](https://explorer.didlab.org/tx/0x7fcdbb722303dad2450567b213f66ef67a9708a3f1ceab949cfe1b5ab2ab4305)). A handoff needs a second credentialed custodian to confirm receipt.
+- **The temperature write depends on rows 4 and 5 of §14.** The contract cannot check a reading's signature until the sensor credential and the signed byte layout exist (0002, 0004).
+- **Deploying the site needs manual access to the DIDLab host.** `/srv/app` is a copy, not a git checkout: each deploy is stamp, push, copy, and restart Node.
 
 ### What went wrong
 
-- Was unable to complete the signing feasibility test; this becomes a priority for the first week of the next checkpoint.
+- **Most of the Checkpoint 3 plan was not delivered.** Rows 1–4 and 6 of the Checkpoint 3 plan (sensor credential, signing path, ESP32, temperature write, history view) were not started, and the signing feasibility test carried from Checkpoint 2 still has not run. The checkpoint's commits went to the portal (sign-in, roles, encrypted uploads, inspection card), the security review, and the v2 fix.
+- **The deployed contract was not the code we reviewed.** Comparing bytecode showed the live v1 contract matched an older commit in which any inspector could recall any plant's batch (BSC-0). We found this only during the security review. We now compare deployed bytecode with the source after every deploy.
+- **The contract was redeployed but the site was not.** The first inspection recorded for Assignment 2 ([`0x4c78…acfb`](https://explorer.didlab.org/tx/0x4c7840776bdbebbd227773c8a3706d0b168fecb65b1daf739c7601a57c9dacfb), batch `BEEF-001`) went through the live site to v1 and had to be redone on v2 from a local server: batch `BEEF-A1-014`, registered by wallet A ([`0x3fe1…ca52`](https://explorer.didlab.org/tx/0x3fe163cbf7bc5029ff2d85293af077a507880d7e3109895a7e6f549b5272ca52)) and inspected by wallet B ([`0xd171…fd53`](https://explorer.didlab.org/tx/0xd1718894205be6af1fb5e44caccdf9ac548a007701acc616c3d751cbc200fd53)).
+- **The DIDLab host behaved differently from local runs.** nginx strips the `/api` prefix and drops `Host`, which broke wallet sign-in, and Cloudflare cached old scripts for four hours after a deploy. Both are now handled in code (`index.js`, `server/auth.js`, `npm run stamp`), but each cost a debugging session.
 
 ## 14. Plan for the next checkpoint
 
+### Checkpoint 3 plan: outcome
+
+| # | Deliverable | Outcome |
+| :--- | :--- | :--- |
+| 1 | Sensor credential type | Not started. Carried (row 4 below). |
+| 2 | Software signing path | Not started. Carried (row 5). |
+| 3 | ESP32 signing path | Not started. Carried (row 6) under the 0004 cut rule. |
+| 4 | Temperature summary write | Not started. Carried (row 7). |
+| 5 | Redeploy with separate wallets for each role | Partly done. v2 is deployed against the existing registry. Wallet A holds PROCESSOR and CUSTODIAN and wallet B holds INSPECTOR, and the v2 register and inspect steps were sent from those wallets. Ship, confirm, temperature and recall are not yet on v2. The admin still holds PROCESSOR itself and is the issuer for every type. Carried (row 2). |
+| 6 | Full batch history on the site | Not started. Carried (row 8). |
+| 7 | Update PROPOSAL.md and README to current scope | Not done: the README still lists no contract addresses. Carried (row 10). |
+| 8 | Security and privacy review (§9) | Done. [`SECURITY_REVIEW.md`](SECURITY_REVIEW.md), adversarial suites, and the v2 fixes; 104 tests passing. |
+| 9 | Performance measurements (§10) | Partly done. v2 gas so far: `registerBatch` 153,047, `recordInspection` 64,264. Carried (row 3). |
+
+### Checkpoint 4 plan (release candidate, November 29)
+
 | # | Deliverable | Owner | Done when |
 | :--- | :--- | :--- | :--- |
-| 1 | Sensor credential type in CredentialRegistry, with its own issuer standing in for the calibration lab (0003 follow-up) | Britt Huffman | Tests pass for grant, revoke, and expiry of a sensor credential; a wrong-type issuer cannot grant it |
-| 2 | Software signing path: a Python script signs a reading in the fixed byte layout, and a contract view function recovers the signer (0004, stages 1–3) | Britt Huffman | The recovered address matches the registered sensor key, and a tampered message, a wrong key, and an unregistered key each fail to verify; byte layout committed in one shared file. If not met, hardware is cut (0004) |
-| 3 | ESP32 signing path: the device signs the same reading layout (0004, stage 4) | Britt Huffman | Row 2's checks pass with a device-produced signature. If not met, the software signer becomes the stand-in sensor and 0004 is superseded |
-| 4 | Per-leg temperature summary write in BeefSupplyChain: min/max, time out of range, timestamp, log hash, with a sensor signature checked on chain (0002) | Bhavana Sriharika Kondapalli | Tests pass for an authorized write, an unauthorized caller, an invalid signature, and a replayed reading |
-| 5 | Redeploy to DIDLab and rerun setup with separate wallets for admin, each issuer, and each holder (0003 follow-up) | Bhavana Sriharika Kondapalli | §6 lists one transaction hash per step (register, inspect, ship, confirm, temperature, recall), each sent from the address that holds that role |
-| 6 | Site shows a batch's full history: inspection, custody chain, temperature summaries, and recall status | Bhavana Sriharika Kondapalli | Entering a batch ID on teambb.didlab.org/frontend renders every record from row 5 read from chain 252501 |
-| 7 | Update PROPOSAL.md, README, and the A2 stakeholder table to the current scope (carried from CP2) | Bhavana Sriharika Kondapalli | PROPOSAL.md scope and stretch goals match 0002–0004; README lists the deployed addresses and the commands to run the tests and the deploy |
-| 8 | Security and privacy review (§9) | Britt Huffman | §9 names each known limitation and where it is handled or accepted: single admin key, custodian-held signing key, replay, one-wallet CP2 deployment |
-| 9 | Performance measurements (§10) | Britt Huffman | §10 reports gas used for each write type, taken from the row 5 DIDLab receipts |
+| 1 | Deploy the v2 frontend and the portal fixes (P-1, P-6) to the DIDLab host | Britt Huffman | The live `chain.js` names `0x9033…448a`, `/api/me` returns JSON, and a sign-in started from an unlisted origin does not get that origin's domain in its message |
+| 2 | Full v2 lifecycle with a separate wallet for each issuer and each holder | Bhavana Sriharika Kondapalli | `issuerOf` returns a wallet other than the admin for each type; a second custodian holds CUSTODIAN; §6 lists one v2 transaction per step (register, inspect, ship, confirm, recall), each sent from the wallet holding that role |
+| 3 | Performance measurements (§10) | Britt Huffman | §10 reports gas used for every v2 write type from the row 2 receipts |
+| 4 | Sensor credential type in CredentialRegistry, with its own issuer standing in for the calibration lab (0003) | Britt Huffman | Tests pass for grant, revoke and expiry of a sensor credential, and a wrong-type issuer cannot grant it |
+| 5 | Software signing path: a script signs a reading in a fixed byte layout and a contract view recovers the signer (0004, stages 1–3) | Britt Huffman | The recovered address matches the registered sensor key; a tampered message, a wrong key and an unregistered key each fail; the byte layout is committed in one shared file. If not met, hardware is cut (0004) |
+| 6 | ESP32 signing path (0004, stage 4) | Britt Huffman | Row 5's checks pass with a device-produced signature. If not met, the software signer becomes the stand-in sensor and 0004 is superseded |
+| 7 | Per-leg temperature summary write in BeefSupplyChain: min/max, time out of range, timestamp, log hash, with the sensor signature checked on chain (0002) | Bhavana Sriharika Kondapalli | Tests pass for an authorized write, an unauthorized caller, an invalid signature and a replayed reading; the write is deployed and appears in §6 |
+| 8 | Batch history on the site: inspection, custody chain, temperature summaries and recall status | Bhavana Sriharika Kondapalli | Entering a batch ID on teambb.didlab.org renders every record from row 2, read from chain 252501 in pages that stay under the RPC block limit |
+| 9 | Close the open review items | Britt Huffman | P-3 (original file name kept in the upload receipt) and P-5 (unpinned signing library) are fixed; the form limit matches nginx's 1 MB; the v2 source is verified on the explorer so event fields show by name |
+| 10 | Update PROPOSAL.md and README to the current scope (carried since Checkpoint 2) | Bhavana Sriharika Kondapalli | PROPOSAL.md scope matches 0002–0004; README lists the v2 and registry addresses and the commands to test, deploy and stamp |
 
 ## 15. Change log — what changed since the previous checkpoint and why
 
 ### Design and scope changes
 
-- The administrative chain has two levels (0003). The admin assigns one issuer per credential type, and only that issuer can grant or revoke credentials of that type. Checkpoint 1 described the team as the administrative chain without specifying this structure.
-- Temperature stays in scope but is not on chain yet (0002). The deployed `BeefSupplyChain` has no temperature write. Any temperature claim at this checkpoint is a design commitment, not a working feature. The write is planned for CP3.
-- Real sensors and the physical QR scanner are deferred (0004). Custody is confirmed by the receiver calling `confirmReceipt` from its own credentialed address, which stands in for the scan.
-- Custody handoff became two-step. The holder records a shipment to a named receiver, and the handoff completes only when that receiver confirms. Checkpoint 1 stated the property (receiver confirmation); this is how the contract enforces it.
-- The DIDLab deployment uses one wallet for every role. `setupCredentials.js` makes the same address the admin, the processor issuer, and the processor holder. Role separation is therefore shown in the Hardhat tests, not on chain. CP3 fixes this (§14, row 5).
+- Recall is the registering plant's action. v2 `recordRecall` reverts `NotBatchProcessor` unless the caller is `batch.processor`. That plant can still recall after its PROCESSOR credential expires or is revoked, because a recall holds product and an offboarded plant has to be able to pull its own lots. Classification is USDA Class I–III, and a later recall has to use a stricter class (`RecallNotEscalated`), so the notice cannot be swapped at the same class. The Checkpoint 2 contract did the reverse: any inspector could recall any plant's batch, and the plant could not ([SECURITY_REVIEW](SECURITY_REVIEW.md) BSC-0, BSC-4, BSC-5). Assignment 2 C1 states the same split.
+- An inspection is a single write, and the plant that registered the batch cannot be the one who inspects it. v2 reverts `AlreadyInspected` on a second inspection, `BatchRecalled` after a recall, and `SelfInspection` when the caller is `batch.processor`, even if that address also holds INSPECTOR. A wrong inspection cannot be corrected on this contract. The refusals are in the Hardhat tests (Assignment 2 D1). The live attempt, wallet A calling `recordInspection` on its own batch, is still open (Assignment 2 C3, row 3). The check is the lab rule that the submitter cannot verify its own record, applied here as `SelfInspection`.
+- The inspection report is encrypted in the browser, and the chain stores the hash of the ciphertext. AES-256-GCM, key from a wallet signature. IPFS receives the ciphertext. `recordInspection` takes that SHA-256 as `reportHash`. The CID stays in the portal receipt: a verifier who has it hashes the gateway bytes and compares them to the chain. For `BEEF-A1-014` the gateway, the upload receipt, and `InspectionRecorded` are the same digest (`cb48afdd…75dd095`). Anchoring transaction [`0xd1718894…00fd53`](https://explorer.didlab.org/tx/0xd1718894205be6af1fb5e44caccdf9ac548a007701acc616c3d751cbc200fd53), block 7271954, 64,264 gas, from inspector `0x2710…3b5b` (Assignment 2 A1, A3). The filename stays off the calldata and out of that report.
+- Processor and inspector are different wallets on the project registry. Wallet A `0xc2Ad…351E` holds PROCESSOR and registered `BEEF-A1-014` ([`0x3fe163cb…72ca52`](https://explorer.didlab.org/tx/0x3fe163cbf7bc5029ff2d85293af077a507880d7e3109895a7e6f549b5272ca52), block 7271926). Wallet B `0x2710…3b5b` holds INSPECTOR and recorded the inspection. Neither holds the other's credential (Assignment 2 C2, C3). Grants: PROCESSOR [`0xe108a04e…d7b6ab`](https://explorer.didlab.org/tx/0xe108a04ea965ed854674a594b95a79e6ce58cb911befd66b8a31f155cfd7b6ab), INSPECTOR [`0xd9c8e1cc…a5efa`](https://explorer.didlab.org/tx/0xd9c8e1cc7807ee6418d2c22661ba3aea6de0304facaa1d02ec631fd81b7a5efa). The admin `0xb323…393F` is still the issuer for all three types and still holds PROCESSOR. The CUSTODIAN issuer is set ([`0x2759…466f`](https://explorer.didlab.org/tx/0x2759a41fb9895676559b3cf1241d75e8c15777acd4e7d9aac9f832eaa576466f), block 7270656) and wallet A holds CUSTODIAN, but no second wallet does, so no handoff can complete on v2 yet. Checkpoint 2 used one address as admin, issuer, and holder. The rest of that split — a distinct admin, a distinct issuer per type, and a custodian holder — is still open (§14, row 2).
+- The portal chooses which cards a signed-in wallet sees. It grants nothing on chain. A wallet with no portal role and no credential called `recordInspection` and `registerBatch` through the page's own client. Both simulations returned `Unauthorized` (`0x82b42900`), and nothing was sent (Assignment 2 D2, sender `0xd488…b861`).
+- Temperature is still not a write on `BeefSupplyChain` (0002). The Checkpoint 2 log scheduled that write for this checkpoint, and it was not added. Sensors and the physical scanner stay deferred (0004). Custody is still `recordShipment` then `confirmReceipt`; a handoff on v2 still waits on a second wallet holding CUSTODIAN to confirm receipt.
 
 ### Other changes
 
-- Removed the course scaffold contracts `ProjectAnchor.sol` and `SimpleStorage.sol`, with the `ProjectAnchor` test file [`008233c`, Britt Huffman]. Neither was part of the §4 architecture, so `contracts/` now holds only the registry, its interface, and the supply-chain contract.
-- The site now shows the deployed contracts and live network status [`de66ed3`, Britt Huffman], and the page title encoding is fixed [`cd17603`, Bhavana Sriharika Kondapalli].
-- `AI_RECORD.md` was updated with each contract, test, and frontend commit [`00680e9`, `845007e`, `de66ed3`].
-- §14 now holds the Checkpoint 3 plan, with due dates and the 0004 cut dates as milestones.
+- BeefSupplyChain v2 is the contract the repository's frontend and scripts call. The live site still serves v1 until the host is redeployed (§14, row 1). Deploy transaction [`0xe97d465f…ad6b3f1`](https://explorer.didlab.org/tx/0xe97d465f82f1d64e266373674545e30cf50732a49d3938339cf780d10ad6b3f1), block 7269167, from `0x8799…b5a8`, reusing CredentialRegistry `0x9ef5…AB2E`. v2 has no owner. v1 [`0x20bA…802e`](https://explorer.didlab.org/address/0x20bA1c398CD59b05dA4427162bdA7F26d5AB802e) still holds `BEEF-001`; those records were not copied [`022bc9b`, Britt Huffman].
+- Two earlier DIDLab deployments are not used by this checkpoint: CredentialRegistry `0x3eC1…38B2` with BeefSupplyChain `0x981a…83D8`, where one wallet was admin, issuer, and every holder, and the lab `AnchorRegistry`. [SECURITY_REVIEW](SECURITY_REVIEW.md) §1 lists that pair as superseded. The frontend, the scripts, and §6 use `0x9ef5…AB2E` and `0x9033…448a`.
+- A zero weight and an empty report or notice hash revert (`ZeroWeight`, `EmptyReportHash`, `EmptyNoticeHash`).
+- The D1 authorization run is saved at [docs/evidence/D1_test_output.txt](evidence/D1_test_output.txt) (31 passing in `test/BeefSupplyChain.test.js`). The full suite, including the adversarial tests, is 104 passing (§9).
+- The security review is [docs/SECURITY_REVIEW.md](SECURITY_REVIEW.md). The portal sign-in and framing fixes are in the repo and are not on the DIDLab host.

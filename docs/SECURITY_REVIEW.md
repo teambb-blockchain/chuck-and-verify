@@ -18,7 +18,9 @@ Guided Lab 3 (Adversarial Security Audit), Activities 6–11. This document beco
 
 Live state read on 2026-11-08: `admin()` = `0xb323821F0dFCf3b2E8727A7FBae2E34F0D4f393F` (an EOA, not a contract). `issuerOf(PROCESSOR)` and `issuerOf(INSPECTOR)` are the admin. `issuerOf(CUSTODIAN)` is unset. The admin holds a valid PROCESSOR credential. On v1, `BEEF-001` is registered by the admin (500 lbs), inspected and passed, and not recalled. v2 has no batches yet: `getBatch(BEEF-001)` reverts `BatchNotFound`, because batches do not migrate.
 
-`docs/references/notes.md` lists a different deployment (`0x3eC1…38B2` / `0x981a…83D8`, deployer `0x8799…b5a8`). The frontend, the scripts and CHECKPOINT §6 all use the addresses above. Treat notes.md as stale.
+**Update, later on 2026-11-08.** The CUSTODIAN issuer was set to the admin ([`0x2759…466f`](https://explorer.didlab.org/tx/0x2759a41fb9895676559b3cf1241d75e8c15777acd4e7d9aac9f832eaa576466f), block 7270656), and wallet A `0xc2Ad…351E` was granted PROCESSOR and CUSTODIAN. v2 now holds `BEEF-A1-014`, registered by wallet A and inspected by wallet B `0x2710…3b5b`.
+
+An earlier deployment (`0x3eC1…38B2` / `0x981a…83D8`, deployer `0x8799…b5a8`) is superseded. The frontend, the scripts and CHECKPOINT §6 all use the addresses above.
 
 Out of scope: the DIDLab IPFS portal and gateway (external), the DIDLab RPC and its transaction ordering, the wallet extension, and Cloudflare and nginx configuration (it cannot be changed from this repo).
 
@@ -78,7 +80,7 @@ Status values: **fixed** (in code, with a regression test), **open** (a fix is p
 | **BSC-6** | `registerBatch`, `recordInspection` | Input validation | `weightLbs = 0` and `2^256−1` are accepted; the frontend checks `> 0`, the contract does not. `reportHash = 0` records an inspection that points at no report. Trusted roles only; the record is misleading but nothing is stolen. | Low | **Fixed (v2 deployed)** (`ZeroWeight`, `EmptyReportHash`); no upper bound on weight (accepted) | `FIXED BSC-6` ×2; `FINDING BSC-6 (residual)` |
 | BSC-7 | `recordShipment` | Input validation | The holder ships to itself and confirms: an empty custody leg in the history. | Info | Accepted | `FINDING BSC-7` |
 | BSC-8 | `recordShipment` / `confirmReceipt` | State-ordering | A recalled or failed batch can still change custody. This is correct: recalled product must still be tracked while it is retrieved. | Info | N/A (intended) | `FINDING BSC-8` |
-| BSC-9 | `recordShipment` | Access control (availability) | When the current holder's CUSTODIAN credential lapses, nobody can move the batch, and there is no admin override. Live: `issuerOf(CUSTODIAN)` is unset, so no one can be granted CUSTODIAN and no live batch can ship at all. | Low | Accepted; set the CUSTODIAN issuer | `FINDING BSC-9`; on-chain read in §1 |
+| BSC-9 | `recordShipment` | Access control (availability) | When the current holder's CUSTODIAN credential lapses, nobody can move the batch, and there is no admin override. Live: the CUSTODIAN issuer is now set and wallet A holds CUSTODIAN; a handoff still needs a second custodian. | Low | Accepted; CUSTODIAN issuer now set | `FINDING BSC-9`; on-chain read in §1 |
 | CR-1 | `setIssuer` | Access control (recovery) | A compromised PROCESSOR issuer grants an attacker a 1-year credential. The admin replaces the issuer, but the grant stays valid. The new issuer must find each grant from `CredentialGranted` events and revoke it by hand; there is no on-chain enumeration and no per-issuer invalidation. | Medium | Accepted (runbook in §7) | `FINDING CR-1` |
 | CR-2 | `grant` | State-ordering | `grant` after `revoke` silently clears `revoked`. A revocation for cause is indistinguishable from a lapse, and any issuer can quietly reinstate a revoked holder. Documented as "grant or renew". | Low | Accepted | `FINDING CR-2` |
 | CR-3 | `grant` | Input validation | `grant(address(0), …)` succeeds, and `isValid(0, …)` returns true. No one can sign as the zero address, so the harm is a misleading event or count. | Low | Deferred (needs a registry redeploy) | `FINDING CR-3` |
@@ -141,7 +143,7 @@ Status values: **fixed** (in code, with a regression test), **open** (a fix is p
 - Its first P-1 test overrode `Host` through `fetch`. `fetch` silently ignores that header, so the test passed for the wrong reason until it was rewritten with `http.request`.
 - It cannot judge P-2's real exposure, which depends on how DIDLab's decrypt tooling phrases the same message.
 
-**What the AI cannot fill: the team's own Activity 6.** `docs/references/SecurityAuditActivity6.xlsx` covers Lab 2's `AnchorRegistry`, not these contracts. §3.1 above is the AI's matrix. **Before submission, a team member must work the five classes against both contracts independently, compare the result with §3.1, and record any miss here.** That comparison is the Activity 9 "what it missed" row, and only the team can write it.
+**What the AI cannot fill: the team's own Activity 6.** The team's Activity 6 worksheet covers Lab 2's `AnchorRegistry`, not these contracts. §3.1 above is the AI's matrix. **Before submission, a team member must work the five classes against both contracts independently, compare the result with §3.1, and record any miss here.** That comparison is the Activity 9 "what it missed" row, and only the team can write it.
 
 ## 5. Fixes
 
@@ -158,7 +160,7 @@ Status values: **fixed** (in code, with a regression test), **open** (a fix is p
 
 **Not fixed:** BSC-3 is accepted (§6). CR-3 and CR-4 are deferred, because only `BeefSupplyChain` is redeployed; v2 points at the live `CredentialRegistry` `0x9ef5…AB2E`.
 
-**Redeploy evidence (Activity 10).** Deployed with `npm run deploy:supply-chain`, which deploys `BeefSupplyChain` only and reuses the live registry. `frontend/public/chain.js`, `scripts/registerBatch.js` and CHECKPOINT §6 now use the v2 address. The frontend still needs to be deployed to the host. Before anyone can ship on v2, the admin must call `setIssuer(CUSTODIAN, …)` and grant CUSTODIAN credentials (§1: no CUSTODIAN issuer is set). `BEEF-001` and other v1 records do not migrate.
+**Redeploy evidence (Activity 10).** Deployed with `npm run deploy:supply-chain`, which deploys `BeefSupplyChain` only and reuses the live registry. `frontend/public/chain.js`, `scripts/registerBatch.js` and CHECKPOINT §6 now use the v2 address. The frontend still needs to be deployed to the host. The CUSTODIAN issuer has since been set and wallet A holds CUSTODIAN (§1, update); a handoff on v2 still needs a second custodian. `BEEF-001` and other v1 records do not migrate.
 
 ```
 finding          BSC-0, BSC-1, BSC-2, BSC-4, BSC-5, BSC-6 (see above)

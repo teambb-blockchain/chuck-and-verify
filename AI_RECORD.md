@@ -84,7 +84,7 @@ Add an entry whenever AI tools help with architecture, code, docs, or debugging 
 
 - **Tool:** Cursor agent
 - **Request:** Mirror `deploy-credential-registry.mjs` to cover BeefSupplyChain deploy plus post-deploy `setIssuer` / `grant` setup; later, review and tighten `.env.example`
-- **Outcome:** Added `scripts/deploy-beef-supply-chain.mjs` (`npm run deploy:supply-chain`, requires `CREDENTIAL_REGISTRY_ADDRESS`) and `scripts/setup-credential-registry.mjs` (`npm run setup:registry`: admin sets issuer for all three types, grants demo holders, verifies `isValid`). Updated README deploy steps and `docs/references/notes.md` placeholders. Rewrote `.env.example` so Hardhat-safe vars are uncommented (`DIDLAB_RPC_URL`, `PORT`, `CREDENTIAL_REGISTRY_ADDRESS`), optional `DEMO_*` / TTL stay commented, and `DIDLAB_PRIVATE_KEY` is documented as shell-export only (no assignment line), with a note that plain Node deploy scripts do not load `.env`.
+- **Outcome:** Added `scripts/deploy-beef-supply-chain.mjs` (`npm run deploy:supply-chain`, requires `CREDENTIAL_REGISTRY_ADDRESS`) and `scripts/setup-credential-registry.mjs` (`npm run setup:registry`: admin sets issuer for all three types, grants demo holders, verifies `isValid`). Updated README deploy steps and the team's local deployment notes. Rewrote `.env.example` so Hardhat-safe vars are uncommented (`DIDLAB_RPC_URL`, `PORT`, `CREDENTIAL_REGISTRY_ADDRESS`), optional `DEMO_*` / TTL stay commented, and `DIDLAB_PRIVATE_KEY` is documented as shell-export only (no assignment line), with a note that plain Node deploy scripts do not load `.env`.
 - **Verification:** Scripts not run against DIDLab in this session (need shell-exported key); artifacts already present from prior compile; `.env.example` checked against README and script `process.env` usage
 - **What it got wrong:** First `.env.example` pass left every line commented and still showed a private-key assignment; fixed in the tighten pass
 
@@ -107,7 +107,7 @@ Add an entry whenever AI tools help with architecture, code, docs, or debugging 
 ### 2026-10-18 — Merge Checkpoint 2 draft into CHECKPOINT_REPORT
 
 - **Tool:** Cursor agent (Auto / Composer)
-- **Request:** Use `docs/references/Checkpoint2 - DRAFT.md` to update `docs/CHECKPOINT_REPORT.md` and the draft itself; append this AI_RECORD entry
+- **Request:** Use the team's Checkpoint 2 draft (kept outside the repo) to update `docs/CHECKPOINT_REPORT.md` and the draft itself; append this AI_RECORD entry
 - **Outcome:** Filled report §6–§8 and §15 from the draft; replaced §11–§14 with CP2 content (AI record, contributions, risks, CP3 plan). Sections 1–5 left unchanged. Completed empty draft §6/§8: deployment addresses plus creation TX hashes from the DIDLab Blockscout API, and Hardhat testing evidence (`npm test` — 32 passing after scaffold removal). Fixed draft typos (`fun` → `run`; checkpoint title Foundation → On Chain). Marked the draft as merged into the report.
 - **Verification:** Checked cited commits against `git log`; confirmed addresses match `frontend/index.html`; confirmed creation TXs via explorer API for both contracts; ran `npm test` (32 passing)
 - **What it got wrong:** Nothing found
@@ -223,3 +223,11 @@ Add an entry whenever AI tools help with architecture, code, docs, or debugging 
 - **Outcome:** No current federal per-batch inspection form exists: FSIS inspects each carcass and records results in PHIS. LP-126 and LP-132 are AMS market-reporting forms, not inspection forms. The blank FSIS Form 6200-14 (Daily Disposition Record, rev. 4/13/2011) was added as `docs/examples/forms/USDA-Form-FSIS-6200-14.pdf`, plus two flat mock fills drawn at the form's own field positions: `mock-disposition-record-BB-2026-014-passed.pdf` (steer, retained for a slight bruise, passed for food, code 605) and `mock-disposition-record-BB-2026-015-condemned.pdf` (cow, U.S. Suspect before slaughter, extensive abscesses in lymph nodes, lungs, liver and muscle, pyemia, condemned, liver condemned under 701). Each has a top line naming the batch and the plain result, and a footer saying it is a mock fill for Chuck and Verify, not a USDA submission, and that FSIS now records post-mortem results in PHIS. A first pass with a self-designed report layout was replaced by these.
 - **Verification:** Both PDFs were rendered and checked against the blank form. The fillable fields were removed so viewers show only the drawn text. They were not uploaded through the Record Inspection card.
 - **What it got wrong:** It first looked for a single current FSIS form number for carcass inspection, then designed its own layout before the team chose 6200-14. FSIS and the Internet Archive blocked automated downloads, so the team supplied the blank form. The first passed fill counted the carcass both in the grid and under "unlisted tags passed without restriction", which is only for carcasses not in the grid. Disposition codes are illustrative.
+
+### 2026-11-08 — Checkpoint report cleanup and review
+
+- **Tool:** Claude
+- **Request:** Clean up and review the Checkpoint 3 report
+- **Outcome:** Cleanup and review of `docs/CHECKPOINT_REPORT.md`. Recorded in that report's §11, separate from the Claude Code implementation sessions.
+- **Verification:** The revised checkpoint text was read against the sections it cites and against this log.
+- **What it got wrong:** Nothing noted for this pass.
