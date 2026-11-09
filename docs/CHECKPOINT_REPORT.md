@@ -107,10 +107,11 @@ Both contracts are live on DIDLab chain **252501**. Deploy script: `scripts/depl
 
 | Contract | Address | Deployment transaction |
 | :--- | :--- | :--- |
-| **BeefSupplyChain** | [`0x20bA1c398CD59b05dA4427162bdA7F26d5AB802e`](https://explorer.didlab.org/address/0x20bA1c398CD59b05dA4427162bdA7F26d5AB802e) | [`0xe7c3f5bd803f2a26cae4293658c17a9eef8d58966084901f9291036756072d89`](https://explorer.didlab.org/tx/0xe7c3f5bd803f2a26cae4293658c17a9eef8d58966084901f9291036756072d89) |
+| **BeefSupplyChain v2** (current; [SECURITY_REVIEW §5](SECURITY_REVIEW.md)) | [`0x903359014d55A25ED1d4a8DCA6740dd30A90448a`](https://explorer.didlab.org/address/0x903359014d55A25ED1d4a8DCA6740dd30A90448a) | [`0xe97d465f82f1d64e266373674545e30cf50732a49d3938339cf780d10ad6b3f1`](https://explorer.didlab.org/tx/0xe97d465f82f1d64e266373674545e30cf50732a49d3938339cf780d10ad6b3f1) |
+| BeefSupplyChain v1 (superseded 2026-11-08) | [`0x20bA1c398CD59b05dA4427162bdA7F26d5AB802e`](https://explorer.didlab.org/address/0x20bA1c398CD59b05dA4427162bdA7F26d5AB802e) | [`0xe7c3f5bd803f2a26cae4293658c17a9eef8d58966084901f9291036756072d89`](https://explorer.didlab.org/tx/0xe7c3f5bd803f2a26cae4293658c17a9eef8d58966084901f9291036756072d89) |
 | **CredentialRegistry** | [`0x9ef5cb328aE86C968dDcb1Fd60887bd021D7AB2E`](https://explorer.didlab.org/address/0x9ef5cb328aE86C968dDcb1Fd60887bd021D7AB2E) | [`0x0666fbae85959f573ce04400a072ffce7506f05db951a09b22a63dcc959056da`](https://explorer.didlab.org/tx/0x0666fbae85959f573ce04400a072ffce7506f05db951a09b22a63dcc959056da) |
 
-Deployer (creator) address: `0xb323821F0dFCf3b2E8727A7FBae2E34F0D4f393F`. 
+Deployer (creator) address: `0xb323821F0dFCf3b2E8727A7FBae2E34F0D4f393F`. BeefSupplyChain v2 was deployed from `0x87996A1051e98DD5586643c9a19B7C000A7eb5a8` against the same registry (block 7269167). v2 has no owner, so the deployer holds no special power over it. Records on v1, including `BEEF-001` below, did not migrate. 
 
 **Sample Batch Registration and Verification**
 We used `scripts/registerBatch.js` to register the sample batch `BEEF-001` on DIDLab chain 252501. The transaction was recorded in block 6223773.
@@ -144,7 +145,72 @@ We ran npm test after updating the repository and confirmed that all 32 tests pa
 
 ## 9. Security and privacy review
 
-_Due at Checkpoint 3._
+Full review: [`docs/SECURITY_REVIEW.md`](SECURITY_REVIEW.md) (Guided Lab 3, 2026-11-08). This section summarises it.
+
+**Scope.** Both contracts on chain 252501, plus the portal server (wallet sign-in, roles, IPFS upload) and the frontend's handling of private documents:
+
+- `CredentialRegistry` [`0x9ef5…AB2E`](https://explorer.didlab.org/address/0x9ef5cb328aE86C968dDcb1Fd60887bd021D7AB2E)
+- `BeefSupplyChain` v1 [`0x20bA…802e`](https://explorer.didlab.org/address/0x20bA1c398CD59b05dA4427162bdA7F26d5AB802e), superseded by v2 [`0x9033…448a`](https://explorer.didlab.org/address/0x903359014d55A25ED1d4a8DCA6740dd30A90448a)
+
+**Method.**
+
+- Every state-changing function was checked against the five classes: access control, input validation, reentrancy, unchecked external calls and state-ordering.
+- Adversarial test suites probe every role boundary, feed hostile inputs and call functions out of order: `test/CredentialRegistry.adversarial.test.js`, `test/BeefSupplyChain.adversarial.test.js` and `test/portal.adversarial.test.js`. The portal suite runs the real server.
+- An AI-assisted audit (Claude Code) made claims. Each one was confirmed by a test or refuted with a reason; four were false positives.
+- Deployed bytecode was compared with the source builds.
+- `npm test`: **104 passing**.
+
+**Main results.**
+
+| Finding | Severity | Outcome |
+| :--- | :--- | :--- |
+| The deployed `BeefSupplyChain` was not the reviewed source. Its bytecode matched an older commit in which **any inspector could recall any plant's batch** and the plant itself could not (BSC-0). | High | Fixed: v2 deployed; its bytecode matches the source exactly. |
+| A failed inspection could be overwritten with a pass, including after a recall (BSC-1). | High | Fixed in v2: an inspection is final, and none is allowed after a recall. |
+| A recall became impossible once the plant's credential expired or was revoked (BSC-4). | High | Fixed in v2: the processor of record can always recall its own batch. |
+| One wallet holding PROCESSOR and INSPECTOR could pass its own batch (BSC-2). | Medium | Fixed in v2 (`SelfInspection`). |
+| Recall class outside I–III, recall downgrades, zero weight and empty report or notice hashes were accepted (BSC-5, BSC-6). | Low | Fixed in v2. |
+| A look-alike site could put its own domain into the wallet sign-in message and take over a portal session (P-1). Reproduced on teambb.didlab.org. | Medium | Fixed in code with regression tests; **not yet deployed to the host**. |
+| Portal pages could be framed (P-6). | Low | Fixed in code; not yet deployed to the host. |
+| Smaller registry input checks: grants to the zero address, never-expiring credentials (CR-3, CR-4). | Low | Deferred until the registry is redeployed. |
+
+Clean findings:
+
+- No reentrancy and no unchecked calls. The only external call is a read-only registry check, and its result is used.
+- Sign-in nonces are single use.
+- Malleated signatures are rejected.
+- Session cookies are `HttpOnly` and `SameSite=Strict`, and the server stores only a hash of each session token.
+- Cross-site form posts and path traversal are refused.
+
+**v2 redeploy.**
+
+- Tx [`0xe97d…b3f1`](https://explorer.didlab.org/tx/0xe97d465f82f1d64e266373674545e30cf50732a49d3938339cf780d10ad6b3f1), block 7269167. It reuses the existing registry.
+- The frontend and scripts now point at v2.
+- Records written to v1 (including `BEEF-001`) did not migrate.
+
+**Privacy.**
+
+- Public on chain, by design (ADR 0001): lot codes, weights, custody addresses, inspection result and recall class.
+- Inspection reports are encrypted in the browser before upload. Only a hash of the encrypted file goes on chain, so a report cannot be recovered by guessing its contents.
+- Remaining privacy risks:
+  - The encryption key comes from a wallet signature over a predictable message (P-2). This is DIDLab's required scheme, so it is accepted, with user guidance not to sign that message on any other site.
+  - The saved upload details keep the original file name (P-3, open).
+  - The signing library is loaded from a CDN without a pinned version (P-5, open).
+
+**Residual risk and key management.**
+
+- **One key controls the registry permanently.** The registry admin `0xb323…393F` is a single wallet that can never be replaced, and it is also the PROCESSOR and INSPECTOR issuer. If it leaks, every record can be forged, and recovery means redeploying both contracts. We accept this for a course deployment; a real system would use a multisig admin.
+- **Also accepted:**
+  - Lot-code squatting by a rival plant (BSC-3).
+  - Inspections cannot be corrected once recorded.
+  - A revoked plant key can still recall its own batches. This fails safe: product is held, not released.
+  - Revocation does not undo past records.
+
+**Open before Checkpoint 4.**
+
+1. Deploy the portal fixes and the v2 frontend to the DIDLab host.
+2. Set a CUSTODIAN issuer and grant CUSTODIAN credentials. None is set, so no batch can ship yet.
+3. Fix P-3 and P-5.
+4. Complete the team's own five-class audit of both contracts and record what the AI audit missed.
 
 ## 10. Performance measurements
 
