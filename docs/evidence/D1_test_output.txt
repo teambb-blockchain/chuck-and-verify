@@ -1,0 +1,43 @@
+
+
+  BeefSupplyChain
+    ✔ runs register → inspect → ship → confirm → recall
+    registerBatch
+      ✔ allows a credentialed processor
+      ✔ rejects an unauthorized caller
+      ✔ rejects an empty batch id
+      ✔ rejects registering a batch that already exists
+      ✔ rejects a zero weight
+      ✔ rejects a processor whose credential was revoked
+    recordInspection
+      ✔ allows a credentialed inspector
+      ✔ rejects an unauthorized caller
+      ✔ rejects inspecting a batch that does not exist
+      ✔ rejects the batch's own processor inspecting it, even with INSPECTOR
+      ✔ rejects a second inspection of the same batch
+      ✔ rejects an empty report hash
+      ✔ rejects an inspector whose credential was revoked
+    recordShipment
+      ✔ allows the current holder with a custodian credential
+      ✔ rejects an unauthorized caller
+      ✔ rejects shipping to the zero address
+      ✔ rejects a shipment from someone who is not the current holder
+    confirmReceipt
+      ✔ allows the pending receiver with a custodian credential
+      ✔ rejects an unauthorized caller
+      ✔ rejects confirming receipt when no shipment is pending
+      ✔ rejects confirming receipt by someone who is not the pending receiver
+    recordRecall
+      ✔ allows the processor that registered the batch
+      ✔ rejects an inspector
+      ✔ rejects a different credentialed processor
+      ✔ still lets the registering processor recall once its credential is revoked
+      ✔ rejects an unauthorized caller
+      ✔ rejects a classification outside Class I–III
+      ✔ rejects an empty notice hash
+      ✔ rejects downgrading a recall
+      ✔ rejects recalling a batch that does not exist
+
+
+  31 passing (1s)
+
