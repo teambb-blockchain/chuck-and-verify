@@ -78,6 +78,22 @@ describe("BeefSupplyChain", function () {
         supplyChain.connect(processor).registerBatch(batchId, 1000)
       ).to.be.revertedWithCustomError(supplyChain, "BatchAlreadyExists");
     });
+
+    it("rejects a zero weight", async function () {
+      await expect(
+        supplyChain.connect(processor).registerBatch(batchId, 0)
+      ).to.be.revertedWithCustomError(supplyChain, "ZeroWeight");
+    });
+
+    it("rejects a processor whose credential was revoked", async function () {
+      // Same wallet, same call: it works before the revoke, not after.
+      await supplyChain.connect(processor).registerBatch(batchId, 1000);
+      await registry.revoke(processor.address, CRED_PROCESSOR);
+      const nextId = ethers.keccak256(ethers.toUtf8Bytes("batch-002"));
+      await expect(
+        supplyChain.connect(processor).registerBatch(nextId, 1000)
+      ).to.be.revertedWithCustomError(supplyChain, "Unauthorized");
+    });
   });
 
   describe("recordInspection", function () {
@@ -115,6 +131,36 @@ describe("BeefSupplyChain", function () {
           .connect(inspector)
           .recordInspection(missingId, reportHash, true)
       ).to.be.revertedWithCustomError(supplyChain, "BatchNotFound");
+    });
+
+    it("rejects the batch's own processor inspecting it, even with INSPECTOR", async function () {
+      const expiresAt = (await time.latest()) + ONE_YEAR;
+      await registry.grant(processor.address, CRED_INSPECTOR, expiresAt);
+      await expect(
+        supplyChain
+          .connect(processor)
+          .recordInspection(batchId, reportHash, true)
+      ).to.be.revertedWithCustomError(supplyChain, "SelfInspection");
+    });
+
+    it("rejects a second inspection of the same batch", async function () {
+      await supplyChain.connect(inspector).recordInspection(batchId, reportHash, false);
+      await expect(
+        supplyChain.connect(inspector).recordInspection(batchId, reportHash, true)
+      ).to.be.revertedWithCustomError(supplyChain, "AlreadyInspected");
+    });
+
+    it("rejects an empty report hash", async function () {
+      await expect(
+        supplyChain.connect(inspector).recordInspection(batchId, ethers.ZeroHash, true)
+      ).to.be.revertedWithCustomError(supplyChain, "EmptyReportHash");
+    });
+
+    it("rejects an inspector whose credential was revoked", async function () {
+      await registry.revoke(inspector.address, CRED_INSPECTOR);
+      await expect(
+        supplyChain.connect(inspector).recordInspection(batchId, reportHash, true)
+      ).to.be.revertedWithCustomError(supplyChain, "Unauthorized");
     });
   });
 
@@ -221,7 +267,7 @@ describe("BeefSupplyChain", function () {
     it("rejects an inspector", async function () {
       await expect(
         supplyChain.connect(inspector).recordRecall(batchId, noticeHash, 1)
-      ).to.be.revertedWithCustomError(supplyChain, "Unauthorized");
+      ).to.be.revertedWithCustomError(supplyChain, "NotBatchProcessor");
     });
 
     it("rejects a different credentialed processor", async function () {
@@ -232,17 +278,39 @@ describe("BeefSupplyChain", function () {
       ).to.be.revertedWithCustomError(supplyChain, "NotBatchProcessor");
     });
 
-    it("rejects the registering processor once its credential is revoked", async function () {
+    it("still lets the registering processor recall once its credential is revoked", async function () {
       await registry.revoke(processor.address, CRED_PROCESSOR);
       await expect(
         supplyChain.connect(processor).recordRecall(batchId, noticeHash, 1)
-      ).to.be.revertedWithCustomError(supplyChain, "Unauthorized");
+      ).to.emit(supplyChain, "RecallRecorded");
     });
 
     it("rejects an unauthorized caller", async function () {
       await expect(
         supplyChain.connect(unauthorized).recordRecall(batchId, noticeHash, 1)
-      ).to.be.revertedWithCustomError(supplyChain, "Unauthorized");
+      ).to.be.revertedWithCustomError(supplyChain, "NotBatchProcessor");
+    });
+
+    it("rejects a classification outside Class I–III", async function () {
+      await expect(
+        supplyChain.connect(processor).recordRecall(batchId, noticeHash, 0)
+      ).to.be.revertedWithCustomError(supplyChain, "InvalidClassification");
+      await expect(
+        supplyChain.connect(processor).recordRecall(batchId, noticeHash, 4)
+      ).to.be.revertedWithCustomError(supplyChain, "InvalidClassification");
+    });
+
+    it("rejects an empty notice hash", async function () {
+      await expect(
+        supplyChain.connect(processor).recordRecall(batchId, ethers.ZeroHash, 1)
+      ).to.be.revertedWithCustomError(supplyChain, "EmptyNoticeHash");
+    });
+
+    it("rejects downgrading a recall", async function () {
+      await supplyChain.connect(processor).recordRecall(batchId, noticeHash, 1);
+      await expect(
+        supplyChain.connect(processor).recordRecall(batchId, noticeHash, 3)
+      ).to.be.revertedWithCustomError(supplyChain, "RecallNotEscalated");
     });
 
     it("rejects recalling a batch that does not exist", async function () {
