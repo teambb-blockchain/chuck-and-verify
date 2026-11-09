@@ -17,3 +17,12 @@ ignition/deployments/chain-31337
 
 # Local portal database (production lives in /srv/data)
 data/
+
+# macOS and local tool config
+.DS_Store
+.claude/
+
+# IPFS recovery bundles and retrieved ciphertext (never commit; see A2 rules)
+ipfs-upload-*.json
+retrieved.bin
+*.bin

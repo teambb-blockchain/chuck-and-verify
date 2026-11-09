@@ -5,7 +5,7 @@ import { createPublicClient, http } from "https://esm.sh/viem@2";
 
 export const EXPLORER_BASE = "https://explorer.didlab.org";
 export const REQUIRED_CHAIN_ID = 252501;
-export const beefSupplyChainAddress = "0x20bA1c398CD59b05dA4427162bdA7F26d5AB802e";
+export const beefSupplyChainAddress = "0x903359014d55A25ED1d4a8DCA6740dd30A90448a";
 export const credentialRegistryAddress = "0x9ef5cb328aE86C968dDcb1Fd60887bd021D7AB2E";
 
 export const chain = {

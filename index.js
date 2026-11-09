@@ -206,7 +206,15 @@ async function serve(req, res) {
     }
 
     const type = types[path.extname(filePath)] || "application/octet-stream";
-    res.writeHead(200, { "Content-Type": type });
+    // No page here is meant to be framed (the admin card sends transactions),
+    // and every file has an explicit type (SECURITY_REVIEW P-6).
+    res.writeHead(200, {
+      "Content-Type": type,
+      "X-Content-Type-Options": "nosniff",
+      "X-Frame-Options": "DENY",
+      "Content-Security-Policy": "frame-ancestors 'none'",
+      "Referrer-Policy": "strict-origin-when-cross-origin",
+    });
     res.end(data);
   });
 }

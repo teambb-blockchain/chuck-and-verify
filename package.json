@@ -14,6 +14,7 @@
     "test": "hardhat test",
     "compile": "hardhat compile",
     "deploy:didlab": "hardhat run scripts/deploy.js --network didlab",
+    "deploy:supply-chain": "CREDENTIAL_REGISTRY_ADDRESS=${CREDENTIAL_REGISTRY_ADDRESS:-0x9ef5cb328aE86C968dDcb1Fd60887bd021D7AB2E} hardhat run scripts/deploy.js --network didlab",
     "setup:credentials": "hardhat run scripts/setupCredentials.js --network didlab",
     "register:batch": "hardhat run scripts/registerBatch.js --network didlab"
   },

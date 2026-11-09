@@ -601,7 +601,11 @@ const inspectRecovery = document.getElementById("inspectRecovery");
 
 const REVERT_MESSAGES = {
   Unauthorized: "This wallet isn't authorized to record inspections.",
-  BatchNotFound: "No batch found with that ID."
+  BatchNotFound: "No batch found with that ID.",
+  SelfInspection: "You can't inspect a batch your own wallet registered.",
+  AlreadyInspected: "This batch has already been inspected.",
+  BatchRecalled: "This batch has been recalled and can't be inspected.",
+  EmptyReportHash: "The report couldn't be read. Choose the file again."
 };
 
 // Plain-language versions of publishEncryptedForm's progress messages.

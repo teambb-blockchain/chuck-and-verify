@@ -12,6 +12,11 @@ export const abi = [
   },
   {
     "inputs": [],
+    "name": "AlreadyInspected",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "BatchAlreadyExists",
     "type": "error"
   },
@@ -22,7 +27,27 @@ export const abi = [
   },
   {
     "inputs": [],
+    "name": "BatchRecalled",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "EmptyBatchId",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "EmptyNoticeHash",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "EmptyReportHash",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InvalidClassification",
     "type": "error"
   },
   {
@@ -47,12 +72,27 @@ export const abi = [
   },
   {
     "inputs": [],
+    "name": "RecallNotEscalated",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "SelfInspection",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "Unauthorized",
     "type": "error"
   },
   {
     "inputs": [],
     "name": "ZeroAddress",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "ZeroWeight",
     "type": "error"
   },
   {

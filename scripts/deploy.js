@@ -12,28 +12,45 @@ async function main() {
     throw new Error("Wrong network. Expected DIDLab chain 252501.");
   }
 
-  // Deploy the credential registry first.
-  const Registry = await hre.ethers.getContractFactory(
-    "CredentialRegistry"
-  );
+  // With CREDENTIAL_REGISTRY_ADDRESS set, reuse that registry and deploy only
+  // BeefSupplyChain. Its issuers and grants carry over, so no credential
+  // setup is needed. Without it, deploy a fresh registry first.
+  const existing = process.env.CREDENTIAL_REGISTRY_ADDRESS;
+  let registry;
 
-  const registry = await Registry.deploy();
-  await registry.waitForDeployment();
+  if (existing) {
+    if (!hre.ethers.isAddress(existing)) {
+      throw new Error(`CREDENTIAL_REGISTRY_ADDRESS is not an address: ${existing}`);
+    }
+    if ((await hre.ethers.provider.getCode(existing)) === "0x") {
+      throw new Error(`No contract at CREDENTIAL_REGISTRY_ADDRESS ${existing}`);
+    }
+    registry = await hre.ethers.getContractAt("CredentialRegistry", existing);
+    console.log("Reusing CredentialRegistry:", existing);
+  } else {
+    const Registry = await hre.ethers.getContractFactory(
+      "CredentialRegistry"
+    );
+    registry = await Registry.deploy();
+    await registry.waitForDeployment();
+    console.log("CredentialRegistry:", await registry.getAddress());
+    console.log("Registry deployment TX:", registry.deploymentTransaction().hash);
+  }
 
   const registryAddress = await registry.getAddress();
-  const registryTx = registry.deploymentTransaction();
-
-  console.log("CredentialRegistry:", registryAddress);
-  console.log("Registry deployment TX:", registryTx.hash);
 
   // Read back from the chain: the deployer must be the registry admin,
-  // otherwise setupCredentials.js cannot call setIssuer later.
+  // otherwise setupCredentials.js cannot call setIssuer later. A reused
+  // registry with a different admin still works, but warn about it.
   const admin = await registry.admin();
 
   if (admin.toLowerCase() !== deployer.address.toLowerCase()) {
-    throw new Error(
-      `admin() mismatch: expected ${deployer.address}, got ${admin}`
-    );
+    if (!existing) {
+      throw new Error(
+        `admin() mismatch: expected ${deployer.address}, got ${admin}`
+      );
+    }
+    console.warn(`Note: registry admin is ${admin}, not the deployer.`);
   }
 
   console.log("Registry admin:", admin);

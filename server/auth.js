@@ -102,16 +102,29 @@ function isLocalHost(host) {
 // names the real site, but it is only trusted when it is on PUBLIC_ORIGINS.
 // Otherwise a look-alike site relaying requests here could get a message
 // carrying its own domain, which the wallet would then not warn about.
+//
+// Host and X-Forwarded-Host are client-controlled too: the DIDLab proxy chain
+// passes a client's X-Forwarded-Host through unchanged. A non-local host is
+// therefore only used when it is on PUBLIC_ORIGINS; anything else gets the
+// first public origin, so a relaying site's domain never reaches the message
+// (SECURITY_REVIEW P-1).
+function siteFromOrigin(origin) {
+  const url = new URL(origin); // safe: equal to a parsed entry above
+  return { host: url.host, scheme: url.protocol.slice(0, -1) };
+}
+
 function requestSite(req) {
   const host = String(req.headers["x-forwarded-host"] || req.headers.host || "localhost")
     .split(",")[0]
     .trim();
-  if (!isLocalHost(host)) return { host, scheme: "https" };
-  const origin = String(req.headers.origin || "");
-  if (PUBLIC_ORIGINS.includes(origin)) {
-    const url = new URL(origin); // safe: equal to a parsed entry above
-    return { host: url.host, scheme: url.protocol.slice(0, -1) };
+  if (!isLocalHost(host)) {
+    const listed = PUBLIC_ORIGINS.find((origin) => new URL(origin).host === host);
+    if (listed) return siteFromOrigin(listed);
+    if (PUBLIC_ORIGINS.length) return siteFromOrigin(PUBLIC_ORIGINS[0]);
+    return { host: "localhost", scheme: "https" };
   }
+  const origin = String(req.headers.origin || "");
+  if (PUBLIC_ORIGINS.includes(origin)) return siteFromOrigin(origin);
   return { host, scheme: "http" };
 }
 
