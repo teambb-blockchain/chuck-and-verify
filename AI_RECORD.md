@@ -6,6 +6,8 @@ Log of AI-assisted design and implementation for this project.
 
 Add an entry whenever AI tools help with architecture, code, docs, or debugging in a meaningful way.
 
+If an entry is written after the work, rather than during it, add a **Recorded:** line saying so and naming the source it was rebuilt from (a commit, a review document, transaction receipts). Leave out anything that source does not show. In particular, do not write "Nothing found" under **What it got wrong** unless someone checked at the time; write that it was not recorded. A reader can then tell which entries were logged as the work happened and which were reconstructed.
+
 ## Entries
 
 ### 2026-09-27 — M1 proposal review and revisions
@@ -216,6 +218,15 @@ Add an entry whenever AI tools help with architecture, code, docs, or debugging 
 - **Verification:** `npm test` reports 92 passing. The P-1/P-6 tests fail on `0dbc924` and pass after the fix. Live runtime bytecode was compared with local builds (immutables and metadata masked): the registry matches HEAD, and the supply chain matches `83d7418`. Live `admin`, `issuerOf` and `isValid` were read over the DIDLab RPC.
 - **What it got wrong:** It first counted custody moves after a recall as a defect (retrieval needs them). Its first Host-header test went through `fetch`, which ignores `Host`, so the test passed for the wrong reason until rewritten with `http.request`. The team's own Activity 6 for these contracts is still needed to fill the "what the AI missed" row.
 
+### 2026-11-08 — BeefSupplyChain v2: apply review fixes and redeploy
+
+- **Recorded:** Added afterward from commit `022bc9b`, `docs/SECURITY_REVIEW.md` §5 and the deployment receipt; not logged when the work was done.
+- **Tool:** Claude Code
+- **Request:** Apply the contract fixes proposed in the security review (`docs/SECURITY_REVIEW.md` §5) and redeploy BeefSupplyChain against the live CredentialRegistry
+- **Outcome:** `contracts/BeefSupplyChain.sol` v2: an inspection is final (`AlreadyInspected`) and none is allowed after a recall (`BatchRecalled`) (BSC-1); the batch's own processor cannot inspect it (`SelfInspection`, BSC-2); only the processor of record can recall, whether or not its credential is still valid (BSC-0 kept, BSC-4); recall class must be 1–3, a later recall must escalate, and the notice hash cannot be empty (BSC-5); zero weight and an empty report hash revert (BSC-6). `scripts/deploy.js` can reuse an existing registry (`CREDENTIAL_REGISTRY_ADDRESS`). `frontend/public/abi.js`, `chain.js` and `scripts/registerBatch.js` point at v2, and `npm run stamp` was rerun. Deployed with `npm run deploy:supply-chain` from `0x8799…b5a8`: `0x903359014d55A25ED1d4a8DCA6740dd30A90448a`, transaction `0xe97d…b3f1`, block 7269167, reusing registry `0x9ef5…AB2E`. Committed as `022bc9b`. CR-3 and CR-4 stay deferred because the registry was not redeployed.
+- **Verification:** The `FIXED BSC-*` regression tests in `test/BeefSupplyChain.adversarial.test.js` and the matching tests in `test/BeefSupplyChain.test.js` pass, and they fail against the v1 source. The deployed runtime bytecode matches the v2 build, with the registry immutable masked. `registry()` on v2 returns `0x9ef5…AB2E`.
+- **What it got wrong:** Not recorded when the work was done (see **Recorded** above).
+
 ### 2026-11-08 — Mock FSIS 6200-14 inspection records
 
 - **Tool:** Claude Code
@@ -231,3 +242,10 @@ Add an entry whenever AI tools help with architecture, code, docs, or debugging 
 - **Outcome:** Cleanup and review of `docs/CHECKPOINT_REPORT.md`. Recorded in that report's §11, separate from the Claude Code implementation sessions.
 - **Verification:** The revised checkpoint text was read against the sections it cites and against this log.
 - **What it got wrong:** Nothing noted for this pass.
+### 2026-11-08 — On-chain evidence and Checkpoint 3 report sections
+
+- **Tool:** Claude Code
+- **Request:** Gather on-chain evidence for anchoring and authorization on BeefSupplyChain v2, check the authorization tests and the console probe, prepare the repository for a public push, and draft and check the Checkpoint 3 report (§9, §10, §12 to §15, conflict review, PDF snapshot).
+- **Outcome:** The v2 evidence is batch `BEEF-A1-014`: registered by wallet A (`0x3fe1…ca52`, block 7271926) and inspected by wallet B (`0xd171…fd53`, block 7271954) through the v2 frontend run locally, because the live site still serves v1. The inspection's `reportHash` equals the SHA-256 of the 563,134 bytes the IPFS gateway serves. The CID stays off chain by the team's choice. In `test/BeefSupplyChain.test.js`, the revoked-processor test now succeeds before the revoke and fails after; the run is saved in `docs/evidence/D1_test_output.txt`. `.gitignore` now excludes `.DS_Store`, `.claude/`, recovery bundles (`ipfs-upload-*.json`) and ciphertext (`*.bin`). In the checkpoint report it drafted §9's on-chain checks and privacy notes, §10 (DIDLab gas and fees, local gas for ship, confirm and recall, latency), §13's risks and §14's Checkpoint 3 outcome and Checkpoint 4 plan. It fixed contradictions across §3–§8, §11 and §15 (CUSTODIAN status, which contract the site calls, recall ownership, test counts), added Bhavana's commit to §12, cited her measurement scripts in §10, and added a dated update to `docs/SECURITY_REVIEW.md`. It generated the PDF snapshot with a small Markdown converter and headless Chrome, kept out of the repository.
+- **Verification:** Every transaction was read back from the DIDLab RPC (status, block, gas, decoded calldata and logs). Credential and issuer state came from `isValid`, `issuerOf` and the registry's event history. The gateway bytes were downloaded and hashed. Deployed v2 runtime bytecode matches the local compile with metadata masked. `npm test`: 104 passing. Before the push, every 64-character hex value in the files to be committed was matched to a transaction, digest or padded batch id, and git history was checked for `.env`, keys and recovery files. A script checked every link, commit, transaction, block number and contract address cited in the report. Bhavana's `measure-gas.js`, `measure-performance.js` and `tamper-demo.js` were run, and their output matched §10. PDF pages were rendered to images and checked.
+- **What it got wrong:** The first anchor evidence used an inspection sent to the superseded v1 contract, before it checked which contract the live site called. It took the lot form's upload receipt for the inspection's. It planned the self-inspection demonstration before checking that wallet A held no INSPECTOR, so the call reverts `Unauthorized` before reaching `SelfInspection`. It wrote that a timing came from "a laptop on home broadband", which it could not know. Its first PDF split table words mid-word and printed a diagram small. Still open: the on-chain `SelfInspection` refusal needs a short-lived INSPECTOR grant to wallet A,.
