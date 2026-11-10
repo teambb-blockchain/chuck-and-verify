@@ -1,7 +1,7 @@
 "use strict";
 
 // Portal role storage. The role/permission catalog below lives in git and is
-// re-synced into SQLite on every boot. The database stores only who holds
+// re-synced into SQLite on every boot (npm sqlite3; DIDLab runs Node 20). The database stores only who holds
 // which role, plus sessions. Sign-in challenges stay in memory because they
 // last five minutes.
 //
@@ -12,7 +12,7 @@
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
-const { DatabaseSync } = require("node:sqlite");
+const { openSqlite } = require("./sqlite");
 
 const ROLES = {
   ADMIN: "Manages portal users and their roles.",
@@ -119,61 +119,54 @@ function isSqliteFile(filePath) {
   }
 }
 
-function connectDatabase(dbPath) {
-  const sqlite = new DatabaseSync(dbPath);
-  sqlite.exec("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;");
-  sqlite.exec(SCHEMA);
-  syncCatalog(sqlite);
+async function connectDatabase(dbPath, options) {
+  const sqlite = await openSqlite(dbPath, options);
+  await sqlite.exec("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;");
+  await sqlite.exec(SCHEMA);
+  await syncCatalog(sqlite);
   return sqlite;
 }
 
 function syncCatalog(sqlite) {
-  sqlite.exec("BEGIN");
-  try {
-    const upsertRole = sqlite.prepare(
+  return sqlite.transaction(async (tx) => {
+    const upsertRole =
       "INSERT INTO roles (name, description) VALUES (?, ?) " +
-        "ON CONFLICT(name) DO UPDATE SET description = excluded.description"
-    );
-    const upsertPerm = sqlite.prepare(
+      "ON CONFLICT(name) DO UPDATE SET description = excluded.description";
+    const upsertPerm =
       "INSERT INTO permissions (name, description) VALUES (?, ?) " +
-        "ON CONFLICT(name) DO UPDATE SET description = excluded.description"
-    );
+      "ON CONFLICT(name) DO UPDATE SET description = excluded.description";
     for (const [name, description] of Object.entries(ROLES)) {
-      upsertRole.run(name, description);
+      await tx.run(upsertRole, name, description);
     }
     for (const [name, { description }] of Object.entries(PERMISSIONS)) {
-      upsertPerm.run(name, description);
+      await tx.run(upsertPerm, name, description);
     }
     // Drop catalog entries that were removed from code. user_roles rows for
     // a removed role go with it (ON DELETE CASCADE).
     const roleNames = Object.keys(ROLES);
     const permNames = Object.keys(PERMISSIONS);
-    sqlite
-      .prepare(`DELETE FROM roles WHERE name NOT IN (${roleNames.map(() => "?").join(",")})`)
-      .run(...roleNames);
-    sqlite
-      .prepare(
-        `DELETE FROM permissions WHERE name NOT IN (${permNames.map(() => "?").join(",")})`
-      )
-      .run(...permNames);
+    await tx.run(
+      `DELETE FROM roles WHERE name NOT IN (${roleNames.map(() => "?").join(",")})`,
+      ...roleNames
+    );
+    await tx.run(
+      `DELETE FROM permissions WHERE name NOT IN (${permNames.map(() => "?").join(",")})`,
+      ...permNames
+    );
 
-    sqlite.exec("DELETE FROM role_permissions");
-    const link = sqlite.prepare("INSERT INTO role_permissions (role, permission) VALUES (?, ?)");
+    await tx.exec("DELETE FROM role_permissions");
+    const link = "INSERT INTO role_permissions (role, permission) VALUES (?, ?)";
     for (const [perm, { roles }] of Object.entries(PERMISSIONS)) {
-      for (const role of roles) link.run(role, perm);
+      for (const role of roles) await tx.run(link, role, perm);
     }
-    sqlite.exec("COMMIT");
-  } catch (error) {
-    sqlite.exec("ROLLBACK");
-    throw error;
-  }
+  });
 }
 
 // The DIDLab Files tab stores text. A pasted portal.db is JSON, not a
 // database. The first boot builds the real database from that text and
 // replaces the file. A later boot sees SQLite and does not read it again,
 // so a role removed in the portal stays removed.
-function adoptPastedSeed(dbPath) {
+async function adoptPastedSeed(dbPath) {
   if (!fs.existsSync(dbPath) || isSqliteFile(dbPath)) return;
 
   const text = fs.readFileSync(dbPath, "utf8").trim();
@@ -200,14 +193,14 @@ function adoptPastedSeed(dbPath) {
     const seedPath = path.join(dir, "seed.json");
     const builtPath = path.join(dir, "portal.db");
     fs.writeFileSync(seedPath, text);
-    const db = createStore(connectDatabase(builtPath));
+    const db = createStore(await connectDatabase(builtPath));
     try {
-      const result = seedOnce(db, seedPath);
+      const result = await seedOnce(db, seedPath);
       if (!result.applied) throw new Error("Pasted portal JSON was not applied.");
-      importSessions(db, parsed.sessions);
-      db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+      await importSessions(db, parsed.sessions);
+      await db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
     } finally {
-      db.close();
+      await db.close();
     }
     fs.copyFileSync(builtPath, dbPath);
   } finally {
@@ -217,16 +210,20 @@ function adoptPastedSeed(dbPath) {
 
 // Keep unexpired sessions from a JSON portal.db so open logins survive the
 // first boot on SQLite. A bad row is skipped; users were already imported.
-function importSessions(db, sessions) {
+async function importSessions(db, sessions) {
   if (!Array.isArray(sessions)) return;
   const now = Date.now();
-  const insert = db.sqlite.prepare(
-    "INSERT OR IGNORE INTO sessions (token_hash, address, expires_at) VALUES (?, ?, ?)"
-  );
+  const insert =
+    "INSERT OR IGNORE INTO sessions (token_hash, address, expires_at) VALUES (?, ?, ?)";
   for (const session of sessions) {
     if (!session || Number(session.expiresAt) <= now || !session.tokenHash) continue;
     try {
-      insert.run(String(session.tokenHash), normalizeAddress(session.address), Number(session.expiresAt));
+      await db.sqlite.run(
+        insert,
+        String(session.tokenHash),
+        normalizeAddress(session.address),
+        Number(session.expiresAt)
+      );
     } catch {
       // Drop a row that is not a real session. The users are already in.
     }
@@ -239,26 +236,31 @@ function createStore(sqlite) {
   return {
     sqlite,
     close() {
-      sqlite.close();
+      return sqlite.close();
     },
     exec(sql) {
-      sqlite.exec(sql);
+      return sqlite.exec(sql);
     },
 
-    sessionAddress(tokenHash, now) {
-      const row = sqlite
-        .prepare("SELECT address FROM sessions WHERE token_hash = ? AND expires_at > ?")
-        .get(tokenHash, now);
+    async sessionAddress(tokenHash, now) {
+      const row = await sqlite.get(
+        "SELECT address FROM sessions WHERE token_hash = ? AND expires_at > ?",
+        tokenHash,
+        now
+      );
       return row ? row.address : null;
     },
-    addSession(tokenHash, address, expiresAt, now) {
-      sqlite.prepare("DELETE FROM sessions WHERE expires_at <= ?").run(now);
-      sqlite
-        .prepare("INSERT INTO sessions (token_hash, address, expires_at) VALUES (?, ?, ?)")
-        .run(tokenHash, address, expiresAt);
+    async addSession(tokenHash, address, expiresAt, now) {
+      await sqlite.run("DELETE FROM sessions WHERE expires_at <= ?", now);
+      await sqlite.run(
+        "INSERT INTO sessions (token_hash, address, expires_at) VALUES (?, ?, ?)",
+        tokenHash,
+        address,
+        expiresAt
+      );
     },
-    deleteSession(tokenHash) {
-      sqlite.prepare("DELETE FROM sessions WHERE token_hash = ?").run(tokenHash);
+    async deleteSession(tokenHash) {
+      await sqlite.run("DELETE FROM sessions WHERE token_hash = ?", tokenHash);
     },
 
     liveChallenges(now) {
@@ -279,19 +281,20 @@ function createStore(sqlite) {
   };
 }
 
-function openDatabase(dataDir = resolveDataDir()) {
+// options.onBroken: see server/sqlite.js.
+async function openDatabase(dataDir = resolveDataDir(), options = {}) {
   fs.mkdirSync(dataDir, { recursive: true });
   const dbPath = path.join(dataDir, "portal.db");
-  adoptPastedSeed(dbPath);
-  const db = createStore(connectDatabase(dbPath));
+  await adoptPastedSeed(dbPath);
+  const db = createStore(await connectDatabase(dbPath, options));
   return { db, dbPath, dataDir };
 }
 
 // Apply seed.json once into this database file. A later run, and every boot,
 // leave the rows alone, so removing a role in the portal stays removed.
 //   { "users": [ { "address": "0x...", "label": "Contract deployer", "roles": ["ADMIN"] } ] }
-function seedOnce(db, seedPath) {
-  const existing = db.sqlite.prepare("SELECT value FROM app_state WHERE key = 'seeded'").get();
+async function seedOnce(db, seedPath) {
+  const existing = await db.sqlite.get("SELECT value FROM app_state WHERE key = 'seeded'");
   if (existing) return { applied: false };
 
   if (!fs.existsSync(seedPath)) {
@@ -307,7 +310,7 @@ function seedOnce(db, seedPath) {
   if (users.length === 0) throw new Error("Seed file has no users.");
 
   for (const user of users) {
-    upsertUser(db, {
+    await upsertUser(db, {
       address: user.address,
       label: user.label,
       roles: user.roles || [],
@@ -316,76 +319,74 @@ function seedOnce(db, seedPath) {
       createdAt: user.createdAt,
     });
   }
-  db.sqlite
-    .prepare("INSERT INTO app_state (key, value) VALUES ('seeded', ?)")
-    .run(new Date().toISOString());
+  await db.sqlite.run(
+    "INSERT INTO app_state (key, value) VALUES ('seeded', ?)",
+    new Date().toISOString()
+  );
   return { applied: true, count: users.length };
 }
 
-function upsertUser(db, { address, label, roles, grantedBy, replaceRoles, createdAt }) {
+async function upsertUser(db, { address, label, roles, grantedBy, replaceRoles, createdAt }) {
   const addr = normalizeAddress(address);
   const unknown = roles.filter((role) => !(role in ROLES));
   if (unknown.length) throw new Error("Unknown role(s): " + unknown.join(", "));
   const now = Date.now();
-  const sqlite = db.sqlite;
 
-  sqlite.exec("BEGIN");
-  try {
-    sqlite
-      .prepare(
-        "INSERT INTO users (address, label, created_at) VALUES (?, ?, ?) " +
-          "ON CONFLICT(address) DO UPDATE SET label = " +
-          "CASE WHEN excluded.label = '' THEN users.label ELSE excluded.label END"
-      )
-      .run(addr, String(label || "").slice(0, 80), Number(createdAt) || now);
-    if (replaceRoles) {
-      sqlite.prepare("DELETE FROM user_roles WHERE address = ?").run(addr);
-    }
-    const grant = sqlite.prepare(
-      "INSERT OR IGNORE INTO user_roles (address, role, granted_by, granted_at) VALUES (?, ?, ?, ?)"
+  await db.sqlite.transaction(async (tx) => {
+    await tx.run(
+      "INSERT INTO users (address, label, created_at) VALUES (?, ?, ?) " +
+        "ON CONFLICT(address) DO UPDATE SET label = " +
+        "CASE WHEN excluded.label = '' THEN users.label ELSE excluded.label END",
+      addr,
+      String(label || "").slice(0, 80),
+      Number(createdAt) || now
     );
-    for (const role of roles) grant.run(addr, role, grantedBy || "portal", now);
-    sqlite.exec("COMMIT");
-  } catch (error) {
-    sqlite.exec("ROLLBACK");
-    throw error;
-  }
+    if (replaceRoles) {
+      await tx.run("DELETE FROM user_roles WHERE address = ?", addr);
+    }
+    const grant =
+      "INSERT OR IGNORE INTO user_roles (address, role, granted_by, granted_at) VALUES (?, ?, ?, ?)";
+    for (const role of roles) await tx.run(grant, addr, role, grantedBy || "portal", now);
+  });
   return addr;
 }
 
-function deleteUser(db, address) {
-  return db.sqlite.prepare("DELETE FROM users WHERE address = ?").run(normalizeAddress(address))
-    .changes;
+async function deleteUser(db, address) {
+  const result = await db.sqlite.run(
+    "DELETE FROM users WHERE address = ?",
+    normalizeAddress(address)
+  );
+  return result.changes;
 }
 
-function accessFor(db, address) {
-  const roles = db.sqlite
-    .prepare("SELECT role FROM user_roles WHERE address = ? ORDER BY role")
-    .all(address)
-    .map((row) => row.role);
-  const permissions = db.sqlite
-    .prepare(
+async function accessFor(db, address) {
+  const roles = (
+    await db.sqlite.all("SELECT role FROM user_roles WHERE address = ? ORDER BY role", address)
+  ).map((row) => row.role);
+  const permissions = (
+    await db.sqlite.all(
       "SELECT DISTINCT rp.permission FROM user_roles ur " +
         "JOIN role_permissions rp ON rp.role = ur.role " +
-        "WHERE ur.address = ? ORDER BY rp.permission"
+        "WHERE ur.address = ? ORDER BY rp.permission",
+      address
     )
-    .all(address)
-    .map((row) => row.permission);
+  ).map((row) => row.permission);
   return { roles, permissions };
 }
 
-function listUsers(db) {
-  const users = db.sqlite
-    .prepare("SELECT address, label, created_at FROM users ORDER BY created_at")
-    .all();
-  const rolesStmt = db.sqlite.prepare(
-    "SELECT role FROM user_roles WHERE address = ? ORDER BY role"
+async function listUsers(db) {
+  const users = await db.sqlite.all(
+    "SELECT address, label, created_at FROM users ORDER BY created_at"
   );
+  const rolesByAddress = new Map(users.map((user) => [user.address, []]));
+  for (const grant of await db.sqlite.all("SELECT address, role FROM user_roles ORDER BY role")) {
+    rolesByAddress.get(grant.address)?.push(grant.role);
+  }
   return users.map((user) => ({
     address: user.address,
     label: user.label,
     createdAt: user.created_at,
-    roles: rolesStmt.all(user.address).map((row) => row.role),
+    roles: rolesByAddress.get(user.address),
   }));
 }
 

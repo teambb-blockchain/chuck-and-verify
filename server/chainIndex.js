@@ -122,7 +122,7 @@ function rpcCall(url, method, params) {
   });
 }
 
-function createChainIndex(db, options = {}) {
+async function createChainIndex(db, options = {}) {
   const config = {
     rpcUrl: process.env.CHAIN_RPC || DEFAULTS.rpcUrl,
     contract: (process.env.BSC_ADDRESS || DEFAULTS.contract).toLowerCase(),
@@ -132,28 +132,30 @@ function createChainIndex(db, options = {}) {
     ...options,
   };
   const sqlite = db.sqlite;
-  sqlite.exec(SCHEMA);
+  await sqlite.exec(SCHEMA);
 
-  const getState = (key) =>
-    sqlite.prepare("SELECT value FROM app_state WHERE key = ?").get(key)?.value ?? null;
-  const setState = (key, value) =>
-    sqlite
-      .prepare(
-        "INSERT INTO app_state (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"
-      )
-      .run(key, String(value));
+  // `conn` is the connection, or the transaction handle inside transaction().
+  const getState = async (key, conn = sqlite) =>
+    (await conn.get("SELECT value FROM app_state WHERE key = ?", key))?.value ?? null;
+  const setState = (key, value, conn = sqlite) =>
+    conn.run(
+      "INSERT INTO app_state (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+      key,
+      String(value)
+    );
 
   // A redeploy (new address) starts the index over.
-  if (getState("chain_contract") !== config.contract) {
-    sqlite.exec("DELETE FROM chain_events");
-    sqlite.prepare("DELETE FROM app_state WHERE key = 'chain_indexed_to'").run();
-    setState("chain_contract", config.contract);
+  if ((await getState("chain_contract")) !== config.contract) {
+    await sqlite.transaction(async (tx) => {
+      await tx.exec("DELETE FROM chain_events");
+      await tx.run("DELETE FROM app_state WHERE key = 'chain_indexed_to'");
+      await setState("chain_contract", config.contract, tx);
+    });
   }
 
-  const insert = sqlite.prepare(
+  const insert =
     "INSERT OR IGNORE INTO chain_events (block, log_index, tx, name, batch_id, actor, other, hash, num, ts) " +
-      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-  );
+    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
   let inFlight = null;
   let lastSyncAt = 0;
@@ -169,7 +171,7 @@ function createChainIndex(db, options = {}) {
 
   async function catchUp() {
     const latest = parseInt(await rpcCall(config.rpcUrl, "eth_blockNumber", []), 16);
-    let from = Number(getState("chain_indexed_to") ?? config.fromBlock - 1) + 1;
+    let from = Number((await getState("chain_indexed_to")) ?? config.fromBlock - 1) + 1;
     const times = new Map();
     while (from <= latest) {
       const to = Math.min(from + config.chunk - 1, latest);
@@ -182,20 +184,15 @@ function createChainIndex(db, options = {}) {
         const row = decodeLog(log);
         if (row) rows.push({ ...row, ts: await blockTime(row.block, times) });
       }
-      sqlite.exec("BEGIN");
-      try {
+      await sqlite.transaction(async (tx) => {
         for (const r of rows) {
-          insert.run(r.block, r.logIndex, r.tx, r.name, r.batchId, r.actor, r.other, r.hash, r.num, r.ts);
+          await tx.run(insert, r.block, r.logIndex, r.tx, r.name, r.batchId, r.actor, r.other, r.hash, r.num, r.ts);
         }
-        setState("chain_indexed_to", to);
-        sqlite.exec("COMMIT");
-      } catch (error) {
-        sqlite.exec("ROLLBACK");
-        throw error;
-      }
+        await setState("chain_indexed_to", to, tx);
+      });
       from = to + 1;
     }
-    setState("chain_synced_at", Date.now());
+    await setState("chain_synced_at", Date.now());
   }
 
   // Many dashboards can load at once; they share one catch-up.
@@ -222,7 +219,7 @@ function createChainIndex(db, options = {}) {
     let timer;
     await Promise.race([sync(), new Promise((r) => (timer = setTimeout(r, ms)))]);
     clearTimeout(timer);
-    const syncedAt = Number(getState("chain_synced_at")) || null;
+    const syncedAt = Number(await getState("chain_synced_at")) || null;
     return {
       syncedAt,
       stale: Boolean(lastError) || Boolean(inFlight) || !syncedAt,
@@ -230,7 +227,7 @@ function createChainIndex(db, options = {}) {
   }
 
   function events() {
-    return sqlite.prepare("SELECT * FROM chain_events ORDER BY block, log_index").all();
+    return sqlite.all("SELECT * FROM chain_events ORDER BY block, log_index");
   }
 
   return { sync, fresh, events, config };

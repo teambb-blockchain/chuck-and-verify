@@ -38,7 +38,7 @@ Compiling and testing need no `.env`. To deploy, copy `.env.example` to `.env` a
 npm start
 ```
 
-Open `http://localhost:3000`. The server serves `frontend/public/` and the `/api/` routes, and keeps portal roles in a SQLite database at `./data/portal.db` (Node's built-in `node:sqlite`).
+Open `http://localhost:3000`. The server serves `frontend/public/` and the `/api/` routes, and keeps portal roles in a SQLite database at `./data/portal.db` (the npm `sqlite3` package, so run `npm install` first).
 
 ## Deploy contracts to DIDLab
 
@@ -104,7 +104,7 @@ This layer controls the portal only. It does not replace `CredentialRegistry` ([
 
 ### The roles database
 
-`portal.db` is a SQLite file holding who has which role, plus sessions. Sign-in challenges stay in memory. The server finds the file in this order: `DATA_DIR` if set, `/srv/data` if that folder exists (DIDLab), otherwise `./data` (gitignored). It needs Node 22.5 or newer for `node:sqlite`. No extra npm package is installed.
+`portal.db` is a SQLite file holding who has which role, plus sessions. Sign-in challenges stay in memory. The server finds the file in this order: `DATA_DIR` if set, `/srv/data` if that folder exists (DIDLab), otherwise `./data` (gitignored). It uses the npm `sqlite3` package because the DIDLab container runs Node 20, which has no built-in `node:sqlite`. `server/sqlite.js` wraps it in promises and runs statements one at a time, so a transaction can't interleave with another request's writes.
 
 To give the first users their roles, use this shape:
 
@@ -128,9 +128,10 @@ nginx also keeps its default 1 MB request limit, so a form upload larger than th
 
 - **Cached scripts.** nginx sends no `Cache-Control`, so Cloudflare caches `.js` and `.css` for 4 hours (in the browser and at its edge) while `index.html` is always fresh. A deploy could then run new HTML against old modules, and a hard refresh doesn't clear Cloudflare's copy. `npm run stamp` gives `styles.css`, `app.js` and every module in the import map a `?v=<content hash>` URL, so any changed file gets a URL no cache has seen.
 
-**Updating the server.** `/srv/app` is a deployed copy, not a git checkout. Run `npm run stamp` after any change in `frontend/public/` and commit the stamped `index.html`. After pushing, redeploy so it gets the new files, then restart Node:
+**Updating the server.** `/srv/app` is a deployed copy, not a git checkout. Run `npm run stamp` after any change in `frontend/public/` and commit the stamped `index.html`. After pushing, redeploy so it gets the new files, install the server's one package (`sqlite3`; a redeploy can arrive without `node_modules`, and Hardhat is a dev dependency the server doesn't need), then restart Node:
 
 ```bash
+cd /srv/app && npm install --omit=dev
 ss -ltnp | grep :3000    # note the pid
 kill <pid>               # the supervisor starts it again on the new code
 ```

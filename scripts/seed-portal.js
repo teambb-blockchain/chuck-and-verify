@@ -6,20 +6,27 @@
 const path = require("path");
 const { openDatabase, seedOnce } = require("../server/db");
 
-const { db, dbPath, dataDir } = openDatabase();
-const seedPath = process.argv[2] || path.join(dataDir, "seed.json");
+async function main() {
+  const { db, dbPath, dataDir } = await openDatabase();
+  const seedPath = process.argv[2] || path.join(dataDir, "seed.json");
 
-try {
-  const result = seedOnce(db, seedPath);
-  db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
-  if (result.applied) {
-    console.log(`Seeded ${result.count} user(s) into ${dbPath}`);
-    console.log(
-      "This file is SQLite. On DIDLab, paste the seed JSON into /srv/data/portal.db instead; the first boot converts it. Do not upload seed.json."
-    );
-  } else {
-    console.log(`Already seeded. Roles in ${dbPath} were left unchanged.`);
+  try {
+    const result = await seedOnce(db, seedPath);
+    await db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+    if (result.applied) {
+      console.log(`Seeded ${result.count} user(s) into ${dbPath}`);
+      console.log(
+        "This file is SQLite. On DIDLab, paste the seed JSON into /srv/data/portal.db instead; the first boot converts it. Do not upload seed.json."
+      );
+    } else {
+      console.log(`Already seeded. Roles in ${dbPath} were left unchanged.`);
+    }
+  } finally {
+    await db.close();
   }
-} finally {
-  db.close();
 }
+
+main().catch((error) => {
+  console.error(error.message);
+  process.exit(1);
+});

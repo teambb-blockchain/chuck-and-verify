@@ -20,11 +20,11 @@ const MAX_UPLOAD_BYTES = 26 * 1024 * 1024;
 // Portal roles live in a SQLite portal.db. Seed that file once before deploy
 // (npm run seed:portal). A pasted JSON portal.db is converted on first boot.
 // Boot does not read a seed file.
-const { db, dbPath } = openDatabase();
-const auth = createAuth(db);
-// Copies BeefSupplyChain events into portal.db for the role dashboards.
-const chainIndex = createChainIndex(db);
-const portal = createPortal(db, auth, chainIndex);
+// Opening the database is async (npm sqlite3), so these are set in start()
+// before the server listens.
+let auth;
+let chainIndex;
+let portal;
 
 const types = {
   ".html": "text/html; charset=utf-8",
@@ -183,7 +183,7 @@ async function serve(req, res) {
       res.end("Method not allowed");
       return;
     }
-    const user = auth.currentUser(req);
+    const user = await auth.currentUser(req);
     if (!auth.can(user, "form.upload")) {
       auth.sendJson(res, user.address ? 403 : 401, {
         error: user.address
@@ -233,10 +233,40 @@ async function serve(req, res) {
   });
 }
 
-const server = http.createServer(serve);
+async function start() {
+  const { db, dbPath } = await openDatabase(undefined, {
+    onBroken(error) {
+      console.error(error, error.cause);
+      process.exit(1); // the supervisor restarts Node on a fresh connection
+    },
+  });
+  auth = createAuth(db);
+  // Copies BeefSupplyChain events into portal.db for the role dashboards.
+  chainIndex = await createChainIndex(db);
+  portal = await createPortal(db, auth, chainIndex);
 
-server.listen(port, "0.0.0.0", () => {
-  console.log(`Serving project page on port ${port}`);
-  console.log(`Portal database: ${dbPath}`);
-  chainIndex.sync();
+  // A failed query must answer 500, not reject unhandled: Node exits on that.
+  const server = http.createServer((req, res) =>
+    serve(req, res).catch((error) => {
+      console.error(error);
+      if (res.writableEnded) return;
+      if (res.headersSent) {
+        // Part of a reply is out; appending text would corrupt it.
+        res.destroy();
+        return;
+      }
+      res.writeHead(500, { "Content-Type": "text/plain; charset=utf-8" });
+      res.end("Server error");
+    })
+  );
+  server.listen(port, "0.0.0.0", () => {
+    console.log(`Serving project page on port ${port}`);
+    console.log(`Portal database: ${dbPath}`);
+    chainIndex.sync();
+  });
+}
+
+start().catch((error) => {
+  console.error(error);
+  process.exit(1);
 });

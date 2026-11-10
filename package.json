@@ -34,5 +34,8 @@
     "@nomicfoundation/hardhat-toolbox": "^6.1.2",
     "dotenv": "^17.4.2",
     "hardhat": "^2.29.1"
+  },
+  "dependencies": {
+    "sqlite3": "^5.1.7"
   }
 }

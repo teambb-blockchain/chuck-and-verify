@@ -54,16 +54,19 @@ function badRequest(message) {
   return Object.assign(new Error(message), { status: 400 });
 }
 
-function createPortal(db, auth, chainIndex) {
+async function createPortal(db, auth, chainIndex) {
   const sqlite = db.sqlite;
-  sqlite.exec(SCHEMA);
+  await sqlite.exec(SCHEMA);
   const { readJson, sendJson } = auth;
 
-  const docsFor = sqlite.prepare(
-    "SELECT batch_id, kind, cid, sha256, iv, enc_ts, original_name, created_at " +
-      "FROM documents WHERE address = ? ORDER BY created_at DESC"
-  );
-  const getRequest = sqlite.prepare("SELECT * FROM access_requests WHERE address = ?");
+  const docsFor = (address) =>
+    sqlite.all(
+      "SELECT batch_id, kind, cid, sha256, iv, enc_ts, original_name, created_at " +
+        "FROM documents WHERE address = ? ORDER BY created_at DESC",
+      address
+    );
+  const getRequest = (address) =>
+    sqlite.get("SELECT * FROM access_requests WHERE address = ?", address);
 
   function requestShape(row) {
     if (!row) return null;
@@ -75,7 +78,7 @@ function createPortal(db, auth, chainIndex) {
     };
   }
 
-  function saveDocument(user, body) {
+  async function saveDocument(user, body) {
     const kind = String(body.kind || "");
     if (!(kind in KIND_PERMISSION)) throw badRequest("Unknown document kind.");
     if (!auth.can(user, KIND_PERMISSION[kind])) {
@@ -93,34 +96,36 @@ function createPortal(db, auth, chainIndex) {
     }
     const encTs = Number(b.timestamp);
     if (!Number.isSafeInteger(encTs) || encTs <= 0) throw badRequest("The form receipt is incomplete.");
-    sqlite
-      .prepare(
-        "INSERT OR IGNORE INTO documents (batch_id, kind, address, cid, sha256, iv, enc_ts, original_name, created_at) " +
-          "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
-      )
-      .run(batchId, kind, user.address, b.cid, sha, b.iv, encTs, String(b.originalName || "").slice(0, 200), Date.now());
+    await sqlite.run(
+      "INSERT OR IGNORE INTO documents (batch_id, kind, address, cid, sha256, iv, enc_ts, original_name, created_at) " +
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      batchId, kind, user.address, b.cid, sha, b.iv, encTs, String(b.originalName || "").slice(0, 200), Date.now()
+    );
   }
 
-  function saveRequest(user, body) {
+  async function saveRequest(user, body) {
     if (user.roles.length) throw badRequest("This wallet already has a role.");
     const roles = Array.isArray(body.roles) ? [...new Set(body.roles.map(String))] : [];
     if (!roles.length) throw badRequest("Choose at least one role.");
     if (roles.some((r) => !REQUESTABLE.includes(r))) throw badRequest("That role can't be requested.");
     const note = String(body.note || "").trim().slice(0, 280);
-    const open = sqlite.prepare("SELECT COUNT(*) AS n FROM access_requests").get().n;
-    if (!getRequest.get(user.address) && open >= MAX_OPEN_REQUESTS) {
-      throw Object.assign(new Error("Too many open requests. Contact an admin directly."), { status: 503 });
-    }
-    sqlite
-      .prepare(
+    // One transaction, so two new wallets can't both pass the cap check.
+    await sqlite.transaction(async (tx) => {
+      const open = (await tx.get("SELECT COUNT(*) AS n FROM access_requests")).n;
+      const existing = await tx.get("SELECT 1 FROM access_requests WHERE address = ?", user.address);
+      if (!existing && open >= MAX_OPEN_REQUESTS) {
+        throw Object.assign(new Error("Too many open requests. Contact an admin directly."), { status: 503 });
+      }
+      await tx.run(
         "INSERT INTO access_requests (address, roles, note, created_at) VALUES (?, ?, ?, ?) " +
-          "ON CONFLICT(address) DO UPDATE SET roles = excluded.roles, note = excluded.note, created_at = excluded.created_at"
-      )
-      .run(user.address, JSON.stringify(roles), note, Date.now());
+          "ON CONFLICT(address) DO UPDATE SET roles = excluded.roles, note = excluded.note, created_at = excluded.created_at",
+        user.address, JSON.stringify(roles), note, Date.now()
+      );
+    });
   }
 
   function clearRequest(address) {
-    sqlite.prepare("DELETE FROM access_requests WHERE address = ?").run(address);
+    return sqlite.run("DELETE FROM access_requests WHERE address = ?", address);
   }
 
   // Attach this wallet's documents to a batch row. A lot form counts only if
@@ -171,14 +176,14 @@ function createPortal(db, auth, chainIndex) {
   async function dashboard(user) {
     const me = user.address;
     const chain = await chainIndex.fresh();
-    const batches = batchesFrom(chainIndex.events());
-    const docs = docsFor.all(me);
+    const batches = batchesFrom(await chainIndex.events());
+    const docs = await docsFor(me);
     const has = (role) => user.roles.includes(role);
     const out = {
       address: me,
       roles: user.roles,
       chain,
-      request: user.roles.length ? null : requestShape(getRequest.get(me)),
+      request: user.roles.length ? null : requestShape(await getRequest(me)),
       views: {},
     };
     const newestFirst = (a, b) => (b.lastMovedAt || 0) - (a.lastMovedAt || 0);
@@ -218,8 +223,8 @@ function createPortal(db, auth, chainIndex) {
     }
     if (has("ADMIN")) {
       out.views.ADMIN = {
-        users: sqlite.prepare("SELECT COUNT(*) AS n FROM users").get().n,
-        requests: sqlite.prepare("SELECT COUNT(*) AS n FROM access_requests").get().n,
+        users: (await sqlite.get("SELECT COUNT(*) AS n FROM users")).n,
+        requests: (await sqlite.get("SELECT COUNT(*) AS n FROM access_requests")).n,
       };
     }
     return out;
@@ -231,7 +236,7 @@ function createPortal(db, auth, chainIndex) {
     if (!routes.includes(urlPath) && !adminRoute) return false;
 
     try {
-      const user = auth.currentUser(req);
+      const user = await auth.currentUser(req);
       if (!user.address) return sendJson(res, 401, { error: "Sign in first." }), true;
 
       if (adminRoute) {
@@ -240,15 +245,15 @@ function createPortal(db, auth, chainIndex) {
         }
         if (urlPath === "/api/admin/requests" && req.method === "GET") {
           // A wallet that has since been given a role no longer needs its request.
-          sqlite.exec(
+          await sqlite.exec(
             "DELETE FROM access_requests WHERE address IN (SELECT address FROM user_roles)"
           );
-          const rows = sqlite.prepare("SELECT * FROM access_requests ORDER BY created_at").all();
+          const rows = await sqlite.all("SELECT * FROM access_requests ORDER BY created_at");
           return sendJson(res, 200, { requests: rows.map(requestShape) }), true;
         }
         const target = urlPath.slice("/api/admin/requests/".length);
         if (target && req.method === "DELETE") {
-          clearRequest(normalizeAddress(target));
+          await clearRequest(normalizeAddress(target));
           return sendJson(res, 200, { ok: true }), true;
         }
         return sendJson(res, 405, { error: "Method not allowed." }), true;
@@ -258,15 +263,15 @@ function createPortal(db, auth, chainIndex) {
         return sendJson(res, 200, await dashboard(user)), true;
       }
       if (urlPath === "/api/documents" && req.method === "POST") {
-        saveDocument(user, await readJson(req));
+        await saveDocument(user, await readJson(req));
         return sendJson(res, 200, { ok: true }), true;
       }
       if (urlPath === "/api/access-request" && req.method === "POST") {
-        saveRequest(user, await readJson(req));
-        return sendJson(res, 200, { request: requestShape(getRequest.get(user.address)) }), true;
+        await saveRequest(user, await readJson(req));
+        return sendJson(res, 200, { request: requestShape(await getRequest(user.address)) }), true;
       }
       if (urlPath === "/api/access-request" && req.method === "DELETE") {
-        clearRequest(user.address);
+        await clearRequest(user.address);
         return sendJson(res, 200, { request: null }), true;
       }
       return sendJson(res, 405, { error: "Method not allowed." }), true;

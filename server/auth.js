@@ -144,11 +144,11 @@ function createAuth(db) {
   // Returns { address, roles, permissions } for the request, or a signed-out
   // shape. Roles are read from the database on every request, so a change
   // made by an admin applies immediately to sessions that are already open.
-  function currentUser(req) {
+  async function currentUser(req) {
     const token = parseCookies(req.headers.cookie)[COOKIE];
     if (token) {
-      const address = db.sessionAddress(sha256(token), Date.now());
-      if (address) return { address, ...accessFor(db, address) };
+      const address = await db.sessionAddress(sha256(token), Date.now());
+      if (address) return { address, ...(await accessFor(db, address)) };
     }
     return { address: null, roles: [], permissions: [] };
   }
@@ -185,7 +185,7 @@ function createAuth(db) {
     return { nonce, message };
   }
 
-  function verify(body) {
+  async function verify(body) {
     const nonce = String(body.nonce || "");
     // Single use: removed before checking anything else.
     const row = db.takeChallenge(nonce);
@@ -205,13 +205,13 @@ function createAuth(db) {
     }
     const token = crypto.randomBytes(32).toString("base64url");
     const now = Date.now();
-    db.addSession(sha256(token), signer, now + SESSION_TTL_MS, now);
-    return { token, user: { address: signer, ...accessFor(db, signer) } };
+    await db.addSession(sha256(token), signer, now + SESSION_TTL_MS, now);
+    return { token, user: { address: signer, ...(await accessFor(db, signer)) } };
   }
 
-  function logout(req) {
+  async function logout(req) {
     const token = parseCookies(req.headers.cookie)[COOKIE];
-    if (token) db.deleteSession(sha256(token));
+    if (token) await db.deleteSession(sha256(token));
   }
 
   // Handles /api/auth/*, /api/me and /api/admin/*. Returns false when the
@@ -219,7 +219,7 @@ function createAuth(db) {
   async function handle(req, res, urlPath) {
     try {
       if (urlPath === "/api/me" && req.method === "GET") {
-        sendJson(res, 200, currentUser(req));
+        sendJson(res, 200, await currentUser(req));
         return true;
       }
       if (urlPath === "/api/auth/challenge" && req.method === "POST") {
@@ -227,14 +227,14 @@ function createAuth(db) {
         return true;
       }
       if (urlPath === "/api/auth/verify" && req.method === "POST") {
-        const { token, user } = verify(await readJson(req));
+        const { token, user } = await verify(await readJson(req));
         sendJson(res, 200, user, {
           "Set-Cookie": sessionCookie(req, token, SESSION_TTL_MS / 1000),
         });
         return true;
       }
       if (urlPath === "/api/auth/logout" && req.method === "POST") {
-        logout(req);
+        await logout(req);
         sendJson(res, 200, { address: null, roles: [], permissions: [] }, {
           "Set-Cookie": sessionCookie(req, "", 0),
         });
@@ -242,7 +242,7 @@ function createAuth(db) {
       }
 
       if (urlPath === "/api/admin/users" || urlPath.startsWith("/api/admin/users/")) {
-        const user = currentUser(req);
+        const user = await currentUser(req);
         if (!user.address) return sendJson(res, 401, { error: "Sign in first." }), true;
         if (!can(user, "users.manage")) {
           return sendJson(res, 403, { error: "Requires the ADMIN role." }), true;
@@ -251,7 +251,7 @@ function createAuth(db) {
 
         if (urlPath === "/api/admin/users" && req.method === "GET") {
           sendJson(res, 200, {
-            users: listUsers(db),
+            users: await listUsers(db),
             roles: Object.entries(ROLES).map(([name, description]) => ({
               name,
               description,
@@ -269,14 +269,14 @@ function createAuth(db) {
           if (address === user.address && !roles.includes("ADMIN")) {
             return sendJson(res, 400, { error: "You cannot remove your own ADMIN role." }), true;
           }
-          upsertUser(db, {
+          await upsertUser(db, {
             address,
             label: body.label,
             roles,
             grantedBy: user.address,
             replaceRoles: true,
           });
-          sendJson(res, 200, { users: listUsers(db) });
+          sendJson(res, 200, { users: await listUsers(db) });
           return true;
         }
         if (target && req.method === "DELETE") {
@@ -284,8 +284,8 @@ function createAuth(db) {
           if (address === user.address) {
             return sendJson(res, 400, { error: "You cannot delete yourself." }), true;
           }
-          deleteUser(db, address);
-          sendJson(res, 200, { users: listUsers(db) });
+          await deleteUser(db, address);
+          sendJson(res, 200, { users: await listUsers(db) });
           return true;
         }
         sendJson(res, 405, { error: "Method not allowed." });
