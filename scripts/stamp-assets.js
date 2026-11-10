@@ -1,13 +1,15 @@
 // Give every frontend asset a content-hashed URL so a deploy can't be mixed
-// with stale copies. teambb.didlab.org serves frontend/public through
-// Cloudflare, which caches .js/.css for 4 hours (browser and edge) while the
-// HTML is fetched fresh; without this, a new index.html can run old modules.
+// with stale copies. teambb.didlab.org serves the repo root, so index.html is
+// `/` and the modules live under /frontend/public/. Cloudflare caches .js/.css
+// for 4 hours (browser and edge) while the HTML is fetched fresh; without
+// this, a new index.html can run old modules.
 //
-// Rewrites frontend/public/index.html in place:
-//   - <link rel="stylesheet" href="./styles.css?v=<hash>">
-//   - <script type="module" src="./app.js?v=<hash>">
-//   - an import map remapping every "./x.js" to "./x.js?v=<hash>", which also
-//     covers the imports between modules (a ?v= on app.js alone would not).
+// Rewrites index.html in place:
+//   - <link rel="stylesheet" href="/frontend/public/styles.css?v=<hash>">
+//   - <script type="module" src="/frontend/public/app.js?v=<hash>">
+//   - an import map remapping every "./x.js" import to
+//     "/frontend/public/x.js?v=<hash>", which also covers imports between
+//     modules (a ?v= on app.js alone would not).
 // Each hash covers one file, so only changed files get a new URL.
 //
 // Run before each deploy: npm run stamp
@@ -16,8 +18,10 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 
-const publicDir = path.join(__dirname, "..", "frontend", "public");
-const htmlPath = path.join(publicDir, "index.html");
+const root = path.join(__dirname, "..");
+const publicDir = path.join(root, "frontend", "public");
+const htmlPath = path.join(root, "index.html");
+const assetRoot = "/frontend/public";
 const START = "<!-- asset-versions:start -->";
 const END = "<!-- asset-versions:end -->";
 
@@ -37,7 +41,7 @@ const cssVersion = hashOf("styles.css");
 
 const importMap = {
   imports: Object.fromEntries(
-    modules.map((f) => [`./${f}`, `./${f}?v=${versions[f]}`])
+    modules.map((f) => [`./${f}`, `${assetRoot}/${f}?v=${versions[f]}`])
   )
 };
 const block =
@@ -56,13 +60,13 @@ const replaceOnce = (pattern, replacement, what) => {
 };
 
 replaceOnce(
-  /href="\.\/styles\.css(\?v=[0-9a-f]+)?"/,
-  `href="./styles.css?v=${cssVersion}"`,
+  /href="(?:\.|\/frontend\/public)\/styles\.css(\?v=[0-9a-f]+)?"/,
+  `href="${assetRoot}/styles.css?v=${cssVersion}"`,
   "styles.css link"
 );
 replaceOnce(
-  /<script type="module" src="\.\/app\.js(\?v=[0-9a-f]+)?"><\/script>/,
-  `<script type="module" src="./app.js?v=${versions["app.js"]}"></script>`,
+  /<script type="module" src="(?:\.|\/frontend\/public)\/app\.js(\?v=[0-9a-f]+)?"><\/script>/,
+  `<script type="module" src="${assetRoot}/app.js?v=${versions["app.js"]}"></script>`,
   "app.js module script"
 );
 
@@ -73,7 +77,7 @@ if (existing.test(html)) {
   html = html.replace(existing, block);
 } else {
   replaceOnce(
-    /(<link rel="stylesheet" href="\.\/styles\.css\?v=[0-9a-f]+">)/,
+    /(<link rel="stylesheet" href="\/frontend\/public\/styles\.css\?v=[0-9a-f]+">)/,
     `$1\n  ${block}`,
     "stylesheet link for import map"
   );

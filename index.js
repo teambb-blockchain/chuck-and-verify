@@ -15,8 +15,9 @@ const port = Number(process.env.PORT) || 3000;
 const IPFS_ADD_URL = "https://blockchain.didlab.org/api/ipfs/add";
 const MAX_UPLOAD_BYTES = 26 * 1024 * 1024;
 
-// Portal roles live in portal.db. Seed that file once before deploy
-// (npm run seed:portal). Boot does not read a seed file.
+// Portal roles live in a SQLite portal.db. Seed that file once before deploy
+// (npm run seed:portal). A pasted JSON portal.db is converted on first boot.
+// Boot does not read a seed file.
 const { db, dbPath } = openDatabase();
 const auth = createAuth(db);
 
@@ -40,10 +41,8 @@ function isInside(dir, filePath) {
 
 function fileInPublic(requestPath) {
   let rel = requestPath;
-  if (rel === "/frontend/public" || rel === "/frontend/public/") {
-    rel = "/index.html";
-  } else if (rel.startsWith("/frontend/public/")) {
-    rel = rel.slice("/frontend/public".length) || "/index.html";
+  if (rel.startsWith("/frontend/public/")) {
+    rel = rel.slice("/frontend/public".length) || "/";
   }
   if (rel.endsWith("/")) {
     rel += "index.html";
@@ -57,6 +56,12 @@ function fileInPublic(requestPath) {
 
 function resolveFile(urlPath) {
   const decoded = decodeURIComponent((urlPath || "/").split("?")[0]);
+  // nginx serves this file for `/`. Node does the same, and keeps the
+  // scripts and styles in frontend/public, which is where `./x.js` imports
+  // are rewritten to.
+  if (decoded === "/" || decoded === "/index.html") {
+    return path.join(root, "index.html");
+  }
   const candidate = fileInPublic(decoded);
   if (!candidate) {
     return null;

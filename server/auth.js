@@ -273,6 +273,7 @@ function createAuth(db) {
             address,
             label: body.label,
             roles,
+            grantedBy: user.address,
             replaceRoles: true,
           });
           sendJson(res, 200, { users: listUsers(db) });

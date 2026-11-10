@@ -15,10 +15,10 @@ Confidential business information stays off chain: pricing, sales data, employee
 | `contracts/` | `BeefSupplyChain` and `CredentialRegistry` (Solidity) |
 | `test/` | Hardhat contract tests |
 | `scripts/` | Deploy, credential setup, sample batch, and portal seed scripts |
-| `frontend/public/` | DApp page (`index.html`, `app.js`, generated `abi.js`, portal session and admin modules) |
+| `frontend/public/` | Page modules and styles (`app.js`, generated `abi.js`, portal session and admin) |
 | `index.js` | Node server: static page, wallet sign-in, portal roles, IPFS upload proxy |
 | `server/` | Sign-in (`auth.js`), role storage (`db.js`), signature recovery (`ethsig.js`) |
-| `index.html` | Redirects `/` to `/frontend/public/index.html` |
+| `index.html` | The page nginx and Node serve at `/`. Its scripts and styles load from `frontend/public/` |
 | `docs/` | Proposal, team charter, checkpoint report |
 | `docs/architecture/` | Architecture and trust-boundary diagrams |
 | `docs/decisions/` | Architecture Decision Records, one file per decision |
@@ -38,7 +38,7 @@ Compiling and testing need no `.env`. To deploy, copy `.env.example` to `.env` a
 npm start
 ```
 
-Open `http://localhost:3000`. The server serves `frontend/public/` and the `/api/` routes, and keeps portal roles in `./data/portal.db`.
+Open `http://localhost:3000`. The server serves `frontend/public/` and the `/api/` routes, and keeps portal roles in a SQLite database at `./data/portal.db` (Node's built-in `node:sqlite`).
 
 ## Deploy contracts to DIDLab
 
@@ -90,9 +90,9 @@ The role and permission catalog lives in `server/db.js`. In the page, an element
 
 This layer controls the portal only. It does not replace `CredentialRegistry` ([ADR 0003](./docs/decisions/0003-simulated-administrative-chain.md)): the contracts still check on-chain credentials on every write.
 
-### The roles file
+### The roles database
 
-`portal.db` is a plain JSON file holding who has which role, plus sessions. The server finds it in this order: `DATA_DIR` if set, `/srv/data` if that folder exists (DIDLab), otherwise `./data` (gitignored).
+`portal.db` is a SQLite file holding who has which role, plus sessions. Sign-in challenges stay in memory. The server finds the file in this order: `DATA_DIR` if set, `/srv/data` if that folder exists (DIDLab), otherwise `./data` (gitignored). It needs Node 22.5 or newer for `node:sqlite`. No extra npm package is installed.
 
 To give the first users their roles, use this shape:
 
@@ -101,7 +101,7 @@ To give the first users their roles, use this shape:
 ```
 
 - **Locally:** put it in `data/seed.json` and run `npm run seed:portal`. That builds `data/portal.db` once; later runs leave existing roles alone.
-- **On DIDLab:** in the Files tab, create `/srv/data/portal.db` and paste the JSON. The first boot marks the file as seeded. From then on, manage roles in the Portal users card. Pasting the seed again would overwrite the current roles.
+- **On DIDLab:** in the Files tab, create `/srv/data/portal.db` and paste the JSON. The file is text. The first boot turns it into the SQLite database and does not read that text again, so a role removed in the Portal users card stays removed. Pasting the seed again would replace the database with only those seed users.
 
 Keep real addresses and labels out of this repository.
 
