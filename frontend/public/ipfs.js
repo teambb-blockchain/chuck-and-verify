@@ -195,3 +195,31 @@ export async function publishEncryptedForm({
     publishAuthorizedAt: published.publishAuthorizedAt ?? publishAt
   };
 }
+
+// Reopen a form this wallet published. The key is keccak256 of the wallet's
+// signature over the same upload message, so signing it again (deterministic
+// for a given wallet) rebuilds the key. Nothing secret is stored anywhere.
+//   doc: { cid, iv (base64), timestamp (seconds), name }
+export async function openEncryptedForm({ doc, account, signMessage }) {
+  const url = gatewayUrlForCid(doc && doc.cid);
+  if (!url) throw new Error("This form can't be found.");
+  const signature = await signMessage(
+    "Authorize DIDLab IPFS upload\nAddress:" +
+      getAddress(account) +
+      "\nTimestamp:" +
+      doc.timestamp
+  );
+  const response = await fetch(url);
+  if (!response.ok) throw new Error("The form couldn't be downloaded. Try again shortly.");
+  const ciphertext = await response.arrayBuffer();
+  const material = hexToBytes(keccak256(hexToBytes(signature)));
+  const key = await crypto.subtle.importKey("raw", material, { name: "AES-GCM" }, false, ["decrypt"]);
+  const iv = Uint8Array.from(atob(doc.iv), (c) => c.charCodeAt(0));
+  let plain;
+  try {
+    plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ciphertext);
+  } catch {
+    throw new Error("This form was saved by a different wallet and can't be opened here.");
+  }
+  return new Blob([plain], { type: "application/pdf" });
+}

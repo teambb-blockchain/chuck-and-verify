@@ -323,6 +323,7 @@ form.onsubmit = async (event) => {
       body: JSON.stringify({ label: form.label.value.trim(), roles })
     });
     renderUsers(users);
+    loadRequests();
 
     status.textContent = "Portal roles saved. Checking CredentialRegistry…";
     const plan = await planCredentials(address, roles);
@@ -451,7 +452,58 @@ issuerForm.onsubmit = async (event) => {
   }
 };
 
+// Wallets with no role can ask for one from the onboarding card. Filling the
+// form from a request still goes through Save user, so the on-chain grants
+// happen the usual way; the request clears once the wallet has a role.
+const requestsBlock = document.getElementById("adminRequestsBlock");
+const requestList = document.getElementById("adminRequests");
+const ROLE_LABEL = { PROCESSOR: "Processor", INSPECTOR: "Inspector", CUSTODIAN: "Custodian" };
+
+async function loadRequests() {
+  let requests = [];
+  try {
+    ({ requests } = await api("/api/admin/requests"));
+  } catch {
+    requestsBlock.hidden = true;
+    return;
+  }
+  requestsBlock.hidden = requests.length === 0;
+  requestList.replaceChildren(
+    ...requests.map((request) => {
+      const fill = el("button", { type: "button", className: "btn btn-accent btn-small" }, "Fill in form");
+      fill.onclick = () => {
+        form.address.value = request.address;
+        for (const box of form.querySelectorAll("input[name=roles]")) {
+          box.checked = request.roles.includes(box.value);
+        }
+        form.label.focus();
+        status.textContent = "Add a label, check the roles, then Save user.";
+      };
+      const dismiss = el("button", { type: "button", className: "btn btn-ghost btn-small" }, "Dismiss");
+      dismiss.onclick = async () => {
+        await api("/api/admin/requests/" + request.address, { method: "DELETE" }).catch(() => {});
+        loadRequests();
+      };
+      const asked = request.roles.map((r) => ROLE_LABEL[r] || r).join(", ");
+      return el(
+        "li",
+        { className: "admin-user admin-request" },
+        el(
+          "div",
+          {},
+          el("code", {}, request.address),
+          el("p", { className: "muted" },
+            "Asked for " + asked + " on " + new Date(request.createdAt).toLocaleDateString()),
+          request.note ? el("p", { className: "admin-request-note" }, request.note) : ""
+        ),
+        el("div", { className: "admin-actions" }, fill, dismiss)
+      );
+    })
+  );
+}
+
 export async function loadAdmin() {
+  loadRequests();
   status.textContent = "";
   issuerStatus.textContent = "";
   loadIssuers().catch((error) => {

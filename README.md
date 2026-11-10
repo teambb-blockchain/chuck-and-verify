@@ -88,6 +88,18 @@ Login is a wallet signature. The server issues a one-time message, the wallet si
 
 The role and permission catalog lives in `server/db.js`. In the page, an element with `data-requires="<permission>"` is shown only to wallets holding that permission. Roles are re-read on every request, so a change made in the Portal users card applies to open sessions right away.
 
+### What each person sees after signing in
+
+- **No role yet.** A card explains that the wallet can verify batches but nothing more. It shows the full address with a copy button, so the person can send it to an admin, and lets them request a role with an optional note. Admins see open requests at the top of the Portal users card ("Fill in form" prefills the user form). A request clears once that wallet has a role. While the card is open, the page rechecks every 30 seconds, so a new role appears without a reload.
+- **With roles.** A dashboard opens first, with one tab per role. Each tab shows its counts, a "What you can do" list that jumps to the right form, and a table of the batches that role touches. Processors and custodians see a recall alert when a batch they registered or hold is recalled. If a portal role has no valid on-chain credential, the dashboard says so before a submission fails.
+- **Inspector:** inspections recorded and batches waiting (excluding your own). The table shows inspection results and your reports.
+- **Processor:** batches registered, how many are still in your custody, and how many are recalled. The table shows inspection, custody and your lot forms and recall notices.
+- **Custodian:** batches in your custody and shipments on the way to you. The table offers Ship or Confirm receipt on each row.
+
+The dashboard counts come from `server/chainIndex.js`. It copies `BeefSupplyChain` events into `portal.db`, reading from the deployment block in 5,000-block chunks (DIDLab's RPC limit), and catches up when a dashboard loads. It is a cache of the chain and never takes input from users.
+
+**Opening filed forms.** After a lot form, inspection report or recall notice is confirmed, the page sends the server that upload's receipt (CID, IV and the timestamp of the encryption message) through `/api/documents`. The key is never sent. The table's form links fetch the ciphertext from the gateway and ask the uploader's wallet to sign the same message again, which rebuilds the key, then decrypt it in the browser. Only the wallet that uploaded a form can open it. An inspection report or recall notice is listed only if its fingerprint matches the one on chain.
+
 This layer controls the portal only. It does not replace `CredentialRegistry` ([ADR 0003](./docs/decisions/0003-simulated-administrative-chain.md)): the contracts still check on-chain credentials on every write.
 
 ### The roles database
@@ -109,7 +121,7 @@ Keep real addresses and labels out of this repository.
 
 In the container, nginx answers the public site. It serves the page as static files and forwards `/api/` to Node on port 3000, which runs from `/srv/app`. The nginx config can't be changed from the repo, so the server works around two of its behaviors:
 
-- **Stripped prefix.** `proxy_pass http://127.0.0.1:3000/;` removes `/api`, so `/api/me` arrives as `/me`. `index.js` adds `/api` back for its own routes (`/me`, `/auth/*`, `/admin/users`, `/ipfs/add`).
+- **Stripped prefix.** `proxy_pass http://127.0.0.1:3000/;` removes `/api`, so `/api/me` arrives as `/me`. `index.js` adds `/api` back for its own routes (`/me`, `/auth/*`, `/admin/users`, `/admin/requests`, `/dashboard`, `/documents`, `/access-request`, `/ipfs/add`).
 - **No forwarded `Host`.** Node sees `Host: 127.0.0.1:3000`. For the domain in the sign-in message and the cookie's `Secure` flag, the server uses the browser's `Origin` instead, but only if it is listed in `PORTAL_ORIGINS`. An unlisted origin falls back to `127.0.0.1`, so a look-alike site can't get a message carrying its own domain.
 
 nginx also keeps its default 1 MB request limit, so a form upload larger than that is rejected before it reaches Node.
@@ -143,6 +155,8 @@ Optional, read only by `scripts/setupCredentials.js`:
 - `PORT`: listen port (default `3000`)
 - `DATA_DIR`: folder holding `portal.db` (default `/srv/data` if it exists, otherwise `./data`)
 - `PORTAL_ORIGINS`: comma-separated public URLs trusted for the sign-in domain (default `https://teambb.didlab.org`)
+- `CHAIN_RPC`: RPC the dashboard index reads events from (default `https://eth.didlab.org`)
+- `BSC_ADDRESS`, `BSC_FROM_BLOCK`: the `BeefSupplyChain` contract to index and its deployment block (defaults: the current deployment, block 7269167). Changing the address rebuilds the index. Update both after a redeploy.
 
 ## Team docs
 

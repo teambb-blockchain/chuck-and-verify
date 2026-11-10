@@ -445,3 +445,370 @@ a:hover { color: var(--accent-hover); }
 @media (max-width: 520px) {
   .admin-user { flex-direction: column; }
 }
+
+/* ---------------------------------------------------------------------------
+   Role dashboards and onboarding
+   Tally figures use Big Shoulders Display (named for Chicago, "Hog Butcher
+   for the World"); everything else stays in the system face. Red is reserved
+   for recalls, amber for anything waiting on someone.
+   ------------------------------------------------------------------------ */
+:root {
+  --recall: #9b1c1c;
+  --recall-hover: #7f1414;
+  --recall-wash: #fbeceb;
+  --wait: #8a5300;
+  --tally-font: "Big Shoulders Display", "Arial Narrow", system-ui, sans-serif;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.dash-head { display: flex; flex-direction: column; gap: 4px; }
+.dash-synced { margin: 0; color: var(--muted); font-size: 0.8125rem; }
+.dash-synced.is-stale { color: var(--wait); }
+
+.dash-credential {
+  margin-top: var(--space-2);
+  padding: 12px var(--space-2);
+  border-left: 4px solid var(--wait);
+  background: color-mix(in srgb, var(--wait) 8%, var(--surface));
+  font-size: 0.875rem;
+}
+
+.dash-tabs {
+  display: flex;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+  border-bottom: 1px solid var(--line);
+}
+.dash-tab {
+  margin-bottom: -1px;
+  padding: var(--space-1) 0;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.dash-tab:hover { color: var(--text); }
+.dash-tab[aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); }
+
+.dash-panel { display: flex; flex-direction: column; gap: var(--space-4); margin-top: var(--space-3); }
+.dash-panel:empty { display: none; }
+#dashStatus:empty { display: none; }
+#dashStatus { margin: var(--space-2) 0 0; font-size: 0.875rem; }
+
+.dash-sub {
+  margin: 0 0 var(--space-1);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  text-align: left;
+}
+.dash-empty { margin: 0; color: var(--muted); }
+.dash-missing { margin: 0; color: var(--muted); font-size: 0.8125rem; }
+
+/* Tally: each figure sits on a heavy rule, like a count on a tally sheet. */
+.tally {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+  gap: var(--space-3);
+  margin: 0;
+}
+.tally-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding-top: 10px;
+  border-top: 4px solid var(--text);
+}
+/* Number, then what it counts, then what to do about it. */
+.tally-item dt { order: 2; color: var(--muted); font-size: 0.875rem; line-height: 1.3; }
+.tally-item dd { display: contents; }
+.tally-item .tally-n { order: 1; }
+.tally-item .tally-go { order: 3; }
+.tally-n {
+  font-family: var(--tally-font);
+  font-weight: 800;
+  font-size: 4rem;
+  line-height: 0.95;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+.tally-item.is-wait { border-top-color: var(--wait); }
+.tally-item.is-wait .tally-n { color: var(--wait); }
+.tally-item.is-recall { border-top-color: var(--recall); }
+.tally-item.is-recall .tally-n { color: var(--recall); }
+.tally-go {
+  margin-top: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.tally-go:hover { color: var(--accent-hover); }
+
+/* Recall alert */
+.recall-alert {
+  padding: var(--space-2) var(--space-2) var(--space-2) 20px;
+  border-left: 6px solid var(--recall);
+  background: var(--recall-wash);
+  font-size: 0.9375rem;
+}
+.recall-alert p { margin: 0 0 4px; }
+.recall-alert-title {
+  color: var(--recall);
+  font-family: var(--tally-font);
+  font-weight: 800;
+  font-size: 1.625rem;
+  line-height: 1.1;
+}
+.recall-alert-list { margin: var(--space-1) 0 0; padding-left: 1.1rem; }
+.recall-alert-list li { margin: 2px 0; }
+
+/* What you can do */
+.can-do-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.can-do-btn {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  height: 100%;
+  padding: 12px var(--space-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.can-do-btn:hover { border-color: var(--accent); }
+.can-do-label { color: var(--accent); font-weight: 600; }
+.can-do-hint { color: var(--muted); font-size: 0.8125rem; line-height: 1.4; }
+
+/* Batch table: filters, search, sorting */
+.lots-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-2); }
+.lots-count { margin: 0; color: var(--muted); font-size: 0.8125rem; font-variant-numeric: tabular-nums; }
+.lots-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-1) var(--space-2);
+  margin-bottom: var(--space-2);
+}
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 4px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.chip:hover { border-color: var(--accent); }
+.chip-n { color: var(--muted); font-weight: 400; font-variant-numeric: tabular-nums; }
+.chip[aria-pressed="true"] { border-color: var(--text); background: var(--text); color: var(--surface); }
+.chip[aria-pressed="true"] .chip-n { color: inherit; opacity: 0.75; }
+.lots-tools { display: flex; gap: var(--space-1); flex: 0 1 14rem; }
+.lots-search { padding: 6px 12px; font-size: 0.875rem; }
+.lots-sort { display: none; padding: 6px 12px; font-size: 0.875rem; }
+
+.sort-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.sort-btn:hover { color: var(--text); }
+/* Triangle shows the direction of the active sort only. */
+.sort-mark {
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 5px solid currentColor;
+  opacity: 0;
+}
+.sort-btn:hover .sort-mark { opacity: 0.35; }
+th[aria-sort="ascending"] .sort-btn,
+th[aria-sort="descending"] .sort-btn { color: var(--text); }
+th[aria-sort="ascending"] .sort-mark { opacity: 1; border-top: 0; border-bottom: 5px solid currentColor; }
+th[aria-sort="descending"] .sort-mark { opacity: 1; }
+
+.lots { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+.lots thead th {
+  padding: 0 var(--space-1) 6px 0;
+  border-bottom: 1px solid var(--text);
+  color: var(--muted);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-align: left;
+}
+.lots tbody th,
+.lots td {
+  padding: 12px var(--space-1) 12px 0;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+  text-align: left;
+  font-weight: 400;
+}
+.lot-id { display: block; font-weight: 600; font-variant-numeric: tabular-nums; }
+.lot-meta { display: block; color: var(--muted); font-size: 0.8125rem; }
+.lot-flag { display: block; color: var(--recall); font-weight: 600; font-size: 0.8125rem; }
+.lots tr.is-recalled { background: var(--recall-wash); box-shadow: inset 4px 0 0 var(--recall); }
+.lots tr.is-recalled th { padding-left: 12px; }
+.lots .lot-action { padding-right: 0; text-align: right; white-space: nowrap; }
+
+.state { display: inline-flex; align-items: baseline; gap: 6px; }
+.state::before {
+  content: "";
+  flex: 0 0 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--line);
+  transform: translateY(-1px);
+}
+.state-text { min-width: 0; }
+.state.is-pass::before,
+.state.is-yours::before { background: var(--accent); }
+.state.is-wait { color: var(--wait); }
+.state.is-wait::before { background: var(--wait); }
+.state.is-fail { color: var(--recall); }
+.state.is-fail::before { background: var(--recall); }
+.state.is-away { color: var(--muted); }
+.state.is-away::before { background: #aab3bd; }
+.state-date { margin-left: 6px; color: var(--muted); font-size: 0.8125rem; white-space: nowrap; }
+.none { color: var(--muted); }
+
+.doc-links { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.doc-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.doc-link:disabled { color: var(--muted); cursor: progress; }
+
+/* A section reached from the dashboard flashes its edge once. */
+.card.is-arrived { animation: arrived 1.2s ease-out; }
+@keyframes arrived {
+  from { box-shadow: 0 0 0 3px var(--accent), var(--shadow); }
+  to { box-shadow: 0 0 0 3px transparent, var(--shadow); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .card.is-arrived { animation: none; }
+}
+
+/* Onboarding */
+.onboard .lede { max-width: 52ch; }
+.onboard-wallet {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) 12px;
+  margin: var(--space-3) 0;
+  padding: 12px var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+}
+.onboard-wallet-label { font-size: 0.875rem; font-weight: 600; }
+.onboard-wallet code { flex: 1 1 16rem; word-break: break-all; font-size: 0.875rem; }
+.onboard-roles { display: grid; gap: var(--space-1); }
+.optional { color: var(--muted); font-weight: 400; }
+textarea {
+  width: 100%;
+  padding: var(--space-1) 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  line-height: 1.4;
+  resize: vertical;
+}
+#onboardRequestForm .field { margin-bottom: var(--space-2); }
+.onboard-pending {
+  padding: var(--space-2);
+  border-left: 4px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 6%, var(--surface));
+}
+.onboard-pending p { margin: 0 0 var(--space-1); }
+#onboardStatus:empty { display: none; }
+#onboardStatus { margin: var(--space-2) 0 0; }
+
+/* Custody and recall cards */
+.custody-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+  margin-top: var(--space-1);
+}
+.custody-step h3 { margin-top: var(--space-1); }
+.custody-step .field { margin-bottom: var(--space-2); }
+.custody-step .muted { margin-bottom: var(--space-2); }
+#custodyStatus,
+#recallStatus { margin: var(--space-2) 0 0; overflow-wrap: anywhere; }
+#custodyStatus:empty,
+#recallStatus:empty { display: none; }
+#recallSection .muted { margin: var(--space-1) 0 var(--space-2); }
+.btn-recall { background: var(--recall); color: #fff; }
+.btn-recall:hover { background: var(--recall-hover); }
+
+.admin-request-note { margin: 4px 0 0; font-size: 0.875rem; }
+
+@media (max-width: 560px) {
+  .tally { grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr)); gap: var(--space-2); }
+  .tally-n { font-size: 3.25rem; }
+  .custody-split { grid-template-columns: 1fr; }
+  .lots-tools { flex: 1 1 100%; }
+  .lots-search { flex: 1 1 auto; min-width: 0; }
+  .lots-sort { display: block; flex: 0 0 auto; width: auto; }
+  .lots thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .lots tr { display: block; padding: 12px 0; border-bottom: 1px solid var(--line); }
+  .lots tbody th,
+  .lots td { display: flex; justify-content: space-between; gap: var(--space-2); padding: 4px 0; border: 0; }
+  .lots tbody th { display: block; }
+  .lots td[data-label]::before { content: attr(data-label); color: var(--muted); }
+  .lots tr.is-recalled { padding: 12px; }
+  .lots tr.is-recalled th { padding-left: 0; }
+  .lots .lot-action { justify-content: flex-start; padding-top: var(--space-1); }
+  .lots .lot-action:empty { display: none; }
+}

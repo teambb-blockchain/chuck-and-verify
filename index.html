@@ -5,16 +5,21 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Chuck and Verify</title>
   <link rel="canonical" href="/">
-  <link rel="stylesheet" href="/frontend/public/styles.css?v=88b90f6f0c">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;800&display=swap">
+  <link rel="stylesheet" href="/frontend/public/styles.css?v=a743005de8">
   <!-- asset-versions:start -->
   <script type="importmap">
   {
     "imports": {
       "./abi.js": "/frontend/public/abi.js?v=e7bb5a762b",
-      "./admin.js": "/frontend/public/admin.js?v=c2fd321850",
-      "./app.js": "/frontend/public/app.js?v=fa9ed109e2",
+      "./actions.js": "/frontend/public/actions.js?v=5b1955376c",
+      "./admin.js": "/frontend/public/admin.js?v=f971c51c98",
+      "./app.js": "/frontend/public/app.js?v=9547b6d7c3",
       "./chain.js": "/frontend/public/chain.js?v=66530b53fe",
-      "./ipfs.js": "/frontend/public/ipfs.js?v=1bbf16bae9",
+      "./dashboard.js": "/frontend/public/dashboard.js?v=35812c15e3",
+      "./ipfs.js": "/frontend/public/ipfs.js?v=93f5458b4e",
       "./registryAbi.js": "/frontend/public/registryAbi.js?v=3f9db4a2f2",
       "./session.js": "/frontend/public/session.js?v=2ccf39cfcb"
     }
@@ -37,6 +42,44 @@
     </header>
 
     <main class="main">
+      <section id="onboarding" class="card onboard" aria-labelledby="onboard-heading" hidden>
+        <h1 id="onboard-heading">This wallet doesn't have a role yet</h1>
+        <p class="lede">You can verify any batch, like anyone else. To register, inspect, move or recall batches, a portal admin needs to give you a role.</p>
+        <div class="onboard-wallet">
+          <span class="onboard-wallet-label">Your wallet</span>
+          <code id="onboardAddress"></code>
+          <button id="copyAddress" class="btn btn-ghost btn-small" type="button">Copy address</button>
+        </div>
+        <div id="onboardRequestForm">
+          <fieldset class="role-options">
+            <legend>Which role do you need?</legend>
+            <div id="onboardRoles" class="onboard-roles"></div>
+          </fieldset>
+          <div class="field">
+            <label for="onboardNote">Note for the admin <span class="optional">(optional)</span></label>
+            <textarea id="onboardNote" maxlength="280" rows="2" placeholder="Your name and the plant or company you work for"></textarea>
+          </div>
+          <button id="requestAccess" class="btn btn-accent" type="button">Request access</button>
+        </div>
+        <div id="onboardPending" class="onboard-pending" hidden>
+          <p id="onboardPendingText"></p>
+          <p class="muted">This page picks up your new role as soon as an admin adds it.</p>
+          <button id="withdrawRequest" class="btn btn-ghost btn-small" type="button">Withdraw request</button>
+        </div>
+        <p id="onboardStatus" role="status" aria-live="polite"></p>
+      </section>
+
+      <section id="dashboard" class="card dash" aria-labelledby="dash-heading" hidden>
+        <div class="dash-head">
+          <h1 id="dash-heading">Your work</h1>
+          <p id="dashSynced" class="dash-synced"></p>
+        </div>
+        <div id="dashCredential" class="dash-credential" role="alert" hidden></div>
+        <div id="dashTabs" class="dash-tabs" role="tablist" aria-label="Your roles" hidden></div>
+        <div id="dashPanel" class="dash-panel" role="tabpanel" aria-labelledby="dash-heading"></div>
+        <p id="dashStatus" role="status" aria-live="polite"></p>
+      </section>
+
       <section class="card" aria-labelledby="verify-heading">
         <h1 id="verify-heading">Scan or enter a batch ID to verify</h1>
         <p class="lede">Look up a registered batch on DIDLab.</p>
@@ -117,9 +160,63 @@
         <button id="inspectRecovery" class="btn btn-ghost" type="button" hidden>Download receipt</button>
       </section>
 
+      <section id="custodySection" class="card" data-requires="custody.transfer" aria-labelledby="custody-heading" hidden>
+        <h2 id="custody-heading">Move a batch</h2>
+        <div class="field">
+          <label for="custodyBatchId">Batch ID</label>
+          <input id="custodyBatchId" maxlength="31" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="custody-split">
+          <div class="custody-step">
+            <h3>Ship it</h3>
+            <div class="field">
+              <label for="custodyTo">Receiving wallet</label>
+              <input id="custodyTo" pattern="0x[0-9a-fA-F]{40}" autocomplete="off" spellcheck="false" placeholder="0x…">
+            </div>
+            <button id="recordShipment" class="btn btn-accent" type="button">Record shipment</button>
+          </div>
+          <div class="custody-step">
+            <h3>Receive it</h3>
+            <p class="muted">When a batch shipped to you arrives, confirm it to take custody.</p>
+            <button id="confirmReceipt" class="btn btn-accent" type="button">Confirm receipt</button>
+          </div>
+        </div>
+        <p id="custodyStatus" role="status" aria-live="polite"></p>
+      </section>
+
+      <section id="recallSection" class="card recall-card" data-requires="batch.recall" aria-labelledby="recall-heading" hidden>
+        <h2 id="recall-heading">Recall a batch</h2>
+        <p class="muted">You can recall only batches your wallet registered. A recall can't be undone. You can later raise it to a more serious class.</p>
+        <div class="field-row">
+          <div class="field">
+            <label for="recallBatchId">Batch ID</label>
+            <input id="recallBatchId" maxlength="31" autocomplete="off" spellcheck="false">
+          </div>
+          <div class="field">
+            <label for="recallClass">Class</label>
+            <select id="recallClass">
+              <option value="1">Class I: serious health risk</option>
+              <option value="2">Class II: remote health risk</option>
+              <option value="3" selected>Class III: no health risk expected</option>
+            </select>
+          </div>
+        </div>
+        <div class="field">
+          <label for="recallNoticeFile">Recall notice</label>
+          <input id="recallNoticeFile" class="form-file" type="file" accept="application/pdf,.pdf">
+        </div>
+        <p class="muted">The notice is kept private. Only a fingerprint of it is saved on the blockchain.</p>
+        <button id="recordRecall" class="btn btn-recall" type="button">Recall batch</button>
+        <p id="recallStatus" role="status" aria-live="polite"></p>
+      </section>
+
       <section id="adminSection" class="card" data-requires="users.manage" aria-labelledby="admin-heading" hidden>
         <h2 id="admin-heading">Portal users</h2>
         <p class="muted">Roles decide what each wallet sees in this portal. On-chain writes are still checked against the CredentialRegistry.</p>
+        <div id="adminRequestsBlock" hidden>
+          <h3 id="requests-heading">Access requests</h3>
+          <ul id="adminRequests" class="admin-list" aria-labelledby="requests-heading"></ul>
+        </div>
         <ul id="adminUsers" class="admin-list"></ul>
         <form id="adminUserForm" class="admin-form">
           <div class="field-row">
@@ -193,6 +290,6 @@
     </footer>
   </div>
 
-  <script type="module" src="/frontend/public/app.js?v=fa9ed109e2"></script>
+  <script type="module" src="/frontend/public/app.js?v=9547b6d7c3"></script>
 </body>
 </html>

@@ -4,6 +4,8 @@ const fs = require("fs");
 const path = require("path");
 const { openDatabase } = require("./server/db");
 const { createAuth } = require("./server/auth");
+const { createChainIndex } = require("./server/chainIndex");
+const { createPortal } = require("./server/portal");
 
 const root = __dirname;
 const publicDir = path.join(root, "frontend", "public");
@@ -20,6 +22,9 @@ const MAX_UPLOAD_BYTES = 26 * 1024 * 1024;
 // Boot does not read a seed file.
 const { db, dbPath } = openDatabase();
 const auth = createAuth(db);
+// Copies BeefSupplyChain events into portal.db for the role dashboards.
+const chainIndex = createChainIndex(db);
+const portal = createPortal(db, auth, chainIndex);
 
 const types = {
   ".html": "text/html; charset=utf-8",
@@ -145,7 +150,8 @@ function proxyIpfsAdd(req, res) {
 // The DIDLab container's nginx forwards /api/ with `proxy_pass .../;`, which
 // strips the prefix: /api/me arrives here as /me. Put it back for the API
 // routes only. None of these collide with a file in frontend/public.
-const STRIPPED_API_ROUTE = /^\/(me|auth\/[a-z]+|admin\/users(\/.*)?|ipfs\/add)$/;
+const STRIPPED_API_ROUTE =
+  /^\/(me|auth\/[a-z]+|admin\/(users|requests)(\/.*)?|ipfs\/add|dashboard|documents|access-request)$/;
 
 function withApiPrefix(urlPath) {
   return STRIPPED_API_ROUTE.test(urlPath) ? "/api" + urlPath : urlPath;
@@ -162,6 +168,9 @@ async function serve(req, res) {
   }
 
   if (urlPath.startsWith("/api/") && (await auth.handle(req, res, urlPath))) {
+    return;
+  }
+  if (urlPath.startsWith("/api/") && (await portal.handle(req, res, urlPath))) {
     return;
   }
 
@@ -229,4 +238,5 @@ const server = http.createServer(serve);
 server.listen(port, "0.0.0.0", () => {
   console.log(`Serving project page on port ${port}`);
   console.log(`Portal database: ${dbPath}`);
+  chainIndex.sync();
 });

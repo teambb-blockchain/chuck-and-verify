@@ -300,7 +300,7 @@ function createAuth(db) {
     return false;
   }
 
-  return { handle, currentUser, can, sendJson };
+  return { handle, currentUser, can, sendJson, readJson };
 }
 
 module.exports = { createAuth };

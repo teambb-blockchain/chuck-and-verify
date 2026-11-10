@@ -8,6 +8,7 @@ import {
 } from "https://esm.sh/viem@2";
 import { abi } from "./abi.js";
 import {
+  api,
   fetchSession,
   signIn,
   signOut,
@@ -15,6 +16,8 @@ import {
   SIGNED_OUT
 } from "./session.js";
 import { loadAdmin } from "./admin.js";
+import { renderForSession, refreshDashboard } from "./dashboard.js";
+import "./actions.js";
 import {
   gatewayUrlForCid,
   publishEncryptedForm
@@ -77,6 +80,7 @@ function syncWalletChrome(accounts) {
     )
   );
   applyPermissions(signedIn ? session.permissions : []);
+  renderForSession(signedIn ? session : null);
 
   if (signedIn && session.permissions.includes("users.manage") && !adminLoaded) {
     adminLoaded = true;
@@ -213,11 +217,6 @@ connectWalletBtn.onclick = async () => {
         "Check your wallet: sign the login message (no gas, no transaction).";
       session = await signIn(accounts[0]);
       walletNotice.hidden = true;
-      if (session.roles.length === 0) {
-        walletNotice.hidden = false;
-        walletNotice.textContent =
-          "Signed in. This wallet has no portal roles yet; ask an admin to assign one.";
-      }
     }
     await updateNetworkStatus();
   } catch (error) {
@@ -241,6 +240,36 @@ signOutBtn.onclick = async () => {
 switchNetworkBtn.onclick = () => {
   switchToDidLab();
 };
+
+// Roles are re-read on every request, so a role an admin adds shows up the
+// next time this tab asks. Ask when the tab comes back into view, and every
+// 30 seconds while a wallet with no role waits on the onboarding card.
+async function recheckRoles() {
+  if (!session.address) return;
+  const next = await fetchSession();
+  if (next.address === session.address && next.roles.join() !== session.roles.join()) {
+    session = next;
+    await updateNetworkStatus();
+  }
+}
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") recheckRoles();
+});
+setInterval(() => {
+  if (session.address && session.roles.length === 0 && document.visibilityState === "visible") {
+    recheckRoles();
+  }
+}, 30000);
+
+// Remember a confirmed form on the server so it opens from any browser.
+function recordDocument(kind, batchId, bundle) {
+  api("/api/documents", {
+    method: "POST",
+    body: JSON.stringify({ kind, batchId, bundle })
+  })
+    .catch(() => {})
+    .finally(refreshDashboard);
+}
 
 session = await fetchSession();
 updateNetworkStatus();
@@ -554,6 +583,7 @@ registerButton.onclick = async () => {
 
     saveFormBundle(batchName, bundle);
     showStoredForm(batchName);
+    recordDocument("lot", batchName, bundle);
 
     // Do not loadBatch here. The BatchRegistered watcher refreshes
     // the record after the log is observed on chain.
@@ -711,6 +741,7 @@ inspectButton.onclick = async () => {
       "Inspection recorded: " + batchName + " " + (passed ? "passed" : "failed") + ". ",
       txLink
     );
+    recordDocument("inspection", batchName, bundle);
     document.getElementById("batchId").value = batchName;
     await loadBatch(batchName);
   } catch (error) {

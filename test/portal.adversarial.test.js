@@ -24,8 +24,53 @@ describe("Portal server — adversarial", function () {
   let server, base, dataDir;
   const adminWallet = ethers.Wallet.createRandom();
   const processorWallet = ethers.Wallet.createRandom();
+  const inspectorWallet = ethers.Wallet.createRandom();
+  const newcomerWallet = ethers.Wallet.createRandom();
+
+  // A fake DIDLab RPC for the dashboard's event index: two batches from the
+  // processor, the first one inspected (passed) with REPORT_SHA.
+  const CONTRACT = "0x" + "ab".repeat(20);
+  const REPORT_SHA = "cd".repeat(32);
+  const word = (hex) => hex.replace(/^0x/, "").padStart(64, "0");
+  const addrTopic = (a) => "0x" + word(a.toLowerCase());
+  const batchTopic = (name) => ethers.encodeBytes32String(name);
+  const fakeLogs = () => [
+    {
+      blockNumber: "0xa", logIndex: "0x0", transactionHash: "0x" + "01".repeat(32),
+      topics: [ethers.id("BatchRegistered(bytes32,address,uint256)"), batchTopic("BB-T-1"), addrTopic(processorWallet.address)],
+      data: "0x" + word("1f4"),
+    },
+    {
+      blockNumber: "0xb", logIndex: "0x0", transactionHash: "0x" + "02".repeat(32),
+      topics: [ethers.id("BatchRegistered(bytes32,address,uint256)"), batchTopic("BB-T-2"), addrTopic(processorWallet.address)],
+      data: "0x" + word("1c2"),
+    },
+    {
+      blockNumber: "0xc", logIndex: "0x0", transactionHash: "0x" + "03".repeat(32),
+      topics: [ethers.id("InspectionRecorded(bytes32,address,bytes32,bool)"), batchTopic("BB-T-1"), addrTopic(inspectorWallet.address)],
+      data: "0x" + REPORT_SHA + word("1"),
+    },
+  ];
+  let rpc;
 
   before(async function () {
+    rpc = require("http")
+      .createServer((req, res) => {
+        let body = "";
+        req.on("data", (c) => (body += c));
+        req.on("end", () => {
+          const { id, method } = JSON.parse(body);
+          const result =
+            method === "eth_blockNumber" ? "0x14"
+            : method === "eth_getLogs" ? fakeLogs()
+            : method === "eth_getBlockByNumber" ? { timestamp: "0x6553f100" }
+            : null;
+          res.end(JSON.stringify({ jsonrpc: "2.0", id, result }));
+        });
+      })
+      .listen(0);
+    await new Promise((r) => rpc.once("listening", r));
+
     dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "cv-portal-"));
     fs.writeFileSync(
       path.join(dataDir, "portal.db"),
@@ -33,6 +78,7 @@ describe("Portal server — adversarial", function () {
         users: [
           { address: adminWallet.address.toLowerCase(), label: "admin", roles: ["ADMIN"] },
           { address: processorWallet.address.toLowerCase(), label: "plant", roles: ["PROCESSOR"] },
+          { address: inspectorWallet.address.toLowerCase(), label: "usda", roles: ["INSPECTOR"] },
         ],
         sessions: [],
       })
@@ -41,7 +87,14 @@ describe("Portal server — adversarial", function () {
     base = `http://127.0.0.1:${port}`;
     server = spawn(process.execPath, ["index.js"], {
       cwd: path.join(__dirname, ".."),
-      env: { ...process.env, PORT: String(port), DATA_DIR: dataDir },
+      env: {
+        ...process.env,
+        PORT: String(port),
+        DATA_DIR: dataDir,
+        CHAIN_RPC: `http://127.0.0.1:${rpc.address().port}`,
+        BSC_ADDRESS: CONTRACT,
+        BSC_FROM_BLOCK: "1",
+      },
       stdio: ["ignore", "pipe", "pipe"],
     });
     await new Promise((resolve, reject) => {
@@ -52,6 +105,7 @@ describe("Portal server — adversarial", function () {
 
   after(function () {
     if (server) server.kill();
+    if (rpc) rpc.close();
     fs.rmSync(dataDir, { recursive: true, force: true });
   });
 
@@ -166,8 +220,14 @@ describe("Portal server — adversarial", function () {
     it("stores only a hash of the session token on disk", async function () {
       const { cookie } = await signIn(processorWallet);
       const token = cookie.split("=")[1];
-      const db = fs.readFileSync(path.join(dataDir, "portal.db"), "utf8");
-      expect(db).to.not.include(token);
+      // WAL mode can hold the new session in a sidecar until the next checkpoint.
+      const blob = Buffer.concat(
+        ["portal.db", "portal.db-wal", "portal.db-shm"].map((name) => {
+          const filePath = path.join(dataDir, name);
+          return fs.existsSync(filePath) ? fs.readFileSync(filePath) : Buffer.alloc(0);
+        })
+      );
+      expect(blob.includes(Buffer.from(token))).to.equal(false);
     });
   });
 
@@ -205,6 +265,102 @@ describe("Portal server — adversarial", function () {
     });
   });
 
+  describe("dashboards", function () {
+    const bundle = (wallet, sha = "ef".repeat(32)) => ({
+      address: wallet.address,
+      cid: "QmTestCid123",
+      ciphertextSha256: sha,
+      iv: "AAAAAAAAAAAAAAAA",
+      timestamp: 1700000000,
+      originalName: "lot.pdf",
+    });
+    const send = (method, p, cookie, body, type = "application/json") =>
+      fetch(base + p, { method, headers: { cookie, "content-type": type }, body: JSON.stringify(body) });
+    const dashboard = async (cookie) =>
+      (await fetch(base + "/api/dashboard", { headers: { cookie } })).json();
+
+    it("requires a session", async function () {
+      expect((await fetch(base + "/api/dashboard")).status).to.equal(401);
+    });
+
+    it("counts a processor's batches from the indexed events", async function () {
+      const { cookie } = await signIn(processorWallet);
+      const d = await dashboard(cookie);
+      expect(d.chain.stale).to.equal(false);
+      expect(d.views.PROCESSOR).to.include({ registered: 2, inCustody: 2, recalled: 0 });
+      expect(d.views.PROCESSOR.rows.map((r) => r.batchId)).to.have.members(["BB-T-1", "BB-T-2"]);
+      expect(d.views).to.not.have.property("INSPECTOR");
+    });
+
+    it("shows an inspector what is waiting, excluding what they already inspected", async function () {
+      const { cookie } = await signIn(inspectorWallet);
+      const d = await dashboard(cookie);
+      expect(d.views.INSPECTOR).to.include({ inspected: 1, waiting: 1 });
+    });
+
+    it("refuses a form receipt for another wallet or the wrong role", async function () {
+      const { cookie } = await signIn(processorWallet);
+      const other = await send("POST", "/api/documents", cookie, {
+        kind: "lot", batchId: "BB-T-1", bundle: bundle(inspectorWallet),
+      });
+      expect(other.status).to.equal(403);
+      const role = await send("POST", "/api/documents", cookie, {
+        kind: "inspection", batchId: "BB-T-1", bundle: bundle(processorWallet),
+      });
+      expect(role.status).to.equal(403);
+    });
+
+    it("lists an inspection report only when its fingerprint matches the chain", async function () {
+      const { cookie } = await signIn(inspectorWallet);
+      const wrong = await send("POST", "/api/documents", cookie, {
+        kind: "inspection", batchId: "BB-T-1", bundle: bundle(inspectorWallet),
+      });
+      expect(wrong.status).to.equal(200);
+      let row = (await dashboard(cookie)).views.INSPECTOR.rows.find((r) => r.batchId === "BB-T-1");
+      expect(row.documents).to.have.length(0);
+
+      await send("POST", "/api/documents", cookie, {
+        kind: "inspection", batchId: "BB-T-1", bundle: { ...bundle(inspectorWallet, REPORT_SHA), cid: "QmRealReport" },
+      });
+      row = (await dashboard(cookie)).views.INSPECTOR.rows.find((r) => r.batchId === "BB-T-1");
+      expect(row.documents.map((d) => d.cid)).to.deep.equal(["QmRealReport"]);
+      expect(row.documents[0]).to.not.have.property("sha256");
+    });
+
+    it("lets a wallet with no role request one, and shows it to admins only", async function () {
+      const { cookie } = await signIn(newcomerWallet);
+      const d = await dashboard(cookie);
+      expect(d.roles).to.deep.equal([]);
+      expect(d.views).to.deep.equal({});
+
+      const admin = await send("POST", "/api/access-request", cookie, { roles: ["ADMIN"] });
+      expect(admin.status).to.equal(400);
+      const crossSite = await send("POST", "/api/access-request", cookie, { roles: ["INSPECTOR"] }, "text/plain");
+      expect(crossSite.status).to.equal(415);
+
+      const ok = await send("POST", "/api/access-request", cookie, { roles: ["INSPECTOR"], note: "FSIS" });
+      expect((await ok.json()).request.roles).to.deep.equal(["INSPECTOR"]);
+      expect((await fetch(base + "/api/admin/requests", { headers: { cookie } })).status).to.equal(403);
+
+      const adminCookie = (await signIn(adminWallet)).cookie;
+      const list = await (await fetch(base + "/api/admin/requests", { headers: { cookie: adminCookie } })).json();
+      expect(list.requests.map((r) => r.address)).to.include(newcomerWallet.address.toLowerCase());
+    });
+
+    it("refuses an access request from a wallet that already has a role", async function () {
+      const { cookie } = await signIn(processorWallet);
+      const r = await send("POST", "/api/access-request", cookie, { roles: ["INSPECTOR"] });
+      expect(r.status).to.equal(400);
+    });
+
+    it("drops a request once the admin gives that wallet a role", async function () {
+      const adminCookie = (await signIn(adminWallet)).cookie;
+      await send("PUT", "/api/admin/users/" + newcomerWallet.address, adminCookie, { roles: ["CUSTODIAN"] });
+      const list = await (await fetch(base + "/api/admin/requests", { headers: { cookie: adminCookie } })).json();
+      expect(list.requests.map((r) => r.address)).to.not.include(newcomerWallet.address.toLowerCase());
+    });
+  });
+
   describe("static files", function () {
     for (const probe of [
       "/../server/auth.js",
@@ -217,6 +373,18 @@ describe("Portal server — adversarial", function () {
         expect(r.status).to.be.oneOf([400, 404]);
       });
     }
+
+    it("serves the repo-root page at / with assets from frontend/public", async function () {
+      const page = await fetch(base + "/");
+      expect(page.status).to.equal(200);
+      const html = await page.text();
+      expect(html).to.include("<title>Chuck and Verify</title>");
+      expect(html).to.not.include("http-equiv=\"refresh\"");
+      expect(html).to.include('src="/frontend/public/app.js?v=');
+      const css = await fetch(base + "/frontend/public/styles.css");
+      expect(css.status).to.equal(200);
+      expect(css.headers.get("content-type")).to.include("text/css");
+    });
 
     it("P-6: refuses framing and MIME sniffing on served files", async function () {
       const r = await fetch(base + "/");
