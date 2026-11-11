@@ -25,10 +25,13 @@ describe("Portal server — adversarial", function () {
   const adminWallet = ethers.Wallet.createRandom();
   const processorWallet = ethers.Wallet.createRandom();
   const inspectorWallet = ethers.Wallet.createRandom();
+  const custodianWallet = ethers.Wallet.createRandom();
   const newcomerWallet = ethers.Wallet.createRandom();
 
-  // A fake DIDLab RPC for the dashboard's event index: two batches from the
-  // processor, the first one inspected (passed) with REPORT_SHA.
+  // A fake DIDLab RPC for the dashboard's event index: three batches from the
+  // processor, the first one inspected (passed) with REPORT_SHA. The third is
+  // shipped to the custodian, split into two lots, then recalled (Class II)
+  // after the split. One LotCreated names a parent that doesn't exist.
   const CONTRACT = "0x" + "ab".repeat(20);
   const REPORT_SHA = "cd".repeat(32);
   const word = (hex) => hex.replace(/^0x/, "").padStart(64, "0");
@@ -49,6 +52,36 @@ describe("Portal server — adversarial", function () {
       blockNumber: "0xc", logIndex: "0x0", transactionHash: "0x" + "03".repeat(32),
       topics: [ethers.id("InspectionRecorded(bytes32,address,bytes32,bool)"), batchTopic("BB-T-1"), addrTopic(inspectorWallet.address)],
       data: "0x" + REPORT_SHA + word("1"),
+    },
+    {
+      blockNumber: "0xd", logIndex: "0x0", transactionHash: "0x" + "04".repeat(32),
+      topics: [ethers.id("BatchRegistered(bytes32,address,uint256)"), batchTopic("BB-T-3"), addrTopic(processorWallet.address)],
+      data: "0x" + word("3e8"),
+    },
+    {
+      blockNumber: "0xe", logIndex: "0x0", transactionHash: "0x" + "05".repeat(32),
+      topics: [ethers.id("ShipmentRecorded(bytes32,address,address)"), batchTopic("BB-T-3"), addrTopic(processorWallet.address), addrTopic(custodianWallet.address)],
+      data: "0x",
+    },
+    {
+      blockNumber: "0xf", logIndex: "0x0", transactionHash: "0x" + "06".repeat(32),
+      topics: [ethers.id("ReceiptConfirmed(bytes32,address)"), batchTopic("BB-T-3"), addrTopic(custodianWallet.address)],
+      data: "0x",
+    },
+    ...[["BB-T-3-L1", "258"], ["BB-T-3-L2", "190"]].map(([lot, weight], i) => ({
+      blockNumber: "0x10", logIndex: "0x" + i.toString(16), transactionHash: "0x" + "07".repeat(32),
+      topics: [ethers.id("LotCreated(bytes32,bytes32,address,uint256)"), batchTopic("BB-T-3"), batchTopic(lot), addrTopic(custodianWallet.address)],
+      data: "0x" + word(weight),
+    })),
+    {
+      blockNumber: "0x11", logIndex: "0x0", transactionHash: "0x" + "08".repeat(32),
+      topics: [ethers.id("LotCreated(bytes32,bytes32,address,uint256)"), batchTopic("BB-NOPE"), batchTopic("BB-NOPE-L1"), addrTopic(custodianWallet.address)],
+      data: "0x" + word("1"),
+    },
+    {
+      blockNumber: "0x12", logIndex: "0x0", transactionHash: "0x" + "09".repeat(32),
+      topics: [ethers.id("RecallRecorded(bytes32,address,bytes32,uint8)"), batchTopic("BB-T-3"), addrTopic(processorWallet.address)],
+      data: "0x" + "ee".repeat(32) + word("2"),
     },
   ];
   let rpc;
@@ -79,6 +112,7 @@ describe("Portal server — adversarial", function () {
           { address: adminWallet.address.toLowerCase(), label: "admin", roles: ["ADMIN"] },
           { address: processorWallet.address.toLowerCase(), label: "plant", roles: ["PROCESSOR"] },
           { address: inspectorWallet.address.toLowerCase(), label: "usda", roles: ["INSPECTOR"] },
+          { address: custodianWallet.address.toLowerCase(), label: "carrier", roles: ["CUSTODIAN"] },
         ],
         sessions: [],
       })
@@ -287,8 +321,12 @@ describe("Portal server — adversarial", function () {
       const { cookie } = await signIn(processorWallet);
       const d = await dashboard(cookie);
       expect(d.chain.stale).to.equal(false);
-      expect(d.views.PROCESSOR).to.include({ registered: 2, inCustody: 2, recalled: 0 });
-      expect(d.views.PROCESSOR.rows.map((r) => r.batchId)).to.have.members(["BB-T-1", "BB-T-2"]);
+      // The split batch counts once as a registration; its recall counts
+      // once per lot, since the lots are what is out there.
+      expect(d.views.PROCESSOR).to.include({ registered: 3, inCustody: 2, recalled: 2 });
+      expect(d.views.PROCESSOR.rows.map((r) => r.batchId)).to.have.members(
+        ["BB-T-1", "BB-T-2", "BB-T-3", "BB-T-3-L1", "BB-T-3-L2"]
+      );
       expect(d.views).to.not.have.property("INSPECTOR");
     });
 
@@ -296,6 +334,22 @@ describe("Portal server — adversarial", function () {
       const { cookie } = await signIn(inspectorWallet);
       const d = await dashboard(cookie);
       expect(d.views.INSPECTOR).to.include({ inspected: 1, waiting: 1 });
+      expect(d.views.INSPECTOR.rows.map((r) => r.batchId)).to.not.include("BB-T-3-L1");
+    });
+
+    it("shows a custodian the lots of a batch they split, each with the batch's recall", async function () {
+      const { cookie } = await signIn(custodianWallet);
+      const v = (await dashboard(cookie)).views.CUSTODIAN;
+      // The split batch is listed but not counted: only its lots are in hand.
+      expect(v).to.include({ inCustody: 2, recalledInCustody: 2, incoming: 0 });
+      const byId = Object.fromEntries(v.rows.map((r) => [r.batchId, r]));
+      expect(Object.keys(byId)).to.have.members(["BB-T-3", "BB-T-3-L1", "BB-T-3-L2"]);
+      expect(byId["BB-T-3"]).to.include({ lotCount: 2, parentId: null });
+      expect(byId["BB-T-3-L1"]).to.include({
+        parentId: "BB-T-3", lotCount: 0, weightLbs: 600, holderIsYou: true,
+        processorIsYou: false, recalled: true, recallClass: 2,
+      });
+      expect(byId["BB-T-3-L2"].weightLbs).to.equal(400);
     });
 
     it("refuses a form receipt for another wallet or the wrong role", async function () {
@@ -358,6 +412,57 @@ describe("Portal server — adversarial", function () {
       await send("PUT", "/api/admin/users/" + newcomerWallet.address, adminCookie, { roles: ["CUSTODIAN"] });
       const list = await (await fetch(base + "/api/admin/requests", { headers: { cookie: adminCookie } })).json();
       expect(list.requests.map((r) => r.address)).to.not.include(newcomerWallet.address.toLowerCase());
+    });
+  });
+
+  describe("organization types", function () {
+    const send = (method, p, cookie, body) =>
+      fetch(base + p, { method, headers: { cookie, "content-type": "application/json" }, body: JSON.stringify(body) });
+    const me = async (cookie) => (await fetch(base + "/api/me", { headers: { cookie } })).json();
+    const carrierWallet = ethers.Wallet.createRandom();
+    const askerWallet = ethers.Wallet.createRandom();
+
+    it("saves a type only with the credential role behind it", async function () {
+      const adminCookie = (await signIn(adminWallet)).cookie;
+      const url = "/api/admin/users/" + carrierWallet.address;
+      const unpaired = await send("PUT", url, adminCookie, { roles: ["PROCESSOR"], organization: "carrier" });
+      expect(unpaired.status).to.equal(400);
+      expect((await unpaired.json()).error).to.match(/Carrier needs the CUSTODIAN role/);
+      const unknown = await send("PUT", url, adminCookie, { roles: ["CUSTODIAN"], organization: "__proto__" });
+      expect(unknown.status).to.equal(400);
+
+      const ok = await send("PUT", url, adminCookie, { roles: ["CUSTODIAN"], organization: "carrier" });
+      expect(ok.status).to.equal(200);
+      const listed = (await ok.json()).users.find((u) => u.address === carrierWallet.address.toLowerCase());
+      expect(listed.organization).to.equal("carrier");
+
+      const { cookie } = await signIn(carrierWallet);
+      expect(await me(cookie)).to.include({ organization: "carrier" });
+      const d = await (await fetch(base + "/api/dashboard", { headers: { cookie } })).json();
+      expect(d.organization).to.equal("carrier");
+      expect(d.views).to.have.property("CUSTODIAN");
+    });
+
+    it("keeps the type on a save that omits it, and drops it with its role", async function () {
+      const adminCookie = (await signIn(adminWallet)).cookie;
+      const url = "/api/admin/users/" + carrierWallet.address;
+      await send("PUT", url, adminCookie, { roles: ["CUSTODIAN", "PROCESSOR"] });
+      const { cookie } = await signIn(carrierWallet);
+      expect((await me(cookie)).organization).to.equal("carrier");
+      await send("PUT", url, adminCookie, { roles: ["PROCESSOR"] });
+      expect((await me(cookie)).organization).to.equal(null);
+    });
+
+    it("turns a newcomer's organization type into the role it requests", async function () {
+      const { cookie } = await signIn(askerWallet);
+      const bad = await send("POST", "/api/access-request", cookie, { organization: "consumer" });
+      expect(bad.status).to.equal(400);
+      const ok = await send("POST", "/api/access-request", cookie, { organization: "retailer", note: "Corner market" });
+      expect((await ok.json()).request).to.deep.include({ roles: ["CUSTODIAN"], organization: "retailer" });
+      const adminCookie = (await signIn(adminWallet)).cookie;
+      const list = await (await fetch(base + "/api/admin/requests", { headers: { cookie: adminCookie } })).json();
+      const mine = list.requests.find((r) => r.address === askerWallet.address.toLowerCase());
+      expect(mine.organization).to.equal("retailer");
     });
   });
 

@@ -13,7 +13,7 @@
 // form (CID, IV, the timestamp in the message they signed). It never holds
 // the key: that is derived from a fresh wallet signature in the browser.
 
-const { ROLES, normalizeAddress } = require("./db");
+const { ROLES, ORGANIZATIONS, checkOrganization, normalizeAddress } = require("./db");
 const { batchesFrom } = require("./chainIndex");
 
 const SCHEMA = `
@@ -57,6 +57,10 @@ function badRequest(message) {
 async function createPortal(db, auth, chainIndex) {
   const sqlite = db.sqlite;
   await sqlite.exec(SCHEMA);
+  const columns = await sqlite.all("PRAGMA table_info(access_requests)");
+  if (!columns.some((c) => c.name === "organization")) {
+    await sqlite.exec("ALTER TABLE access_requests ADD COLUMN organization TEXT NOT NULL DEFAULT ''");
+  }
   const { readJson, sendJson } = auth;
 
   const docsFor = (address) =>
@@ -73,6 +77,7 @@ async function createPortal(db, auth, chainIndex) {
     return {
       address: row.address,
       roles: JSON.parse(row.roles),
+      organization: row.organization || null,
       note: row.note,
       createdAt: row.created_at,
     };
@@ -105,9 +110,17 @@ async function createPortal(db, auth, chainIndex) {
 
   async function saveRequest(user, body) {
     if (user.roles.length) throw badRequest("This wallet already has a role.");
-    const roles = Array.isArray(body.roles) ? [...new Set(body.roles.map(String))] : [];
-    if (!roles.length) throw badRequest("Choose at least one role.");
+    // An organization type implies its role, so a newcomer only has to say
+    // what kind of business they are.
+    const organization = String(body.organization || "");
+    if (organization && !Object.hasOwn(ORGANIZATIONS, organization)) {
+      throw badRequest("Unknown organization type.");
+    }
+    const asked = Array.isArray(body.roles) ? body.roles.map(String) : [];
+    const roles = [...new Set([...(organization ? [ORGANIZATIONS[organization].role] : []), ...asked])];
+    if (!roles.length) throw badRequest("Choose what kind of organization you are.");
     if (roles.some((r) => !REQUESTABLE.includes(r))) throw badRequest("That role can't be requested.");
+    checkOrganization(organization, roles);
     const note = String(body.note || "").trim().slice(0, 280);
     // One transaction, so two new wallets can't both pass the cap check.
     await sqlite.transaction(async (tx) => {
@@ -117,9 +130,10 @@ async function createPortal(db, auth, chainIndex) {
         throw Object.assign(new Error("Too many open requests. Contact an admin directly."), { status: 503 });
       }
       await tx.run(
-        "INSERT INTO access_requests (address, roles, note, created_at) VALUES (?, ?, ?, ?) " +
-          "ON CONFLICT(address) DO UPDATE SET roles = excluded.roles, note = excluded.note, created_at = excluded.created_at",
-        user.address, JSON.stringify(roles), note, Date.now()
+        "INSERT INTO access_requests (address, roles, organization, note, created_at) VALUES (?, ?, ?, ?, ?) " +
+          "ON CONFLICT(address) DO UPDATE SET roles = excluded.roles, organization = excluded.organization, " +
+          "note = excluded.note, created_at = excluded.created_at",
+        user.address, JSON.stringify(roles), organization, note, Date.now()
       );
     });
   }
@@ -131,11 +145,13 @@ async function createPortal(db, auth, chainIndex) {
   // Attach this wallet's documents to a batch row. A lot form counts only if
   // this wallet registered the batch; an inspection report only if its
   // fingerprint is the one recorded on chain. A form published for an attempt
-  // that never landed is left out.
+  // that never landed is left out. A lot shares the documents of the batch it
+  // was split from, since it carries that batch's form, inspection and recall.
   function documentsFor(batch, docs, me) {
     const out = [];
+    const ids = [batch.batchId, batch.parentId];
     const pick = (kind, ok) => {
-      const d = docs.find((x) => x.batch_id === batch.batchId && x.kind === kind && ok(x));
+      const d = docs.find((x) => ids.includes(x.batch_id) && x.kind === kind && ok(x));
       if (d) {
         out.push({
           kind,
@@ -169,6 +185,8 @@ async function createPortal(db, auth, chainIndex) {
       recallClass: batch.recallClass,
       recalledAt: batch.recalledAt,
       lastMovedAt: batch.receivedAt || batch.shippedAt || batch.registeredAt,
+      parentId: batch.parentId,
+      lotCount: batch.lotIds.length,
       documents: documentsFor(batch, docs, me),
     };
   }
@@ -182,15 +200,23 @@ async function createPortal(db, auth, chainIndex) {
     const out = {
       address: me,
       roles: user.roles,
+      organization: user.organization || null,
       chain,
       request: user.roles.length ? null : requestShape(await getRequest(me)),
       views: {},
     };
     const newestFirst = (a, b) => (b.lastMovedAt || 0) - (a.lastMovedAt || 0);
+    // A split batch lives on as its lots. Counts of product in hand skip it,
+    // so a split never counts the same beef twice.
+    const notSplit = (b) => b.lotIds.length === 0;
 
     if (has("INSPECTOR")) {
-      const mine = batches.filter((b) => b.inspector === me);
-      const waiting = batches.filter((b) => !b.inspected && !b.recalled && b.processor !== me);
+      // Lots are inspected through their parent batch, so they are never
+      // waiting and never count as an inspection of their own.
+      const mine = batches.filter((b) => b.inspector === me && !b.parentId);
+      const waiting = batches.filter(
+        (b) => !b.inspected && !b.recalled && b.processor !== me && !b.parentId
+      );
       out.views.INSPECTOR = {
         inspected: mine.length,
         waiting: waiting.length,
@@ -202,14 +228,14 @@ async function createPortal(db, auth, chainIndex) {
     if (has("PROCESSOR")) {
       const mine = batches.filter((b) => b.processor === me);
       out.views.PROCESSOR = {
-        registered: mine.length,
-        inCustody: mine.filter((b) => b.holder === me).length,
-        recalled: mine.filter((b) => b.recalled).length,
+        registered: mine.filter((b) => !b.parentId).length,
+        inCustody: mine.filter((b) => b.holder === me && notSplit(b)).length,
+        recalled: mine.filter((b) => b.recalled && notSplit(b)).length,
         rows: mine.map((b) => row(b, me, docs)).sort(newestFirst),
       };
     }
     if (has("CUSTODIAN")) {
-      const held = batches.filter((b) => b.holder === me);
+      const held = batches.filter((b) => b.holder === me && notSplit(b));
       const incoming = batches.filter((b) => b.pendingReceiver === me);
       const touched = batches.filter(
         (b) => b.holder === me || b.pendingReceiver === me || b.handlers.has(me)

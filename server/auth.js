@@ -9,6 +9,7 @@ const { recoverPersonalSignAddress } = require("./ethsig");
 const {
   ROLES,
   PERMISSIONS,
+  ORGANIZATIONS,
   normalizeAddress,
   upsertUser,
   deleteUser,
@@ -150,7 +151,7 @@ function createAuth(db) {
       const address = await db.sessionAddress(sha256(token), Date.now());
       if (address) return { address, ...(await accessFor(db, address)) };
     }
-    return { address: null, roles: [], permissions: [] };
+    return { address: null, roles: [], permissions: [], organization: null };
   }
 
   function can(user, permission) {
@@ -259,6 +260,7 @@ function createAuth(db) {
                 PERMISSIONS[p].roles.includes(name)
               ),
             })),
+            organizations: Object.entries(ORGANIZATIONS).map(([key, o]) => ({ key, ...o })),
           });
           return true;
         }
@@ -273,6 +275,7 @@ function createAuth(db) {
             address,
             label: body.label,
             roles,
+            organization: body.organization === undefined ? undefined : String(body.organization || ""),
             grantedBy: user.address,
             replaceRoles: true,
           });

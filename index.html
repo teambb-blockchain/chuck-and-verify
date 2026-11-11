@@ -5,20 +5,22 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Chuck and Verify</title>
   <link rel="canonical" href="/">
+  <!-- Drop the ?r= that frontend/public/index.html adds to skip a stale cached copy of `/`. -->
+  <script>if (/[?&]r=/.test(location.search)) history.replaceState(null, "", "/" + location.hash);</script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;800&display=swap">
-  <link rel="stylesheet" href="/frontend/public/styles.css?v=a743005de8">
+  <link rel="stylesheet" href="/frontend/public/styles.css?v=a1da030134">
   <!-- asset-versions:start -->
   <script type="importmap">
   {
     "imports": {
-      "./abi.js": "/frontend/public/abi.js?v=e7bb5a762b",
-      "./actions.js": "/frontend/public/actions.js?v=5b1955376c",
-      "./admin.js": "/frontend/public/admin.js?v=f971c51c98",
-      "./app.js": "/frontend/public/app.js?v=9547b6d7c3",
+      "./abi.js": "/frontend/public/abi.js?v=120e37e0ae",
+      "./actions.js": "/frontend/public/actions.js?v=2fd3c00728",
+      "./admin.js": "/frontend/public/admin.js?v=1c69d0a249",
+      "./app.js": "/frontend/public/app.js?v=e11b075d41",
       "./chain.js": "/frontend/public/chain.js?v=66530b53fe",
-      "./dashboard.js": "/frontend/public/dashboard.js?v=35812c15e3",
+      "./dashboard.js": "/frontend/public/dashboard.js?v=cf8345d8d6",
       "./ipfs.js": "/frontend/public/ipfs.js?v=93f5458b4e",
       "./registryAbi.js": "/frontend/public/registryAbi.js?v=3f9db4a2f2",
       "./session.js": "/frontend/public/session.js?v=2ccf39cfcb"
@@ -44,7 +46,7 @@
     <main class="main">
       <section id="onboarding" class="card onboard" aria-labelledby="onboard-heading" hidden>
         <h1 id="onboard-heading">This wallet doesn't have a role yet</h1>
-        <p class="lede">You can verify any batch, like anyone else. To register, inspect, move or recall batches, a portal admin needs to give you a role.</p>
+        <p class="lede">You can verify any batch, like any consumer. To register, inspect, move or recall batches, tell a portal admin what kind of organization you are.</p>
         <div class="onboard-wallet">
           <span class="onboard-wallet-label">Your wallet</span>
           <code id="onboardAddress"></code>
@@ -52,7 +54,7 @@
         </div>
         <div id="onboardRequestForm">
           <fieldset class="role-options">
-            <legend>Which role do you need?</legend>
+            <legend>What kind of organization are you?</legend>
             <div id="onboardRoles" class="onboard-roles"></div>
           </fieldset>
           <div class="field">
@@ -100,6 +102,7 @@
           <p><strong>Inspected:</strong> <span id="resultInspected"></span></p>
           <p><strong>Inspection Passed:</strong> <span id="resultPassed"></span></p>
           <p><strong>Recalled:</strong> <span id="resultRecalled"></span></p>
+          <p id="resultLotsRow" hidden><strong id="resultLotsLabel"></strong> <span id="resultLots"></span></p>
           <p id="resultFormRow" hidden><strong>Encrypted form:</strong> <span><a id="resultFormLink" target="_blank" rel="noopener noreferrer"></a></span></p>
         </div>
       </section>
@@ -184,6 +187,32 @@
         <p id="custodyStatus" role="status" aria-live="polite"></p>
       </section>
 
+      <section id="splitSection" class="card" data-requires="custody.transfer" aria-labelledby="split-heading" hidden>
+        <h2 id="split-heading">Split a batch into lots</h2>
+        <p class="muted">Divide a batch in your custody into lots you can ship separately, such as BEEF-01-L1 and BEEF-01-L2. The lot weights must add up to the batch weight.</p>
+        <div class="field-row">
+          <div class="field">
+            <label for="splitBatchId">Batch ID</label>
+            <input id="splitBatchId" maxlength="31" autocomplete="off" spellcheck="false">
+          </div>
+          <div class="field">
+            <label for="splitCount">Number of lots</label>
+            <input id="splitCount" type="number" min="2" max="20" step="1" value="2">
+          </div>
+        </div>
+        <label class="check">
+          <input id="splitEqual" type="checkbox" checked>
+          Equal weights
+        </label>
+        <div class="field split-weights">
+          <label for="splitWeights">Lot weights (lbs), separated by commas</label>
+          <input id="splitWeights" autocomplete="off" spellcheck="false" placeholder="400, 350, 250" aria-describedby="splitWeightsHint" disabled>
+          <p id="splitWeightsHint" class="muted">Worked out from the batch weight. Clear Equal weights to set each lot yourself.</p>
+        </div>
+        <button id="splitBatch" class="btn btn-accent" type="button">Split batch</button>
+        <p id="splitStatus" role="status" aria-live="polite"></p>
+      </section>
+
       <section id="recallSection" class="card recall-card" data-requires="batch.recall" aria-labelledby="recall-heading" hidden>
         <h2 id="recall-heading">Recall a batch</h2>
         <p class="muted">You can recall only batches your wallet registered. A recall can't be undone. You can later raise it to a more serious class.</p>
@@ -228,6 +257,13 @@
               <label for="adminLabel">Label</label>
               <input id="adminLabel" name="label" maxlength="80" autocomplete="off" placeholder="Name or organization">
             </div>
+          </div>
+          <div class="field">
+            <label for="adminOrganization">Organization type</label>
+            <select id="adminOrganization" name="organization">
+              <option value="">Not set</option>
+            </select>
+            <p class="muted">Tailors the dashboard to the work this business does, such as a carrier's pickups or a retailer's deliveries. It needs the matching role.</p>
           </div>
           <fieldset class="role-options">
             <legend>Roles</legend>
@@ -290,6 +326,6 @@
     </footer>
   </div>
 
-  <script type="module" src="/frontend/public/app.js?v=9547b6d7c3"></script>
+  <script type="module" src="/frontend/public/app.js?v=e11b075d41"></script>
 </body>
 </html>

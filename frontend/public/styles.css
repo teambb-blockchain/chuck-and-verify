@@ -152,6 +152,30 @@ select {
 
 .form-file { margin-top: var(--space-1); }
 
+input:disabled {
+  background: var(--bg);
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  width: fit-content;
+  cursor: pointer;
+}
+
+.check input {
+  width: auto;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+#splitSection > .muted { margin: var(--space-1) 0 var(--space-2); }
+.split-weights { margin: var(--space-2) 0; }
+.split-weights .muted { margin: var(--space-1) 0 0; font-size: 0.875rem; }
+
 #downloadRecovery { margin-top: var(--space-2); }
 
 #registerSection .muted,
@@ -514,6 +538,8 @@ a:hover { color: var(--accent-hover); }
 }
 .dash-empty { margin: 0; color: var(--muted); }
 .dash-missing { margin: 0; color: var(--muted); font-size: 0.8125rem; }
+.dash-intro { margin: 0; color: var(--muted); max-width: 60ch; }
+.dash-intro strong { color: var(--text, inherit); font-weight: 600; }
 
 /* Tally: each figure sits on a heavy rule, like a count on a tally sheet. */
 .tally {
@@ -692,6 +718,7 @@ th[aria-sort="descending"] .sort-mark { opacity: 1; }
 .lots tr.is-recalled { background: var(--recall-wash); box-shadow: inset 4px 0 0 var(--recall); }
 .lots tr.is-recalled th { padding-left: 12px; }
 .lots .lot-action { padding-right: 0; text-align: right; white-space: nowrap; }
+.row-actions { display: inline-flex; gap: 6px; }
 
 .state { display: inline-flex; align-items: baseline; gap: 6px; }
 .state::before {

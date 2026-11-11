@@ -41,6 +41,8 @@ const CHAIN_ROLES = ["PROCESSOR", "INSPECTOR", "CUSTODIAN"];
 const credentialType = (role) => keccak256(stringToHex(role));
 
 let catalog = [];
+let organizations = [];
+const orgName = (key) => organizations.find((o) => o.key === key)?.name || key;
 let annotateRun = 0;
 
 function el(tag, props = {}, ...children) {
@@ -95,6 +97,20 @@ function renderRoleBoxes() {
   );
 }
 
+function renderOrganizations() {
+  form.organization.replaceChildren(
+    el("option", { value: "" }, "Not set"),
+    ...organizations.map((o) => el("option", { value: o.key }, o.name + " (" + o.role + ")"))
+  );
+}
+
+// Picking a type checks the role it needs, so the pair saves cleanly.
+form.organization.onchange = () => {
+  const org = organizations.find((o) => o.key === form.organization.value);
+  const box = org && form.querySelector(`input[name=roles][value="${org.role}"]`);
+  if (box) box.checked = true;
+};
+
 function renderUsers(users) {
   if (!users.length) {
     list.replaceChildren(el("li", { className: "muted" }, "No portal users yet."));
@@ -106,6 +122,7 @@ function renderUsers(users) {
       edit.onclick = () => {
         form.address.value = user.address;
         form.label.value = user.label;
+        form.organization.value = user.organization || "";
         for (const box of form.querySelectorAll("input[name=roles]")) {
           box.checked = user.roles.includes(box.value);
         }
@@ -135,6 +152,7 @@ function renderUsers(users) {
           {},
           el("code", {}, user.address),
           user.label ? el("span", { className: "muted" }, " — " + user.label) : "",
+          user.organization ? el("span", { className: "muted" }, " · " + orgName(user.organization)) : "",
           el("div", { className: "role-chips" },
             ...(user.roles.length
               ? user.roles.map((r) => {
@@ -320,7 +338,7 @@ form.onsubmit = async (event) => {
   try {
     const { users } = await api("/api/admin/users/" + encodeURIComponent(address), {
       method: "PUT",
-      body: JSON.stringify({ label: form.label.value.trim(), roles })
+      body: JSON.stringify({ label: form.label.value.trim(), roles, organization: form.organization.value })
     });
     renderUsers(users);
     loadRequests();
@@ -473,6 +491,7 @@ async function loadRequests() {
       const fill = el("button", { type: "button", className: "btn btn-accent btn-small" }, "Fill in form");
       fill.onclick = () => {
         form.address.value = request.address;
+        form.organization.value = request.organization || "";
         for (const box of form.querySelectorAll("input[name=roles]")) {
           box.checked = request.roles.includes(box.value);
         }
@@ -484,7 +503,9 @@ async function loadRequests() {
         await api("/api/admin/requests/" + request.address, { method: "DELETE" }).catch(() => {});
         loadRequests();
       };
-      const asked = request.roles.map((r) => ROLE_LABEL[r] || r).join(", ");
+      const asked = request.organization
+        ? orgName(request.organization)
+        : request.roles.map((r) => ROLE_LABEL[r] || r).join(", ");
       return el(
         "li",
         { className: "admin-user admin-request" },
@@ -503,7 +524,6 @@ async function loadRequests() {
 }
 
 export async function loadAdmin() {
-  loadRequests();
   status.textContent = "";
   issuerStatus.textContent = "";
   loadIssuers().catch((error) => {
@@ -512,9 +532,13 @@ export async function loadAdmin() {
   try {
     const data = await api("/api/admin/users");
     catalog = data.roles;
+    organizations = data.organizations || [];
     renderRoleBoxes();
+    renderOrganizations();
     renderUsers(data.users);
   } catch (error) {
     status.textContent = error.message;
   }
+  // After the catalog, so requests show the organization's name.
+  loadRequests();
 }

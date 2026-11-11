@@ -49,7 +49,34 @@ const PERMISSIONS = {
   },
 };
 
+// The stakeholders of CHECKPOINT_REPORT §2 that write on the operational
+// chain, each backed by the one credential type the contract checks. The
+// portal uses the type to tailor a wallet's dashboard; the chain never sees
+// it. Regulators other than FSIS (FMCSA, FDA, state and local health)
+// attest parties off chain and have no portal type yet. Consumers verify
+// without signing in.
+const ORGANIZATIONS = {
+  processor: { role: "PROCESSOR", name: "Beef processor" },
+  fsis: { role: "INSPECTOR", name: "USDA FSIS inspector" },
+  storage: { role: "CUSTODIAN", name: "Storage facility" },
+  distributor: { role: "CUSTODIAN", name: "Distributor" },
+  carrier: { role: "CUSTODIAN", name: "Carrier" },
+  retailer: { role: "CUSTODIAN", name: "Retailer" },
+  restaurant: { role: "CUSTODIAN", name: "Restaurant" },
+};
+
 const ADDRESS_RE = /^0x[0-9a-f]{40}$/;
+
+// '' (none) or a known type whose credential is among `roles`.
+function checkOrganization(organization, roles) {
+  const org = String(organization || "");
+  if (!org) return "";
+  const bad = (message) => Object.assign(new Error(message), { status: 400 });
+  if (!Object.hasOwn(ORGANIZATIONS, org)) throw bad("Unknown organization type: " + org);
+  const { role, name } = ORGANIZATIONS[org];
+  if (!roles.includes(role)) throw bad(name + " needs the " + role + " role.");
+  return org;
+}
 
 function normalizeAddress(value) {
   const address = String(value || "").trim().toLowerCase();
@@ -83,7 +110,8 @@ CREATE TABLE IF NOT EXISTS role_permissions (
 CREATE TABLE IF NOT EXISTS users (
   address    TEXT PRIMARY KEY CHECK (length(address) = 42 AND address GLOB '0x*'),
   label      TEXT NOT NULL DEFAULT '',
-  created_at INTEGER NOT NULL
+  created_at INTEGER NOT NULL,
+  organization TEXT NOT NULL DEFAULT ''
 );
 CREATE TABLE IF NOT EXISTS user_roles (
   address    TEXT NOT NULL REFERENCES users(address) ON DELETE CASCADE,
@@ -123,6 +151,11 @@ async function connectDatabase(dbPath, options) {
   const sqlite = await openSqlite(dbPath, options);
   await sqlite.exec("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;");
   await sqlite.exec(SCHEMA);
+  // Databases built before organization types existed lack the column.
+  const columns = await sqlite.all("PRAGMA table_info(users)");
+  if (!columns.some((c) => c.name === "organization")) {
+    await sqlite.exec("ALTER TABLE users ADD COLUMN organization TEXT NOT NULL DEFAULT ''");
+  }
   await syncCatalog(sqlite);
   return sqlite;
 }
@@ -314,6 +347,7 @@ async function seedOnce(db, seedPath) {
       address: user.address,
       label: user.label,
       roles: user.roles || [],
+      organization: user.organization,
       grantedBy: "seed",
       replaceRoles: false,
       createdAt: user.createdAt,
@@ -326,20 +360,33 @@ async function seedOnce(db, seedPath) {
   return { applied: true, count: users.length };
 }
 
-async function upsertUser(db, { address, label, roles, grantedBy, replaceRoles, createdAt }) {
+// organization: a key of ORGANIZATIONS, '' to clear, or undefined to keep
+// the current one while the wallet still holds its role.
+async function upsertUser(db, { address, label, roles, organization, grantedBy, replaceRoles, createdAt }) {
   const addr = normalizeAddress(address);
   const unknown = roles.filter((role) => !(role in ROLES));
   if (unknown.length) throw new Error("Unknown role(s): " + unknown.join(", "));
   const now = Date.now();
+  const before = await db.sqlite.get("SELECT organization FROM users WHERE address = ?", addr);
+  const heldBefore = replaceRoles ? [] : (await accessFor(db, addr)).roles;
+  const held = [...new Set([...heldBefore, ...roles])];
+  let org;
+  if (organization === undefined) {
+    const current = before ? before.organization : "";
+    org = current && held.includes(ORGANIZATIONS[current]?.role) ? current : "";
+  } else {
+    org = checkOrganization(organization, held);
+  }
 
   await db.sqlite.transaction(async (tx) => {
     await tx.run(
-      "INSERT INTO users (address, label, created_at) VALUES (?, ?, ?) " +
-        "ON CONFLICT(address) DO UPDATE SET label = " +
+      "INSERT INTO users (address, label, created_at, organization) VALUES (?, ?, ?, ?) " +
+        "ON CONFLICT(address) DO UPDATE SET organization = excluded.organization, label = " +
         "CASE WHEN excluded.label = '' THEN users.label ELSE excluded.label END",
       addr,
       String(label || "").slice(0, 80),
-      Number(createdAt) || now
+      Number(createdAt) || now,
+      org
     );
     if (replaceRoles) {
       await tx.run("DELETE FROM user_roles WHERE address = ?", addr);
@@ -371,12 +418,13 @@ async function accessFor(db, address) {
       address
     )
   ).map((row) => row.permission);
-  return { roles, permissions };
+  const user = await db.sqlite.get("SELECT organization FROM users WHERE address = ?", address);
+  return { roles, permissions, organization: (user && user.organization) || null };
 }
 
 async function listUsers(db) {
   const users = await db.sqlite.all(
-    "SELECT address, label, created_at FROM users ORDER BY created_at"
+    "SELECT address, label, created_at, organization FROM users ORDER BY created_at"
   );
   const rolesByAddress = new Map(users.map((user) => [user.address, []]));
   for (const grant of await db.sqlite.all("SELECT address, role FROM user_roles ORDER BY role")) {
@@ -386,6 +434,7 @@ async function listUsers(db) {
     address: user.address,
     label: user.label,
     createdAt: user.created_at,
+    organization: user.organization || null,
     roles: rolesByAddress.get(user.address),
   }));
 }
@@ -393,6 +442,8 @@ async function listUsers(db) {
 module.exports = {
   ROLES,
   PERMISSIONS,
+  ORGANIZATIONS,
+  checkOrganization,
   normalizeAddress,
   openDatabase,
   seedOnce,

@@ -22,11 +22,6 @@ const ROLE_NAME = {
   CUSTODIAN: "Custodian",
   ADMIN: "Admin"
 };
-const ROLE_PLAIN = {
-  PROCESSOR: "Register new batches and recall your own.",
-  INSPECTOR: "Record USDA inspections with a report.",
-  CUSTODIAN: "Ship batches and confirm deliveries."
-};
 // What each role adds, phrased to finish "Your roles don't include …".
 const ROLE_ABILITY = {
   PROCESSOR: "registering batches",
@@ -34,6 +29,104 @@ const ROLE_ABILITY = {
   CUSTODIAN: "moving batches",
   ADMIN: "managing portal users"
 };
+// Organization types (server/db.js ORGANIZATIONS), the stakeholders of the
+// checkpoint report that write on chain. The chain sees only the credential
+// behind each one; the portal uses the type to show each business the work
+// it actually does. A custodian with no type sees the generic custodian view.
+const ORGS = {
+  processor: { role: "PROCESSOR", name: "Beef processor", desc: "You slaughter and pack beef. Register each batch and recall your own." },
+  fsis: { role: "INSPECTOR", name: "USDA FSIS inspector", tab: "USDA inspection", desc: "You inspect batches for USDA and file the report." },
+  storage: { role: "CUSTODIAN", name: "Storage facility", desc: "You keep beef cold between handoffs. Confirm deliveries and ship batches on." },
+  distributor: { role: "CUSTODIAN", name: "Distributor", desc: "You receive batches, split them into lots, and send lots to buyers." },
+  carrier: { role: "CUSTODIAN", name: "Carrier", desc: "You haul beef. Confirm each pickup and hand it to the receiver." },
+  retailer: { role: "CUSTODIAN", name: "Retailer", desc: "You sell beef in your store. Confirm each delivery that arrives." },
+  restaurant: { role: "CUSTODIAN", name: "Restaurant", desc: "You prepare beef for diners. Confirm each delivery that arrives." }
+};
+const ORG_ORDER = Object.keys(ORGS);
+
+// How the custodian panel reads for each kind of custodian. `actions` is the
+// "What you can do" list; `ship` and `split` say whether a row offers them.
+const HOLD_UNTIL = " until the processor tells you how to return or dispose of ";
+const CUSTODY_PROFILE = {
+  default: {
+    actions: ["ship", "split", "receive"],
+    ship: true,
+    split: true,
+    here: "With you",
+    inCustody: "in your custody",
+    incoming: "on the way to you",
+    incomingTag: "On its way to you",
+    passedOn: "Passed on",
+    hold: ["It's in your custody. Don't ship it. Hold it", "They're in your custody. Don't ship them. Hold them"],
+    empty: "Nothing is in your custody. A batch shows up here once it's shipped to your wallet."
+  },
+  storage: {
+    actions: ["receive", "ship"],
+    here: "In storage",
+    inCustody: "in storage",
+    hold: ["It's in your storage. Don't ship it. Hold it", "They're in your storage. Don't ship them. Hold them"],
+    empty: "Nothing is in storage. A batch shows up here once it's shipped to your facility."
+  },
+  distributor: {
+    actions: ["receive", "split", "ship"],
+    here: "In your warehouse",
+    inCustody: "in your warehouse",
+    hold: ["It's in your warehouse. Don't split or ship it. Hold it", "They're in your warehouse. Don't split or ship them. Hold them"],
+    empty: "Nothing is in your warehouse. A batch shows up here once a supplier ships it to you."
+  },
+  carrier: {
+    actions: ["receive", "ship"],
+    split: false,
+    here: "On your truck",
+    inCustody: "on your trucks",
+    incoming: "waiting for pickup",
+    incomingTag: "Ready for pickup",
+    passedOn: "Delivered",
+    labels: {
+      receive: ["Confirm a pickup", "Take custody of a batch when you load it.", "Confirm pickup"],
+      ship: ["Hand off a delivery", "Ship a batch you're hauling to the wallet receiving it.", "Hand off"]
+    },
+    hold: ["It's on your truck. Don't deliver it. Hold it", "They're on your trucks. Don't deliver them. Hold them"],
+    empty: "Nothing is on your trucks. A batch shows up here once a shipper names your wallet."
+  },
+  retailer: {
+    actions: ["receive", "ship"],
+    ship: false,
+    split: false,
+    here: "In your store",
+    inCustody: "in your store",
+    passedOn: "Sent back",
+    labels: { ship: ["Return a batch", "Send a batch back to a supplier, such as after a recall.", "Return"] },
+    hold: ["Take it off the shelf and don't sell it. Hold it", "Take them off the shelf and don't sell them. Hold them"],
+    empty: "Nothing has been delivered to your store yet. A batch shows up here once a supplier ships it to you."
+  },
+  restaurant: {
+    actions: ["receive", "ship"],
+    ship: false,
+    split: false,
+    here: "In your kitchen",
+    inCustody: "in your kitchen",
+    passedOn: "Sent back",
+    labels: { ship: ["Return a batch", "Send a batch back to a supplier, such as after a recall.", "Return"] },
+    hold: ["Don't prepare or serve it. Hold it", "Don't prepare or serve them. Hold them"],
+    empty: "Nothing has been delivered to your kitchen yet. A batch shows up here once a supplier ships it to you."
+  }
+};
+
+function orgOf(role) {
+  const key = session?.organization;
+  return key && ORGS[key]?.role === role ? key : null;
+}
+
+// The custodian words for this wallet. Other roles' tables keep the
+// generic words: a processor's own custody is just "With you".
+function custodyProfile(role = "CUSTODIAN") {
+  const key = role === "CUSTODIAN" ? orgOf("CUSTODIAN") : null;
+  const base = CUSTODY_PROFILE.default;
+  const own = (key && CUSTODY_PROFILE[key]) || {};
+  return { ...base, ...own, labels: { ...own.labels } };
+}
+
 const CLASS_NAME = { 1: "Class I", 2: "Class II", 3: "Class III" };
 const DOC_LABEL = { lot: "Lot form", inspection: "Report", recall: "Notice" };
 const FORM_STORE = "chuck-and-verify.formBundles";
@@ -96,7 +189,7 @@ function goTo(sectionId, fill = {}, focusId) {
 const ACTIONS = {
   register: {
     label: "Register a batch",
-    hint: "Add a new lot with its weight and lot form.",
+    hint: "Add a new batch with its weight and form.",
     run: () => goTo("registerSection", {}, "newBatchId")
   },
   recall: {
@@ -113,6 +206,11 @@ const ACTIONS = {
     label: "Ship a batch",
     hint: "Hand a batch in your custody to the next wallet.",
     run: (id) => goTo("custodySection", id ? { custodyBatchId: id } : {}, id ? "custodyTo" : "custodyBatchId")
+  },
+  split: {
+    label: "Split a batch into lots",
+    hint: "Divide a batch in your custody into lots you can ship separately.",
+    run: (id) => goTo("splitSection", id ? { splitBatchId: id } : {}, id ? "splitCount" : "splitBatchId")
   },
   receive: {
     label: "Confirm a delivery",
@@ -135,7 +233,7 @@ const ACTIONS = {
   }
 };
 
-function canDo(keys) {
+function canDo(keys, labels = {}) {
   return el(
     "div",
     { className: "can-do" },
@@ -145,9 +243,10 @@ function canDo(keys) {
       { className: "can-do-list" },
       ...keys.map((key) => {
         const action = ACTIONS[key];
+        const [label, hint] = labels[key] || [action.label, action.hint];
         const button = el("button", { type: "button", className: "can-do-btn" },
-          el("span", { className: "can-do-label" }, action.label),
-          el("span", { className: "can-do-hint" }, action.hint)
+          el("span", { className: "can-do-label" }, label),
+          el("span", { className: "can-do-hint" }, hint)
         );
         button.onclick = () => action.run();
         return el("li", {}, button);
@@ -216,10 +315,17 @@ function inspectionCell(r) {
   );
 }
 
-function custodyCell(r) {
-  if (r.incomingToYou) return stateTag("wait", "On its way to you");
+// In your hands and free to act on: not in transit, and not split (a split
+// batch lives on as its lots).
+const withYou = (r) => r.holderIsYou && !r.inTransit && !r.lotCount;
+
+function custodyCell(r, role) {
+  const words = custodyProfile(role);
+  // A split batch lives on as its lots; it has no custody of its own.
+  if (r.lotCount) return stateTag(null, "Split into " + r.lotCount + " lots");
+  if (r.incomingToYou) return stateTag("wait", words.incomingTag);
   if (r.holderIsYou && r.inTransit) return stateTag(null, "Shipped, not yet received");
-  if (r.holderIsYou) return stateTag("yours", "With you");
+  if (r.holderIsYou) return stateTag("yours", words.here);
   return stateTag("away", r.inTransit ? "In transit" : "With another custodian");
 }
 
@@ -242,20 +348,33 @@ function docButtons(r) {
 
 function rowAction(r, role) {
   const perms = new Set(session.permissions);
-  let key = null;
-  if (role === "INSPECTOR" && !r.inspected && !r.recalled) key = "inspect";
-  if (role === "CUSTODIAN" && r.incomingToYou) key = "receive";
+  let keys = [];
+  if (role === "INSPECTOR" && !r.inspected && !r.recalled) keys = ["inspect"];
+  if (role === "CUSTODIAN" && r.incomingToYou) keys = ["receive"];
   // A recall is serious and rare, so it lives in "What you can do", not on
-  // every row. Shipping is the everyday next step for a batch you hold.
-  if ((role === "CUSTODIAN" || role === "PROCESSOR") && r.holderIsYou && !r.inTransit && !r.recalled) {
-    key = "ship";
+  // every row. Shipping is the everyday next step for a batch you hold, and
+  // a batch that isn't a lot can be split first. A split batch has no
+  // actions: its lots carry on.
+  // Each kind of custodian gets only the steps its business takes: a
+  // retailer doesn't ship on, a carrier doesn't split.
+  const profile = custodyProfile(role);
+  if ((role === "CUSTODIAN" || role === "PROCESSOR") && withYou(r)) {
+    keys = [
+      ...(r.recalled || !profile.ship ? [] : ["ship"]),
+      ...(r.parentId || !profile.split ? [] : ["split"])
+    ];
   }
-  if (!key || !perms.has(key === "inspect" ? "batch.inspect" : "custody.transfer")) return null;
-  const labels = { inspect: "Inspect", receive: "Confirm receipt", ship: "Ship" };
-  const b = el("button", { type: "button", className: "btn btn-ghost btn-small" }, labels[key]);
-  b.setAttribute("aria-label", labels[key] + " " + r.batchId);
-  b.onclick = () => ACTIONS[key].run(r.batchId);
-  return b;
+  keys = keys.filter((key) => perms.has(key === "inspect" ? "batch.inspect" : "custody.transfer"));
+  if (!keys.length) return null;
+  const labels = { inspect: "Inspect", receive: "Confirm receipt", ship: "Ship", split: "Split" };
+  for (const [key, words] of Object.entries(profile.labels)) labels[key] = words[2];
+  const buttons = keys.map((key) => {
+    const b = el("button", { type: "button", className: "btn btn-ghost btn-small" }, labels[key]);
+    b.setAttribute("aria-label", labels[key] + " " + r.batchId);
+    b.onclick = () => ACTIONS[key].run(r.batchId);
+    return b;
+  });
+  return buttons.length === 1 ? buttons[0] : el("span", { className: "row-actions" }, ...buttons);
 }
 
 // Columns each role needs. Custodians file no forms; inspectors don't
@@ -276,23 +395,26 @@ const FILTERS = {
     ["recalled", "Recalled", (r) => r.recalled]
   ],
   PROCESSOR: [
-    ["withYou", "With you", (r) => r.holderIsYou && !r.inTransit],
+    ["withYou", "With you", withYou],
     ["shipped", "Shipped", (r) => !r.holderIsYou || r.inTransit],
     ["waiting", "Waiting for inspection", (r) => !r.inspected && !r.recalled],
     ["recalled", "Recalled", (r) => r.recalled]
   ],
-  CUSTODIAN: [
-    ["incoming", "On its way to you", (r) => r.incomingToYou],
-    ["withYou", "With you", (r) => r.holderIsYou && !r.inTransit],
-    ["passedOn", "Passed on", (r) => !r.holderIsYou && !r.incomingToYou],
-    ["recalled", "Recalled", (r) => r.recalled]
-  ]
+  CUSTODIAN: () => {
+    const words = custodyProfile();
+    return [
+      ["incoming", words.incomingTag, (r) => r.incomingToYou],
+      ["withYou", words.here, withYou],
+      ["passedOn", words.passedOn, (r) => !r.holderIsYou && !r.incomingToYou],
+      ["recalled", "Recalled", (r) => r.recalled]
+    ];
+  }
 };
 
 // Status order for sorting: what needs someone comes first.
 const inspectionRank = (r) => (!r.inspected ? 0 : r.passed ? 2 : 1);
 const custodyRank = (r) =>
-  r.incomingToYou ? 0 : r.holderIsYou && !r.inTransit ? 1 : r.holderIsYou ? 2 : r.inTransit ? 3 : 4;
+  r.lotCount ? 5 : r.incomingToYou ? 0 : r.holderIsYou && !r.inTransit ? 1 : r.holderIsYou ? 2 : r.inTransit ? 3 : 4;
 const byId = (a, b) => a.batchId.localeCompare(b.batchId, undefined, { numeric: true });
 const SORTS = {
   updated: { label: "Latest activity", dir: "desc", cmp: (a, b) => (a.lastMovedAt || 0) - (b.lastMovedAt || 0) },
@@ -328,10 +450,10 @@ function lotTable(rows, role, empty) {
   if (!rows.length) return el("p", { className: "dash-empty" }, empty);
   const state = stateFor(role);
   const cols = COLUMNS[role];
-  const filters = FILTERS[role];
+  const filters = typeof FILTERS[role] === "function" ? FILTERS[role]() : FILTERS[role];
   const cell = {
     Inspection: inspectionCell,
-    Custody: custodyCell,
+    Custody: (r) => custodyCell(r, role),
     Forms: docButtons,
     Report: docButtons
   };
@@ -439,7 +561,10 @@ function lotTable(rows, role, empty) {
               el("th", { scope: "row" },
                 el("span", { className: "lot-id" }, r.batchId),
                 r.recalled ? el("span", { className: "lot-flag" }, "Recalled, " + (CLASS_NAME[r.recallClass] || "")) : null,
-                el("span", { className: "lot-meta" }, r.weightLbs + " lbs, registered " + day(r.registeredAt))
+                el("span", { className: "lot-meta" },
+                  r.parentId
+                    ? "Lot of " + r.parentId + ", " + r.weightLbs + " lbs, split " + day(r.registeredAt)
+                    : r.weightLbs + " lbs, registered " + day(r.registeredAt))
               ),
               ...cols.map((c) => el("td", { dataset: { label: c } }, cell[c](r))),
               el("td", { className: "lot-action" }, rowAction(r, role))
@@ -479,6 +604,7 @@ const PANELS = {
   INSPECTOR(v) {
     const next = firstRow(v.rows, (r) => !r.inspected);
     return [
+      orgIntro("INSPECTOR"),
       tally([
         {
           n: v.waiting,
@@ -495,7 +621,8 @@ const PANELS = {
   PROCESSOR(v) {
     const perms = new Set(session.permissions);
     return [
-      recallAlert(v.rows, (n) =>
+      orgIntro("PROCESSOR"),
+      recallAlert(v.rows.filter((r) => !r.lotCount), (n) =>
         (n === 1 ? "Keep it" : "Keep them") + " out of shipments. Any custodian holding " +
         (n === 1 ? "it" : "them") + " sees the same alert."
       ),
@@ -504,30 +631,31 @@ const PANELS = {
         { n: v.inCustody, label: "still in your custody" },
         { n: v.recalled, label: "recalled", tone: v.recalled ? "recall" : null }
       ]),
-      canDo(["register", "recall", ...(perms.has("custody.transfer") ? ["ship"] : [])]),
+      canDo(["register", "recall", ...(perms.has("custody.transfer") ? ["ship", "split"] : [])]),
       lotTable(v.rows, "PROCESSOR", "You haven't registered a batch yet. Register one to see it here.")
     ];
   },
   CUSTODIAN(v) {
+    const words = custodyProfile();
     const incoming = firstRow(v.rows, (r) => r.incomingToYou);
+    const confirm = words.labels.receive ? words.labels.receive[2] : "Confirm";
     return [
+      orgIntro("CUSTODIAN"),
       recallAlert(
-        v.rows.filter((r) => r.holderIsYou),
-(n) =>
-          (n === 1 ? "It's in your custody. Don't ship it. Hold it" : "They're in your custody. Don't ship them. Hold them") +
-          " until the processor tells you how to return or dispose of " + (n === 1 ? "it." : "them.")
+        v.rows.filter((r) => r.holderIsYou && !r.lotCount),
+        (n) => words.hold[n === 1 ? 0 : 1] + HOLD_UNTIL + (n === 1 ? "it." : "them.")
       ),
       tally([
-        { n: v.inCustody, label: "in your custody", tone: v.recalledInCustody ? "recall" : null },
+        { n: v.inCustody, label: words.inCustody, tone: v.recalledInCustody ? "recall" : null },
         {
           n: v.incoming,
-          label: "on the way to you",
+          label: words.incoming,
           tone: v.incoming ? "wait" : null,
-          action: incoming ? { label: "Confirm " + incoming, run: () => ACTIONS.receive.run(incoming) } : null
+          action: incoming ? { label: confirm + " " + incoming, run: () => ACTIONS.receive.run(incoming) } : null
         }
       ]),
-      canDo(["ship", "receive"]),
-      lotTable(v.rows, "CUSTODIAN", "Nothing is in your custody. A batch shows up here once it's shipped to your wallet.")
+      canDo(words.actions, words.labels),
+      lotTable(v.rows, "CUSTODIAN", words.empty)
     ];
   },
   ADMIN(v) {
@@ -544,6 +672,19 @@ const PANELS = {
       canDo(["users", "verify"])
     ];
   }
+};
+
+// One line naming the business this panel is for, so a carrier can see the
+// portal knows it is a carrier.
+function orgIntro(role) {
+  const key = orgOf(role);
+  if (!key) return null;
+  return el("p", { className: "dash-intro" }, el("strong", {}, ORGS[key].name + ". "), ORGS[key].desc);
+}
+
+const tabName = (role) => {
+  const key = orgOf(role);
+  return key ? ORGS[key].tab || ORGS[key].name : ROLE_NAME[role];
 };
 
 function missingAbilities() {
@@ -568,7 +709,7 @@ function renderPanel() {
         role: "tab",
         id: "dashTab-" + role,
         className: "dash-tab",
-        textContent: ROLE_NAME[role]
+        textContent: tabName(role)
       });
       b.setAttribute("aria-selected", String(role === active));
       b.tabIndex = role === active ? 0 : -1;
@@ -735,7 +876,9 @@ export function refreshDashboard() {
 // Called by app.js whenever the signed-in state changes.
 export function renderForSession(next) {
   const signedIn = Boolean(next && next.address);
-  const changed = !session || !next || session.address !== next.address || session.roles.join() !== next.roles.join();
+  const changed =
+    !session || !next || session.address !== next.address ||
+    session.roles.join() !== next.roles.join() || session.organization !== next.organization;
   session = signedIn ? next : null;
 
   dashboard.hidden = !signedIn || !next.roles.length;
@@ -747,6 +890,9 @@ export function renderForSession(next) {
     tableState.clear();
     return;
   }
+  // A custodian whose business doesn't split lots doesn't need the card.
+  // The contract would still accept a split; this only trims the page.
+  if (!custodyProfile().split) $("splitSection").hidden = true;
   if (!changed) return;
   if (next.roles.length) {
     active = storage(true, TAB_KEY) || null;
@@ -766,14 +912,14 @@ const onboardStatus = $("onboardStatus");
 function renderOnboarding() {
   $("onboardAddress").textContent = session.address;
   $("onboardRoles").replaceChildren(
-    ...Object.entries(ROLE_PLAIN).map(([role, text]) =>
+    ...ORG_ORDER.map((key) =>
       el(
         "label",
         { className: "role-option" },
-        el("input", { type: "checkbox", name: "requestRoles", value: role }),
+        el("input", { type: "radio", name: "requestOrg", value: key }),
         el("span", { className: "role-option-text" },
-          el("span", { className: "role-option-name" }, ROLE_NAME[role]),
-          el("span", { className: "role-option-desc" }, text)
+          el("span", { className: "role-option-name" }, ORGS[key].name),
+          el("span", { className: "role-option-desc" }, ORGS[key].desc)
         )
       )
     )
@@ -789,10 +935,12 @@ function showRequest(request) {
   $("onboardPending").hidden = !request;
   if (!request) return;
   const names = request.roles.map((r) => ROLE_NAME[r] || r);
+  const asked = ORGS[request.organization]
+    ? "access as a " + ORGS[request.organization].name.toLowerCase().replace("usda fsis", "USDA FSIS")
+    : names.length > 1 ? names.slice(0, -1).join(", ") + " and " + names.at(-1) : names[0];
   $("onboardPendingText").replaceChildren(
     el("strong", {}, "Request sent " + day(request.createdAt) + "."),
-    " You asked for " + (names.length > 1 ? names.slice(0, -1).join(", ") + " and " + names.at(-1) : names[0]) +
-      ". A portal admin will review it."
+    " You asked for " + asked + ". A portal admin will review it."
   );
 }
 
@@ -812,9 +960,9 @@ $("copyAddress").onclick = async () => {
 };
 
 $("requestAccess").onclick = async () => {
-  const roles = [...document.querySelectorAll("input[name=requestRoles]:checked")].map((b) => b.value);
-  if (!roles.length) {
-    onboardStatus.textContent = "Choose at least one role.";
+  const organization = document.querySelector("input[name=requestOrg]:checked")?.value;
+  if (!organization) {
+    onboardStatus.textContent = "Choose what kind of organization you are.";
     return;
   }
   const button = $("requestAccess");
@@ -823,7 +971,7 @@ $("requestAccess").onclick = async () => {
   try {
     const { request } = await api("/api/access-request", {
       method: "POST",
-      body: JSON.stringify({ roles, note: $("onboardNote").value })
+      body: JSON.stringify({ organization, note: $("onboardNote").value })
     });
     onboardStatus.textContent = "";
     showRequest(request);
