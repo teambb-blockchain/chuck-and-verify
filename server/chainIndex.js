@@ -29,6 +29,7 @@ const EVENTS = {
   [topic("ShipmentRecorded(bytes32,address,address)")]: "ShipmentRecorded",
   [topic("ReceiptConfirmed(bytes32,address)")]: "ReceiptConfirmed",
   [topic("RecallRecorded(bytes32,address,bytes32,uint8)")]: "RecallRecorded",
+  [topic("LotCreated(bytes32,bytes32,address,uint256)")]: "LotCreated",
 };
 
 const SCHEMA = `
@@ -86,6 +87,13 @@ function decodeLog(log) {
   } else if (name === "RecallRecorded") {
     row.hash = word(data, 0);
     row.num = Number(BigInt("0x" + word(data, 1)));
+  } else if (name === "LotCreated") {
+    // LotCreated(parentId, lotId, holder, weightLbs): the row is about the
+    // new lot, and `other` names the batch it was split from.
+    row.batchId = batchName(log.topics[2]);
+    row.other = batchName(log.topics[1]);
+    row.actor = topicAddress(log.topics[3]);
+    row.num = Number(BigInt("0x" + word(data, 0)));
   }
   return row;
 }
@@ -237,29 +245,44 @@ async function createChainIndex(db, options = {}) {
 // returns, plus who did what and when.
 function batchesFrom(events) {
   const batches = new Map();
+  const newBatch = (e, { processor, holder, weightLbs, parentId = null }) => ({
+    batchId: e.batch_id,
+    processor,
+    weightLbs,
+    registeredAt: e.ts,
+    registeredTx: e.tx,
+    holder,
+    pendingReceiver: null,
+    shippedAt: null,
+    receivedAt: null,
+    inspected: false,
+    passed: false,
+    inspector: null,
+    inspectedAt: null,
+    reportHash: null,
+    recalled: false,
+    recallClass: null,
+    recallHash: null,
+    recalledAt: null,
+    parentId,
+    lotIds: [],
+    handlers: new Set([holder]),
+  });
   for (const e of events) {
     if (e.name === "BatchRegistered") {
-      batches.set(e.batch_id, {
-        batchId: e.batch_id,
-        processor: e.actor,
-        weightLbs: e.num,
-        registeredAt: e.ts,
-        registeredTx: e.tx,
+      batches.set(e.batch_id, newBatch(e, { processor: e.actor, holder: e.actor, weightLbs: e.num }));
+      continue;
+    }
+    if (e.name === "LotCreated") {
+      const parent = batches.get(e.other);
+      if (!parent) continue;
+      parent.lotIds.push(e.batch_id);
+      batches.set(e.batch_id, newBatch(e, {
+        processor: parent.processor,
         holder: e.actor,
-        pendingReceiver: null,
-        shippedAt: null,
-        receivedAt: null,
-        inspected: false,
-        passed: false,
-        inspector: null,
-        inspectedAt: null,
-        reportHash: null,
-        recalled: false,
-        recallClass: null,
-        recallHash: null,
-        recalledAt: null,
-        handlers: new Set([e.actor]),
-      });
+        weightLbs: e.num,
+        parentId: e.other,
+      }));
       continue;
     }
     const b = batches.get(e.batch_id);
@@ -279,6 +302,24 @@ function batchesFrom(events) {
       b.handlers.add(e.actor);
     } else if (e.name === "RecallRecorded") {
       Object.assign(b, { recalled: true, recallClass: e.num, recallHash: e.hash, recalledAt: e.ts });
+    }
+  }
+  // A lot reads through to its parent, as getBatch does on chain: the
+  // parent's inspection, and the parent's recall when it is more serious.
+  // Done after the fold so a parent event recorded after the split still
+  // reaches the lots.
+  for (const b of batches.values()) {
+    const p = b.parentId && batches.get(b.parentId);
+    if (!p) continue;
+    Object.assign(b, {
+      inspected: p.inspected,
+      passed: p.passed,
+      inspector: p.inspector,
+      inspectedAt: p.inspectedAt,
+      reportHash: p.reportHash,
+    });
+    if (p.recalled && (!b.recalled || p.recallClass < b.recallClass)) {
+      Object.assign(b, { recalled: true, recallClass: p.recallClass, recallHash: p.recallHash, recalledAt: p.recalledAt });
     }
   }
   return [...batches.values()];

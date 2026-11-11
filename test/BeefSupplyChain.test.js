@@ -244,6 +244,28 @@ describe("BeefSupplyChain", function () {
         supplyChain.connect(custodianB).confirmReceipt(batchId)
       ).to.be.revertedWithCustomError(supplyChain, "NotPendingReceiver");
     });
+
+    it("counts custody legs: a pending shipment stays in the sender's leg", async function () {
+      expect(await supplyChain.custodyLeg(batchId)).to.equal(0);
+      await supplyChain.connect(custodianA).confirmReceipt(batchId);
+      expect(await supplyChain.custodyLeg(batchId)).to.equal(1);
+      await supplyChain.connect(custodianA).recordShipment(batchId, custodianB.address);
+      expect(await supplyChain.custodyLeg(batchId)).to.equal(1);
+      await supplyChain.connect(custodianB).confirmReceipt(batchId);
+      expect(await supplyChain.custodyLeg(batchId)).to.equal(2);
+    });
+
+    it("a failed receipt does not advance the leg", async function () {
+      await expect(supplyChain.connect(custodianB).confirmReceipt(batchId))
+        .to.be.revertedWithCustomError(supplyChain, "NotPendingReceiver");
+      expect(await supplyChain.custodyLeg(batchId)).to.equal(0);
+    });
+
+    it("custodyLeg rejects a batch that does not exist", async function () {
+      const missing = ethers.keccak256(ethers.toUtf8Bytes("batch-missing"));
+      await expect(supplyChain.custodyLeg(missing))
+        .to.be.revertedWithCustomError(supplyChain, "BatchNotFound");
+    });
   });
 
   describe("recordRecall", function () {
@@ -340,5 +362,192 @@ describe("BeefSupplyChain", function () {
     expect(batch.currentHolder).to.equal(custodianB.address);
     expect(batch.inspected).to.equal(true);
     expect(batch.recalled).to.equal(true);
+  });
+
+  describe("splitBatch", function () {
+    // Lots are named from the readable batch ID, so these tests use the
+    // portal's encoding rather than the keccak ID above.
+    const name = (s) => ethers.encodeBytes32String(s);
+    const PARENT = name("BEEF-01");
+    const L1 = name("BEEF-01-L1");
+    const L2 = name("BEEF-01-L2");
+    const L3 = name("BEEF-01-L3");
+
+    beforeEach(async function () {
+      await supplyChain.connect(processor).registerBatch(PARENT, 1000);
+      await supplyChain.connect(processor).recordShipment(PARENT, custodianA.address);
+      await supplyChain.connect(custodianA).confirmReceipt(PARENT);
+    });
+
+    it("splits a held batch into named lots that add up to its weight", async function () {
+      await expect(supplyChain.connect(custodianA).splitBatch(PARENT, [400, 350, 250]))
+        .to.emit(supplyChain, "LotCreated").withArgs(PARENT, L1, custodianA.address, 400)
+        .and.to.emit(supplyChain, "LotCreated").withArgs(PARENT, L2, custodianA.address, 350)
+        .and.to.emit(supplyChain, "LotCreated").withArgs(PARENT, L3, custodianA.address, 250);
+
+      const lot = await supplyChain.getBatch(L2);
+      expect(lot.processor).to.equal(processor.address);
+      expect(lot.currentHolder).to.equal(custodianA.address);
+      expect(lot.weightLbs).to.equal(350);
+      expect(lot.pendingReceiver).to.equal(ethers.ZeroAddress);
+
+      const parentInfo = await supplyChain.getLotInfo(PARENT);
+      expect(parentInfo.parentId).to.equal(ethers.ZeroHash);
+      expect(parentInfo.lotIds).to.deep.equal([L1, L2, L3]);
+      const lotInfo = await supplyChain.getLotInfo(L3);
+      expect(lotInfo.parentId).to.equal(PARENT);
+      expect(lotInfo.lotIds).to.deep.equal([]);
+      expect((await supplyChain.getBatch(PARENT)).weightLbs).to.equal(1000);
+    });
+
+    it("names lots 10 and up with two digits", async function () {
+      await supplyChain.connect(custodianA).splitBatch(PARENT, Array(20).fill(50));
+      const { lotIds } = await supplyChain.getLotInfo(PARENT);
+      expect(lotIds.map(ethers.decodeBytes32String).slice(8, 11))
+        .to.deep.equal(["BEEF-01-L9", "BEEF-01-L10", "BEEF-01-L11"]);
+      expect(ethers.decodeBytes32String(lotIds[19])).to.equal("BEEF-01-L20");
+    });
+
+    it("rejects a caller who is not the current holder", async function () {
+      await expect(supplyChain.connect(processor).splitBatch(PARENT, [500, 500]))
+        .to.be.revertedWithCustomError(supplyChain, "NotCurrentHolder");
+    });
+
+    it("rejects a holder without a valid CUSTODIAN credential", async function () {
+      await registry.revoke(custodianA.address, CRED_CUSTODIAN);
+      await expect(supplyChain.connect(custodianA).splitBatch(PARENT, [500, 500]))
+        .to.be.revertedWithCustomError(supplyChain, "Unauthorized");
+    });
+
+    it("rejects fewer than 2 or more than 20 lots", async function () {
+      await expect(supplyChain.connect(custodianA).splitBatch(PARENT, [1000]))
+        .to.be.revertedWithCustomError(supplyChain, "BadLotCount");
+      await expect(supplyChain.connect(custodianA).splitBatch(PARENT, Array(21).fill(1)))
+        .to.be.revertedWithCustomError(supplyChain, "BadLotCount");
+    });
+
+    it("rejects weights that do not add up to the batch weight", async function () {
+      await expect(supplyChain.connect(custodianA).splitBatch(PARENT, [500, 499]))
+        .to.be.revertedWithCustomError(supplyChain, "LotWeightMismatch");
+      await expect(supplyChain.connect(custodianA).splitBatch(PARENT, [500, 501]))
+        .to.be.revertedWithCustomError(supplyChain, "LotWeightMismatch");
+    });
+
+    it("rejects a lot with zero weight", async function () {
+      await expect(supplyChain.connect(custodianA).splitBatch(PARENT, [1000, 0]))
+        .to.be.revertedWithCustomError(supplyChain, "ZeroWeight");
+    });
+
+    it("rejects a split while a shipment is pending", async function () {
+      await supplyChain.connect(custodianA).recordShipment(PARENT, custodianB.address);
+      await expect(supplyChain.connect(custodianA).splitBatch(PARENT, [500, 500]))
+        .to.be.revertedWithCustomError(supplyChain, "ShipmentPending");
+    });
+
+    it("rejects a parent ID too long to take a lot number", async function () {
+      const long = name("X".repeat(28)); // 28 + "-L1" = 31 bytes: fits up to lot 9
+      await supplyChain.connect(processor).registerBatch(long, 100);
+      await expect(supplyChain.connect(processor).splitBatch(long, Array(10).fill(10)))
+        .to.be.revertedWithCustomError(supplyChain, "LotNameTooLong");
+      await supplyChain.connect(processor).splitBatch(long, [50, 50]);
+    });
+
+    describe("after a split", function () {
+      beforeEach(async function () {
+        await supplyChain.connect(custodianA).splitBatch(PARENT, [600, 400]);
+      });
+
+      it("the batch cannot be split again or shipped as a whole", async function () {
+        await expect(supplyChain.connect(custodianA).splitBatch(PARENT, [500, 500]))
+          .to.be.revertedWithCustomError(supplyChain, "AlreadySplit");
+        await expect(supplyChain.connect(custodianA).recordShipment(PARENT, custodianB.address))
+          .to.be.revertedWithCustomError(supplyChain, "AlreadySplit");
+      });
+
+      it("a lot cannot be split", async function () {
+        await expect(supplyChain.connect(custodianA).splitBatch(L1, [300, 300]))
+          .to.be.revertedWithCustomError(supplyChain, "LotCannotBeSplit");
+      });
+
+      it("each lot ships to its own custodian independently", async function () {
+        await supplyChain.connect(custodianA).recordShipment(L1, custodianB.address);
+        await supplyChain.connect(custodianB).confirmReceipt(L1);
+        expect((await supplyChain.getBatch(L1)).currentHolder).to.equal(custodianB.address);
+        expect((await supplyChain.getBatch(L2)).currentHolder).to.equal(custodianA.address);
+      });
+
+      it("each lot starts at leg 0 and counts its own legs", async function () {
+        expect(await supplyChain.custodyLeg(PARENT)).to.equal(1);
+        expect(await supplyChain.custodyLeg(L1)).to.equal(0);
+        await supplyChain.connect(custodianA).recordShipment(L1, custodianB.address);
+        await supplyChain.connect(custodianB).confirmReceipt(L1);
+        expect(await supplyChain.custodyLeg(L1)).to.equal(1);
+        expect(await supplyChain.custodyLeg(L2)).to.equal(0);
+        expect(await supplyChain.custodyLeg(PARENT)).to.equal(1);
+      });
+
+      it("a lot shows the inspection of its batch, even one recorded after the split", async function () {
+        await supplyChain.connect(inspector).recordInspection(PARENT, reportHash, true);
+        const lot = await supplyChain.getBatch(L1);
+        expect(lot.inspected).to.equal(true);
+        expect(lot.inspectionPassed).to.equal(true);
+        expect(lot.inspectionReportHash).to.equal(reportHash);
+      });
+
+      it("a lot cannot be inspected on its own", async function () {
+        await expect(supplyChain.connect(inspector).recordInspection(L1, reportHash, true))
+          .to.be.revertedWithCustomError(supplyChain, "InspectParentBatch");
+      });
+
+      it("a recall of the batch applies to every lot", async function () {
+        await supplyChain.connect(processor).recordRecall(PARENT, noticeHash, 2);
+        for (const id of [L1, L2]) {
+          const lot = await supplyChain.getBatch(id);
+          expect(lot.recalled).to.equal(true);
+          expect(lot.recallClassification).to.equal(2);
+          expect(lot.recallNoticeHash).to.equal(noticeHash);
+        }
+      });
+
+      it("one lot can be recalled more seriously without touching its sibling", async function () {
+        const lotNotice = ethers.id("lot recall");
+        await supplyChain.connect(processor).recordRecall(PARENT, noticeHash, 2);
+        await supplyChain.connect(processor).recordRecall(L1, lotNotice, 1);
+        expect((await supplyChain.getBatch(L1)).recallClassification).to.equal(1);
+        expect((await supplyChain.getBatch(L1)).recallNoticeHash).to.equal(lotNotice);
+        expect((await supplyChain.getBatch(L2)).recallClassification).to.equal(2);
+        expect((await supplyChain.getBatch(PARENT)).recallClassification).to.equal(2);
+      });
+
+      it("a lot recall no more serious than the batch's is refused", async function () {
+        await supplyChain.connect(processor).recordRecall(PARENT, noticeHash, 2);
+        await expect(supplyChain.connect(processor).recordRecall(L1, noticeHash, 2))
+          .to.be.revertedWithCustomError(supplyChain, "RecallNotEscalated");
+        await expect(supplyChain.connect(processor).recordRecall(L1, noticeHash, 3))
+          .to.be.revertedWithCustomError(supplyChain, "RecallNotEscalated");
+      });
+
+      it("only the batch's processor can recall a lot", async function () {
+        await expect(supplyChain.connect(custodianA).recordRecall(L1, noticeHash, 1))
+          .to.be.revertedWithCustomError(supplyChain, "NotBatchProcessor");
+      });
+    });
+
+    it("a recalled batch can still be split and its lots shipped (BSC-8)", async function () {
+      await supplyChain.connect(processor).recordRecall(PARENT, noticeHash, 1);
+      await supplyChain.connect(custodianA).splitBatch(PARENT, [500, 500]);
+      await supplyChain.connect(custodianA).recordShipment(L1, custodianB.address);
+      await supplyChain.connect(custodianB).confirmReceipt(L1);
+      expect((await supplyChain.getBatch(L1)).recalled).to.equal(true);
+    });
+
+    it("rejects registering a batch under a lot-style name", async function () {
+      await expect(supplyChain.connect(processor).registerBatch(name("BEEF-02-L1"), 10))
+        .to.be.revertedWithCustomError(supplyChain, "ReservedLotName");
+      // Names that only look similar are still allowed.
+      for (const ok of ["BEEF-L", "BEEF-L1X", "BEEFL1", "L1", "BEEF-02-l1"]) {
+        await supplyChain.connect(processor).registerBatch(name(ok), 10);
+      }
+    });
   });
 });

@@ -316,6 +316,12 @@ async function loadBatch(batchName) {
       batch[5] ? "Yes" : "No";
     document.getElementById("resultRecalled").textContent =
       batch[7] ? "Yes" : "No";
+    // Lot details are extra: a contract without getLotInfo (the one deployed
+    // before lots) still verifies the batch itself.
+    await showLots(batchId).catch((error) => {
+      document.getElementById("resultLotsRow").hidden = true;
+      console.warn("Lot details unavailable", error);
+    });
     showStoredForm(batchName);
 
     result.hidden = false;
@@ -326,6 +332,47 @@ async function loadBatch(batchName) {
       "Unable to verify batch. Check the ID or network connection.";
     console.error(error);
   }
+}
+
+// For a lot: the batch it came from and its sibling lots. For a split batch:
+// its lots. Each name looks that batch up. getBatch already returns a lot's
+// inspection and recall as read through from its parent.
+async function showLots(batchId) {
+  const lotInfo = (id) =>
+    publicClient.readContract({
+      address: beefSupplyChainAddress,
+      abi,
+      functionName: "getLotInfo",
+      args: [id]
+    });
+  const linkTo = (id) => {
+    const name = decodeBatchId(id);
+    const link = Object.assign(document.createElement("button"), {
+      type: "button",
+      className: "doc-link",
+      textContent: name
+    });
+    link.onclick = () => {
+      document.getElementById("batchId").value = name;
+      loadBatch(name);
+    };
+    return link;
+  };
+  const links = (ids) => ids.flatMap((id, i) => (i ? [", ", linkTo(id)] : [linkTo(id)]));
+
+  const [parentId, lotIds] = await lotInfo(batchId);
+  const row = document.getElementById("resultLotsRow");
+  const label = document.getElementById("resultLotsLabel");
+  const list = document.getElementById("resultLots");
+  if (BigInt(parentId) !== 0n) {
+    const siblings = (await lotInfo(parentId))[1].filter((id) => id !== batchId);
+    label.textContent = "Lot of:";
+    list.replaceChildren(linkTo(parentId), " · Other lots: ", ...links(siblings));
+  } else {
+    label.textContent = "Split into " + lotIds.length + " lots:";
+    list.replaceChildren(...links(lotIds));
+  }
+  row.hidden = BigInt(parentId) === 0n && lotIds.length === 0;
 }
 
 document.getElementById("verifyBatch").onclick = () => {
@@ -493,6 +540,10 @@ registerButton.onclick = async () => {
     if (!batchName || new TextEncoder().encode(batchName).length > 31) {
       throw new Error("Batch ID must contain 1–31 UTF-8 bytes.");
     }
+    // The contract keeps "-L<number>" endings for lots made by a split.
+    if (/-L[0-9]+$/.test(batchName)) {
+      throw new Error("IDs ending in -L and a number are kept for lots. Choose another batch ID.");
+    }
 
     const weight = BigInt(weightText);
 
@@ -635,7 +686,8 @@ const REVERT_MESSAGES = {
   SelfInspection: "You can't inspect a batch your own wallet registered.",
   AlreadyInspected: "This batch has already been inspected.",
   BatchRecalled: "This batch has been recalled and can't be inspected.",
-  EmptyReportHash: "The report couldn't be read. Choose the file again."
+  EmptyReportHash: "The report couldn't be read. Choose the file again.",
+  InspectParentBatch: "This is a lot. It carries the inspection of the batch it was split from, so inspect that batch instead."
 };
 
 // Plain-language versions of publishEncryptedForm's progress messages.

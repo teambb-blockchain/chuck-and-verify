@@ -303,6 +303,68 @@ describe("BeefSupplyChain — adversarial", function () {
     });
   });
 
+  describe("lots", function () {
+    const L1 = lot("BB-2026-014-L1");
+    const L2 = lot("BB-2026-014-L2");
+
+    beforeEach(async function () {
+      await supplyChain.connect(plantA).registerBatch(LOT, 1000);
+    });
+
+    it("FIXED BSC-10: a rival cannot take a lot's name ahead of the split", async function () {
+      await expect(
+        supplyChain.connect(plantB).registerBatch(L1, 1)
+      ).to.be.revertedWithCustomError(supplyChain, "ReservedLotName");
+      await supplyChain.connect(plantA).splitBatch(LOT, [500, 500]);
+      expect((await supplyChain.getBatch(L1)).processor).to.equal(plantA.address);
+    });
+
+    it("only the holder can create lots, so no one else can forge one", async function () {
+      await expect(
+        supplyChain.connect(attacker).splitBatch(LOT, [500, 500])
+      ).to.be.revertedWithCustomError(supplyChain, "Unauthorized");
+      await expect(
+        supplyChain.connect(plantB).splitBatch(LOT, [500, 500])
+      ).to.be.revertedWithCustomError(supplyChain, "NotCurrentHolder");
+    });
+
+    it("lots cannot add up to more product than the batch", async function () {
+      await expect(
+        supplyChain.connect(plantA).splitBatch(LOT, [ethers.MaxUint256, 2])
+      ).to.be.revertedWithPanic(0x11); // checked overflow
+      await expect(
+        supplyChain.connect(plantA).splitBatch(LOT, [1000, 1000])
+      ).to.be.revertedWithCustomError(supplyChain, "LotWeightMismatch");
+    });
+
+    it("a split batch cannot also ship as a whole (no double counting)", async function () {
+      await supplyChain.connect(plantA).splitBatch(LOT, [500, 500]);
+      await expect(
+        supplyChain.connect(plantA).recordShipment(LOT, carrier.address)
+      ).to.be.revertedWithCustomError(supplyChain, "AlreadySplit");
+    });
+
+    it("FIXED BSC-1: splitting cannot launder a failed inspection or a recall", async function () {
+      await supplyChain.connect(inspector).recordInspection(LOT, report, false);
+      await supplyChain.connect(plantA).recordRecall(LOT, notice, 1);
+      await supplyChain.connect(plantA).splitBatch(LOT, [500, 500]);
+      await expect(
+        supplyChain.connect(inspector2).recordInspection(L2, ethers.id("clean"), true)
+      ).to.be.revertedWithCustomError(supplyChain, "InspectParentBatch");
+      const b = await supplyChain.getBatch(L2);
+      expect(b.inspectionPassed).to.equal(false);
+      expect(b.recalled).to.equal(true);
+      expect(b.recallClassification).to.equal(1);
+    });
+
+    it("FIXED BSC-4: a processor whose credential lapsed can still recall a lot", async function () {
+      await supplyChain.connect(plantA).splitBatch(LOT, [500, 500]);
+      await registry.revoke(plantA.address, CRED_PROCESSOR);
+      await supplyChain.connect(plantA).recordRecall(L1, notice, 1);
+      expect((await supplyChain.getBatch(L1)).recalled).to.equal(true);
+    });
+  });
+
   describe("external call to the registry", function () {
     it("reverts every write when the registry address has no code", async function () {
       const Supply = await ethers.getContractFactory("BeefSupplyChain");

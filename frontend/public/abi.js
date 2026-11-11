@@ -17,6 +17,16 @@ export const abi = [
   },
   {
     "inputs": [],
+    "name": "AlreadySplit",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "BadLotCount",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "BatchAlreadyExists",
     "type": "error"
   },
@@ -47,7 +57,27 @@ export const abi = [
   },
   {
     "inputs": [],
+    "name": "InspectParentBatch",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "InvalidClassification",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "LotCannotBeSplit",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "LotNameTooLong",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "LotWeightMismatch",
     "type": "error"
   },
   {
@@ -77,7 +107,17 @@ export const abi = [
   },
   {
     "inputs": [],
+    "name": "ReservedLotName",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "SelfInspection",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "ShipmentPending",
     "type": "error"
   },
   {
@@ -149,6 +189,37 @@ export const abi = [
       }
     ],
     "name": "InspectionRecorded",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "parentId",
+        "type": "bytes32"
+      },
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "lotId",
+        "type": "bytes32"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "holder",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "weightLbs",
+        "type": "uint256"
+      }
+    ],
+    "name": "LotCreated",
     "type": "event"
   },
   {
@@ -266,6 +337,19 @@ export const abi = [
     "type": "function"
   },
   {
+    "inputs": [],
+    "name": "MAX_LOTS",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
     "inputs": [
       {
         "internalType": "bytes32",
@@ -337,6 +421,30 @@ export const abi = [
         "internalType": "uint8",
         "name": "recallClassification",
         "type": "uint8"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "batchId",
+        "type": "bytes32"
+      }
+    ],
+    "name": "getLotInfo",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "parentId",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "bytes32[]",
+        "name": "lotIds",
+        "type": "bytes32[]"
       }
     ],
     "stateMutability": "view",
@@ -435,6 +543,24 @@ export const abi = [
       }
     ],
     "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "batchId",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "uint256[]",
+        "name": "weights",
+        "type": "uint256[]"
+      }
+    ],
+    "name": "splitBatch",
+    "outputs": [],
+    "stateMutability": "nonpayable",
     "type": "function"
   }
 ];

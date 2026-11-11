@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <!--
+    The app used to live at this URL, and an old copy of `/` redirected here.
+    nginx sends no Cache-Control, so browsers can keep that old `/` for days
+    and land on this path after the app moved to `/`. Send them back with a
+    query string the browser hasn't cached, so they can't loop between the
+    old copy of `/` and this page.
+  -->
+  <meta http-equiv="refresh" content="0; url=/?r=1">
+  <title>Chuck and Verify — Team BB</title>
+  <script>location.replace("/?r=" + Date.now());</script>
+</head>
+<body>
+  <p>Chuck and Verify has moved. <a href="/">Go to the site</a>.</p>
+</body>
+</html>
