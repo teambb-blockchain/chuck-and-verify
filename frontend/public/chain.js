@@ -7,6 +7,9 @@ export const EXPLORER_BASE = "https://explorer.didlab.org";
 export const REQUIRED_CHAIN_ID = 252501;
 export const beefSupplyChainAddress = "0x35c56b125da5d3e8CBFbB0e3f87cEC8CCD96b3e0";
 export const credentialRegistryAddress = "0x9ef5cb328aE86C968dDcb1Fd60887bd021D7AB2E";
+// Where the verify page starts reading a batch's events. Same block the
+// portal's index starts from (server/chainIndex.js).
+export const BEEF_SUPPLY_CHAIN_DEPLOY_BLOCK = 7384345;
 
 export const chain = {
   id: REQUIRED_CHAIN_ID,

@@ -18,6 +18,7 @@ import {
 import { loadAdmin } from "./admin.js";
 import { renderForSession, refreshDashboard } from "./dashboard.js";
 import "./actions.js";
+import { showBatch } from "./consumer.js";
 import {
   gatewayUrlForCid,
   publishEncryptedForm
@@ -26,27 +27,18 @@ import {
   EXPLORER_BASE,
   REQUIRED_CHAIN_ID,
   beefSupplyChainAddress,
-  credentialRegistryAddress,
   chain,
   publicClient,
   isUserRejection
 } from "./chain.js";
 
-// BeefSupplyChain carries batch reads and writes here. CredentialRegistry
-// writes (grant/revoke) happen on the admin page, in admin.js.
-document.getElementById("deployedChainId").textContent = String(REQUIRED_CHAIN_ID);
-document.getElementById("addrBeefSupplyChain").textContent = beefSupplyChainAddress;
-document.getElementById("addrCredentialRegistry").textContent = credentialRegistryAddress;
-document.getElementById("linkBeefSupplyChain").href =
-  EXPLORER_BASE + "/address/" + beefSupplyChainAddress;
-document.getElementById("linkCredentialRegistry").href =
-  EXPLORER_BASE + "/address/" + credentialRegistryAddress;
+// BeefSupplyChain writes happen here; the read-only consumer verify flow
+// (lookup, result page, network pill) lives in consumer.js and needs no
+// wallet. CredentialRegistry writes (grant/revoke) happen in admin.js.
 
-const networkStatus = document.getElementById("networkStatus");
 const switchNetworkBtn = document.getElementById("switchNetwork");
-const verificationStatus =
-  document.getElementById("verificationStatus");
 const connectWalletBtn = document.getElementById("connectWallet");
+const connectWalletLabel = document.getElementById("connectWalletLabel");
 const walletNotice = document.getElementById("walletNotice");
 const signOutBtn = document.getElementById("signOut");
 const sessionRoles = document.getElementById("sessionRoles");
@@ -61,7 +53,7 @@ function shortAddress(address) {
   return address.slice(0, 6) + "…" + address.slice(-4);
 }
 
-const LOGGED_OUT_LABEL = "Connect Wallet";
+const LOGGED_OUT_LABEL = "Sign in";
 
 function syncWalletChrome(accounts) {
   const account = accounts && accounts[0];
@@ -88,19 +80,19 @@ function syncWalletChrome(accounts) {
   }
 
   if (!account) {
-    connectWalletBtn.textContent = LOGGED_OUT_LABEL;
-    connectWalletBtn.setAttribute("aria-label", LOGGED_OUT_LABEL);
+    connectWalletLabel.textContent = LOGGED_OUT_LABEL;
+    connectWalletBtn.removeAttribute("aria-label");
     return;
   }
 
   const label = shortAddress(account);
   if (signedIn) {
-    connectWalletBtn.textContent = label;
+    connectWalletLabel.textContent = label;
     connectWalletBtn.setAttribute("aria-label", "Signed in as " + label);
     walletNotice.hidden = true;
     walletNotice.textContent = "";
   } else {
-    connectWalletBtn.textContent = "Sign in";
+    connectWalletLabel.textContent = "Sign in";
     connectWalletBtn.setAttribute(
       "aria-label",
       "Sign in as " + label + " with a wallet signature"
@@ -108,12 +100,20 @@ function syncWalletChrome(accounts) {
   }
 }
 
+// The wallet's network matters only to handlers logging events. Verifying
+// reads DIDLab directly (consumer.js), so a missing wallet is not an error.
+let chainNoticeShown = false;
+
+function walletChainNotice(text) {
+  chainNoticeShown = Boolean(text);
+  walletNotice.hidden = !text;
+  walletNotice.textContent = text || "";
+}
+
 async function updateNetworkStatus() {
   switchNetworkBtn.hidden = true;
-  networkStatus.classList.remove("network-status-warn");
 
   if (!window.ethereum) {
-    networkStatus.textContent = "No Wallet Detected";
     syncWalletChrome(null);
     return;
   }
@@ -127,44 +127,24 @@ async function updateNetworkStatus() {
     });
     const currentChainId = Number(chainIdHex);
 
-    if (!accounts || accounts.length === 0) {
-      networkStatus.textContent =
-        "Wallet detected, not connected.";
-      syncWalletChrome(accounts);
-      return;
-    }
-
-    if (currentChainId !== REQUIRED_CHAIN_ID) {
-      networkStatus.textContent =
-        "WARNING: Connected on chain " +
-        currentChainId +
-        "; required " +
-        REQUIRED_CHAIN_ID +
-        " (DIDLab).";
-      networkStatus.classList.add("network-status-warn");
+    if (accounts && accounts.length && currentChainId !== REQUIRED_CHAIN_ID) {
+      walletChainNotice(
+        "Your wallet is on chain " + currentChainId +
+        ". Switch it to DIDLab (" + REQUIRED_CHAIN_ID + ") to log events."
+      );
       switchNetworkBtn.hidden = false;
-      syncWalletChrome(accounts);
-      return;
+    } else if (chainNoticeShown) {
+      walletChainNotice("");
     }
-
-    networkStatus.textContent =
-      "Connected on DIDLab (" +
-      REQUIRED_CHAIN_ID +
-      "): " +
-      accounts[0];
     syncWalletChrome(accounts);
   } catch (error) {
-    networkStatus.textContent =
-      "Unable to read wallet network status: " + error.message;
+    walletChainNotice("Couldn't read your wallet's network: " + error.message);
     syncWalletChrome(null);
   }
 }
 
 async function switchToDidLab() {
-  if (!window.ethereum) {
-    networkStatus.textContent = "No Wallet Detected";
-    return;
-  }
+  if (!window.ethereum) return;
 
   const chainIdHex = "0x" + REQUIRED_CHAIN_ID.toString(16);
 
@@ -187,8 +167,7 @@ async function switchToDidLab() {
         ]
       });
     } else {
-      networkStatus.textContent =
-        "Could not switch network: " + error.message;
+      walletChainNotice("Couldn't switch networks: " + error.message);
     }
   }
 
@@ -201,8 +180,7 @@ connectWalletBtn.onclick = async () => {
   if (!window.ethereum) {
     walletNotice.hidden = false;
     walletNotice.textContent =
-      "No wallet detected in this browser.";
-    await updateNetworkStatus();
+      "Handlers log events with a browser wallet such as MetaMask. Verifying a batch needs no wallet.";
     return;
   }
 
@@ -289,96 +267,6 @@ if (window.ethereum && window.ethereum.on) {
   });
 }
 
-async function loadBatch(batchName) {
-  const result = document.getElementById("batchResult");
-
-  result.hidden = true;
-  verificationStatus.textContent = "Reading DIDLab blockchain...";
-
-  try {
-    const batchId = stringToHex(batchName, { size: 32 });
-
-    const batch = await publicClient.readContract({
-      address: beefSupplyChainAddress,
-      abi,
-      functionName: "getBatch",
-      args: [batchId]
-    });
-
-    document.getElementById("resultId").textContent = batchName;
-    document.getElementById("resultProcessor").textContent = batch[0];
-    document.getElementById("resultWeight").textContent =
-      batch[1].toString() + " lbs";
-    document.getElementById("resultHolder").textContent = batch[2];
-    document.getElementById("resultInspected").textContent =
-      batch[4] ? "Yes" : "No";
-    document.getElementById("resultPassed").textContent =
-      batch[5] ? "Yes" : "No";
-    document.getElementById("resultRecalled").textContent =
-      batch[7] ? "Yes" : "No";
-    // Lot details are extra: a contract without getLotInfo (the one deployed
-    // before lots) still verifies the batch itself.
-    await showLots(batchId).catch((error) => {
-      document.getElementById("resultLotsRow").hidden = true;
-      console.warn("Lot details unavailable", error);
-    });
-    showStoredForm(batchName);
-
-    result.hidden = false;
-    verificationStatus.textContent =
-      "Verified against DIDLab blockchain.";
-  } catch (error) {
-    verificationStatus.textContent =
-      "Unable to verify batch. Check the ID or network connection.";
-    console.error(error);
-  }
-}
-
-// For a lot: the batch it came from and its sibling lots. For a split batch:
-// its lots. Each name looks that batch up. getBatch already returns a lot's
-// inspection and recall as read through from its parent.
-async function showLots(batchId) {
-  const lotInfo = (id) =>
-    publicClient.readContract({
-      address: beefSupplyChainAddress,
-      abi,
-      functionName: "getLotInfo",
-      args: [id]
-    });
-  const linkTo = (id) => {
-    const name = decodeBatchId(id);
-    const link = Object.assign(document.createElement("button"), {
-      type: "button",
-      className: "doc-link",
-      textContent: name
-    });
-    link.onclick = () => {
-      document.getElementById("batchId").value = name;
-      loadBatch(name);
-    };
-    return link;
-  };
-  const links = (ids) => ids.flatMap((id, i) => (i ? [", ", linkTo(id)] : [linkTo(id)]));
-
-  const [parentId, lotIds] = await lotInfo(batchId);
-  const row = document.getElementById("resultLotsRow");
-  const label = document.getElementById("resultLotsLabel");
-  const list = document.getElementById("resultLots");
-  if (BigInt(parentId) !== 0n) {
-    const siblings = (await lotInfo(parentId))[1].filter((id) => id !== batchId);
-    label.textContent = "Lot of:";
-    list.replaceChildren(linkTo(parentId), " · Other lots: ", ...links(siblings));
-  } else {
-    label.textContent = "Split into " + lotIds.length + " lots:";
-    list.replaceChildren(...links(lotIds));
-  }
-  row.hidden = BigInt(parentId) === 0n && lotIds.length === 0;
-}
-
-document.getElementById("verifyBatch").onclick = () => {
-  loadBatch(document.getElementById("batchId").value.trim());
-};
-
 const eventList = document.getElementById("events");
 
 function decodeBatchId(value) {
@@ -393,7 +281,7 @@ publicClient.watchContractEvent({
   address: beefSupplyChainAddress,
   abi,
   eventName: "BatchRegistered",
-  onLogs: async (logs) => {
+  onLogs: (logs) => {
     for (const log of logs) {
       const batchName = decodeBatchId(log.args.batchId);
       const args = {
@@ -409,8 +297,11 @@ publicClient.watchContractEvent({
         "block " + log.blockNumber + " · " + JSON.stringify(args);
       eventList.prepend(item);
 
-      document.getElementById("batchId").value = batchName;
-      await loadBatch(batchName);
+      // Open the result only for a batch this wallet just registered; other
+      // visitors keep the page they are on.
+      if (session.address && args.processor.toLowerCase() === session.address) {
+        showBatch(batchName);
+      }
     }
   },
   onError: (error) => {
@@ -452,13 +343,6 @@ function showCidLink(anchor, bundle) {
   anchor.href = href;
   anchor.textContent = bundle.cid;
   return true;
-}
-
-function showStoredForm(batchName) {
-  const row = document.getElementById("resultFormRow");
-  const link = document.getElementById("resultFormLink");
-  const bundle = readFormStore()[batchName];
-  row.hidden = !showCidLink(link, bundle);
 }
 
 // Inspection report bundles share the store with lot forms, under their own
@@ -519,7 +403,7 @@ registerButton.onclick = async () => {
 
   try {
     if (!window.ethereum) {
-      throw new Error("No wallet detected. Install MetaMask.");
+      throw new Error("Connect a browser wallet such as MetaMask first.");
     }
 
     const accounts = await window.ethereum.request({
@@ -633,11 +517,10 @@ registerButton.onclick = async () => {
       "CONFIRMED: Batch successfully registered on DIDLab.";
 
     saveFormBundle(batchName, bundle);
-    showStoredForm(batchName);
     recordDocument("lot", batchName, bundle);
 
-    // Do not loadBatch here. The BatchRegistered watcher refreshes
-    // the record after the log is observed on chain.
+    // Do not open the result here. The BatchRegistered watcher opens it
+    // once the log is observed on chain.
     transactionDetails.textContent =
       "Transaction: " + hash +
       " | Block: " + receipt.blockNumber +
@@ -707,7 +590,7 @@ inspectButton.onclick = async () => {
 
   try {
     if (!window.ethereum) {
-      throw new Error("No wallet detected.");
+      throw new Error("Connect a browser wallet first.");
     }
     const [account] = await window.ethereum.request({
       method: "eth_requestAccounts"
@@ -794,8 +677,7 @@ inspectButton.onclick = async () => {
       txLink
     );
     recordDocument("inspection", batchName, bundle);
-    document.getElementById("batchId").value = batchName;
-    await loadBatch(batchName);
+    showBatch(batchName);
   } catch (error) {
     const reverted =
       error instanceof BaseError

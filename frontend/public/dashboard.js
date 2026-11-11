@@ -435,7 +435,11 @@ const tableState = new Map();
 function stateFor(role) {
   if (!tableState.has(role)) {
     const sort = DEFAULT_SORT[role];
-    tableState.set(role, { filter: "all", query: "", sort, dir: SORTS[sort].dir });
+    // `open`: batch id -> whether its lots are showing, once someone has
+    // pressed its toggle. Without an entry, a batch opens only when a filter
+    // or search matches its lots and not the batch itself. Changing the
+    // filter or search clears these choices.
+    tableState.set(role, { filter: "all", query: "", sort, dir: SORTS[sort].dir, open: new Map() });
   }
   return tableState.get(role);
 }
@@ -444,6 +448,24 @@ function sortRows(rows, state) {
   const { cmp } = SORTS[state.sort];
   const sign = state.dir === "asc" ? 1 : -1;
   return [...rows].sort((a, b) => sign * cmp(a, b) || byId(a, b));
+}
+
+// The table lists batches. A split batch's lots sit under it and show on
+// request. A lot whose batch isn't in this list (a carrier who received only
+// one lot) is listed on its own.
+function groupRows(rows) {
+  const ids = new Set(rows.map((r) => r.batchId));
+  const lotsOf = new Map();
+  const tops = [];
+  for (const r of rows) {
+    if (r.parentId && ids.has(r.parentId)) {
+      if (!lotsOf.has(r.parentId)) lotsOf.set(r.parentId, []);
+      lotsOf.get(r.parentId).push(r);
+    } else {
+      tops.push(r);
+    }
+  }
+  return tops.map((top) => ({ top, lots: (lotsOf.get(top.batchId) || []).sort(byId) }));
 }
 
 function lotTable(rows, role, empty) {
@@ -484,6 +506,9 @@ function lotTable(rows, role, empty) {
     b.setAttribute("aria-pressed", String(state.filter === key));
     b.onclick = () => {
       state.filter = state.filter === key && key !== "all" ? "all" : key;
+      // A new filter starts from its own default: batches open only to show
+      // matching lots.
+      state.open.clear();
       render();
     };
     return b;
@@ -509,13 +534,73 @@ function lotTable(rows, role, empty) {
     return th;
   }
 
+  const groups = groupRows(rows);
+  const lotTotal = rows.length - groups.length;
+  const plural = (n, one, many) => n + " " + (n === 1 ? one : many);
+
+  function batchRow(r, { lot = false, group = null, matches = null, open = false } = {}) {
+    const meta = lot
+      ? r.weightLbs + " lbs, split " + day(r.registeredAt)
+      : r.parentId
+        ? "Lot of " + r.parentId + ", " + r.weightLbs + " lbs, split " + day(r.registeredAt)
+        : r.weightLbs + " lbs, registered " + day(r.registeredAt);
+    let toggle = null;
+    if (group && group.lots.length) {
+      const n = group.lots.length;
+      const shownLots = matches ? matches.length : n;
+      const label = open
+        ? "Hide lots"
+        : "Show " + (shownLots === n ? plural(n, "lot", "lots") : shownLots + " of " + n + " lots");
+      toggle = el("button", { type: "button", className: "lots-toggle" }, el("span", { className: "lots-caret" }), label);
+      toggle.setAttribute("aria-expanded", String(open));
+      toggle.setAttribute("aria-label", label + " in " + r.batchId);
+      toggle.onclick = () => {
+        state.open.set(r.batchId, !open);
+        render();
+        body.querySelector('[data-toggle="' + CSS.escape(r.batchId) + '"]')?.focus();
+      };
+      toggle.dataset.toggle = r.batchId;
+    }
+    return el(
+      "tr",
+      { className: [r.recalled ? "is-recalled" : "", lot ? "is-lot" : "", open ? "is-open" : ""].filter(Boolean).join(" ") },
+      el("th", { scope: "row" },
+        el("span", { className: "lot-id" }, r.batchId),
+        r.recalled ? el("span", { className: "lot-flag" }, "Recalled, " + (CLASS_NAME[r.recallClass] || "")) : null,
+        el("span", { className: "lot-meta" }, meta),
+        toggle
+      ),
+      ...cols.map((c) => el("td", { dataset: { label: c } }, cell[c](r))),
+      el("td", { className: "lot-action" }, rowAction(r, role))
+    );
+  }
+
   function render() {
     const tests = Object.fromEntries(filters.map(([key, , test]) => [key, test]));
     const q = state.query.trim().toLowerCase();
-    const shown = sortRows(
-      rows.filter((r) => (state.filter === "all" || tests[state.filter](r)) && r.batchId.toLowerCase().includes(q)),
-      state
-    );
+    const narrowed = state.filter !== "all" || q !== "";
+    const match = (r) => (state.filter === "all" || tests[state.filter](r)) && r.batchId.toLowerCase().includes(q);
+    const sign = state.dir === "asc" ? 1 : -1;
+    const { cmp } = SORTS[state.sort];
+
+    // A batch shows when it or any of its lots matches. It sorts by its most
+    // relevant member (the newest activity, the most urgent custody state).
+    const shown = groups
+      .map((g) => {
+        const topMatches = match(g.top);
+        const lotMatches = g.lots.filter(match);
+        if (!topMatches && !lotMatches.length) return null;
+        const rep = sortRows([g.top, ...g.lots], state)[0];
+        const open = state.open.has(g.top.batchId)
+          ? state.open.get(g.top.batchId)
+          : narrowed && !topMatches && lotMatches.length > 0;
+        // Under a filter, an opened batch lists only its matching lots, unless
+        // it matched on its own and none of its lots do.
+        const listed = narrowed && lotMatches.length ? lotMatches : g.lots;
+        return { ...g, rep, open, lotMatches: listed };
+      })
+      .filter(Boolean)
+      .sort((a, b) => sign * cmp(a.rep, b.rep) || byId(a.top, b.top));
 
     chips.replaceChildren(
       chip("all", "All", rows.length),
@@ -525,14 +610,14 @@ function lotTable(rows, role, empty) {
         .map(([key, label, n]) => chip(key, label, n))
     );
     sortSelect.value = state.sort;
-    count.textContent =
-      shown.length === rows.length ? rows.length + (rows.length === 1 ? " batch" : " batches")
-        : "Showing " + shown.length + " of " + rows.length;
+    const total = plural(groups.length, "batch", "batches") + (lotTotal ? ", " + plural(lotTotal, "lot", "lots") : "");
+    count.textContent = narrowed ? "Showing " + shown.length + " of " + plural(groups.length, "batch", "batches") : total;
 
     if (!shown.length) {
       const reset = el("button", { type: "button", className: "doc-link" }, "Show all batches");
       reset.onclick = () => {
         Object.assign(state, { filter: "all", query: "" });
+        state.open.clear();
         search.value = "";
         render();
       };
@@ -545,7 +630,7 @@ function lotTable(rows, role, empty) {
       el(
         "table",
         { className: "lots" },
-        el("caption", { className: "visually-hidden" }, "Batches, sorted by " + caption),
+        el("caption", { className: "visually-hidden" }, "Batches, sorted by " + caption + ". Lots are listed under the batch they were split from."),
         el("thead", {}, el("tr", {},
           sortHeader("Batch"),
           ...cols.map(sortHeader),
@@ -554,22 +639,10 @@ function lotTable(rows, role, empty) {
         el(
           "tbody",
           {},
-          ...shown.map((r) =>
-            el(
-              "tr",
-              { className: r.recalled ? "is-recalled" : "" },
-              el("th", { scope: "row" },
-                el("span", { className: "lot-id" }, r.batchId),
-                r.recalled ? el("span", { className: "lot-flag" }, "Recalled, " + (CLASS_NAME[r.recallClass] || "")) : null,
-                el("span", { className: "lot-meta" },
-                  r.parentId
-                    ? "Lot of " + r.parentId + ", " + r.weightLbs + " lbs, split " + day(r.registeredAt)
-                    : r.weightLbs + " lbs, registered " + day(r.registeredAt))
-              ),
-              ...cols.map((c) => el("td", { dataset: { label: c } }, cell[c](r))),
-              el("td", { className: "lot-action" }, rowAction(r, role))
-            )
-          )
+          ...shown.flatMap((g) => [
+            batchRow(g.top, { group: g, matches: g.lotMatches, open: g.open }),
+            ...(g.open ? g.lotMatches.map((r) => batchRow(r, { lot: true })) : [])
+          ])
         )
       )
     );
@@ -577,6 +650,7 @@ function lotTable(rows, role, empty) {
 
   search.oninput = () => {
     state.query = search.value;
+    state.open.clear();
     render();
   };
   sortSelect.onchange = () => {
