@@ -46,5 +46,5 @@ The Checkpoint 2 deployment of `BeefSupplyChain` has no temperature write. Tempe
 - Scope grew late. Temperature adds a contract write, a credential path for whoever submits summaries, and the hardware question in 0004, all landing before Checkpoint 3.
 
 **Follow-up**
-- Add a per-leg temperature summary write to `BeefSupplyChain` at Checkpoint 3, gated by the registry like the other writes.
+- Add a per-leg temperature summary write to `BeefSupplyChain` at Checkpoint 3, gated by the registry like the other writes. *Changed by 0005: the write goes in a separate contract keyed to `BeefSupplyChain`'s custody legs.*
 - Decide which credential type may submit summaries (custodian, or a separate sensor type registered by the calibration lab) before writing that function.

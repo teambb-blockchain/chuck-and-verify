@@ -4,7 +4,7 @@ Team BB's blockchain project for tracking beef batches through the supply chain.
 
 ## Overview
 
-The `BeefSupplyChain` contract records batch registration, USDA inspection, custody handoffs, and recalls. Processors, USDA inspectors, logistics partners, and retailers write to it, each with a credential from `CredentialRegistry`. Consumers can read a batch's inspection status, custody history, and recall status.
+The `BeefSupplyChain` contract records batch registration, USDA inspection, custody handoffs, lot splits, and recalls. A custodian can split a batch it holds into 2–20 lots (`BEEF-01-L1`, `BEEF-01-L2`, …) that ship to new custodians independently. Each lot carries the inspection and recall status of the batch it came from. Processors, USDA inspectors, logistics partners, and retailers write to it, each with a credential from `CredentialRegistry`. Consumers can read a batch's inspection status, custody history, and recall status.
 
 Confidential business information stays off chain: pricing, sales data, employee information, shipping details, and complete inspection documents. A batch's lot form (a PDF) is encrypted in the browser and published to IPFS when the batch is registered. Only the batch facts go on chain.
 
@@ -42,6 +42,15 @@ Open `http://localhost:3000`. The server serves `frontend/public/` and the `/api
 
 ## Deploy contracts to DIDLab
 
+Current deployment on chain 252501:
+
+| Contract | Address |
+|----------|---------|
+| `BeefSupplyChain` v3 (lots) | [`0x35c56b125da5d3e8CBFbB0e3f87cEC8CCD96b3e0`](https://explorer.didlab.org/address/0x35c56b125da5d3e8CBFbB0e3f87cEC8CCD96b3e0), deployed in block 7384345 |
+| `CredentialRegistry` | [`0x9ef5cb328aE86C968dDcb1Fd60887bd021D7AB2E`](https://explorer.didlab.org/address/0x9ef5cb328aE86C968dDcb1Fd60887bd021D7AB2E) |
+
+Earlier deployments are listed in [docs/CHECKPOINT_REPORT.md](docs/CHECKPOINT_REPORT.md) §6.
+
 Deploying costs TRUST for gas on chain 252501. Use a disposable DIDLab lab wallet. `DEPLOYER_KEY` is a private key (64 hex characters after `0x`), not a wallet address, and it lives only in your local `.env`.
 
 ```bash
@@ -73,7 +82,7 @@ export DEMO_CUSTODIAN=0x...
 
 The processor also receives the CUSTODIAN credential so it can ship a batch after registering it. Credentials expire after 30 days unless `CREDENTIAL_TTL_SECONDS` is set. Re-running step 2 is safe: it skips issuers and credentials that are already in place.
 
-After a redeploy, update the addresses in `frontend/public/app.js` and `scripts/registerBatch.js`. If the contract interface changes, regenerate `frontend/public/abi.js` from the BeefSupplyChain artifact.
+After a redeploy, update the BeefSupplyChain address in `frontend/public/chain.js` and `scripts/registerBatch.js`, and the address and deployment block in the `DEFAULTS` of `server/chainIndex.js` (or set `BSC_ADDRESS` and `BSC_FROM_BLOCK`). If the contract interface changes, regenerate `frontend/public/abi.js` from the BeefSupplyChain artifact. Then run `npm run stamp` and update the table above. Batches do not move to a new contract.
 
 ## Portal roles
 
@@ -84,7 +93,7 @@ Login is a wallet signature. The server issues a one-time message, the wallet si
 | `ADMIN` | `users.manage` (Portal users card, `/api/admin/users`) |
 | `PROCESSOR` | `batch.register`, `batch.recall` (own batches only), `form.upload` |
 | `INSPECTOR` | `batch.inspect`, `form.upload` |
-| `CUSTODIAN` | `custody.transfer` |
+| `CUSTODIAN` | `custody.transfer` (ship, confirm receipt, split into lots) |
 
 The role and permission catalog lives in `server/db.js`. In the page, an element with `data-requires="<permission>"` is shown only to wallets holding that permission. Roles are re-read on every request, so a change made in the Portal users card applies to open sessions right away.
 
@@ -94,7 +103,7 @@ The role and permission catalog lives in `server/db.js`. In the page, an element
 - **With roles.** A dashboard opens first, with one tab per role. Each tab shows its counts, a "What you can do" list that jumps to the right form, and a table of the batches that role touches. Processors and custodians see a recall alert when a batch they registered or hold is recalled. If a portal role has no valid on-chain credential, the dashboard says so before a submission fails.
 - **Inspector:** inspections recorded and batches waiting (excluding your own). The table shows inspection results and your reports.
 - **Processor:** batches registered, how many are still in your custody, and how many are recalled. The table shows inspection, custody and your lot forms and recall notices.
-- **Custodian:** batches in your custody and shipments on the way to you. The table offers Ship or Confirm receipt on each row.
+- **Custodian:** batches in your custody and shipments on the way to you. The table offers Ship, Split or Confirm receipt on each row. A split batch shows "Split into N lots" and its lots appear as their own rows ("Lot of BEEF-01"). Counts include the lots, not the batch they came from.
 
 The dashboard counts come from `server/chainIndex.js`. It copies `BeefSupplyChain` events into `portal.db`, reading from the deployment block in 5,000-block chunks (DIDLab's RPC limit), and catches up when a dashboard loads. It is a cache of the chain and never takes input from users.
 
@@ -157,7 +166,7 @@ Optional, read only by `scripts/setupCredentials.js`:
 - `DATA_DIR`: folder holding `portal.db` (default `/srv/data` if it exists, otherwise `./data`)
 - `PORTAL_ORIGINS`: comma-separated public URLs trusted for the sign-in domain (default `https://teambb.didlab.org`)
 - `CHAIN_RPC`: RPC the dashboard index reads events from (default `https://eth.didlab.org`)
-- `BSC_ADDRESS`, `BSC_FROM_BLOCK`: the `BeefSupplyChain` contract to index and its deployment block (defaults: the current deployment, block 7269167). Changing the address rebuilds the index. Update both after a redeploy.
+- `BSC_ADDRESS`, `BSC_FROM_BLOCK`: the `BeefSupplyChain` contract to index and its deployment block (defaults: the current deployment, block 7384345). Changing the address rebuilds the index. Update both after a redeploy.
 
 ## Team docs
 

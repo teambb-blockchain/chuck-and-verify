@@ -4,6 +4,7 @@ Guided Lab 3 (Adversarial Security Audit), Activities 6–11. This document beco
 
 - Date: 2026-11-08
 - Repository commit: `0dbc924` plus the working-tree changes listed in §5 (portal fixes, not yet deployed to the host; `BeefSupplyChain` v2, deployed on chain but not committed)
+- Updated 2026-11-11: `BeefSupplyChain` v3 (lots, custody legs) deployed from commit `af2fb3c`; see §1, BSC-10 in §3.2, and §5
 - Reviewers: Britt Huffman, Bhavana Sriharika Kondapalli (team); Claude Code (AI-assisted audit, see §4)
 
 ## 1. Scope
@@ -11,7 +12,8 @@ Guided Lab 3 (Adversarial Security Audit), Activities 6–11. This document beco
 | Component | Source | Live on chain 252501 | Live code matches source? |
 | :--- | :--- | :--- | :--- |
 | `CredentialRegistry` | `contracts/CredentialRegistry.sol` | [`0x9ef5cb328aE86C968dDcb1Fd60887bd021D7AB2E`](https://explorer.didlab.org/address/0x9ef5cb328aE86C968dDcb1Fd60887bd021D7AB2E) | **Yes.** Runtime bytecode equals the HEAD build once the immutable `admin` and the metadata hash are masked. |
-| `BeefSupplyChain` v2 (current) | `contracts/BeefSupplyChain.sol` | [`0x903359014d55A25ED1d4a8DCA6740dd30A90448a`](https://explorer.didlab.org/address/0x903359014d55A25ED1d4a8DCA6740dd30A90448a) | **Yes.** Runtime bytecode equals the v2 build, metadata hash included, once the immutable `registry` is masked. Deployed 2026-11-08 (§5). |
+| `BeefSupplyChain` v3 (current) | `contracts/BeefSupplyChain.sol` at `af2fb3c` | [`0x35c56b125da5d3e8CBFbB0e3f87cEC8CCD96b3e0`](https://explorer.didlab.org/address/0x35c56b125da5d3e8CBFbB0e3f87cEC8CCD96b3e0) | **Yes.** Runtime bytecode equals the `af2fb3c` build, metadata hash included, once the six immutable `registry` slots are masked. Deployed 2026-11-11 (§5). |
+| `BeefSupplyChain` v2 (superseded 2026-11-11) | commit `022bc9b` | [`0x903359014d55A25ED1d4a8DCA6740dd30A90448a`](https://explorer.didlab.org/address/0x903359014d55A25ED1d4a8DCA6740dd30A90448a) | **Yes.** Runtime bytecode equals the v2 build, metadata hash included, once the immutable `registry` is masked. Deployed 2026-11-08 (§5). The frontend no longer uses v2, but its records stay on chain. |
 | `BeefSupplyChain` v1 (superseded) | commit `83d7418` | [`0x20bA1c398CD59b05dA4427162bdA7F26d5AB802e`](https://explorer.didlab.org/address/0x20bA1c398CD59b05dA4427162bdA7F26d5AB802e) | **No.** Live bytecode equals commit `83d7418`, built before `ccee520` made `recordRecall` processor-only. A copy of that source is kept at `contracts/test/DeployedBeefSupplyChainV1.sol` (test only). See BSC-0. The frontend no longer uses v1, but its records stay on chain. |
 | Portal server | `index.js`, `server/auth.js`, `server/db.js`, `server/ethsig.js` | <https://teambb.didlab.org> | Not checked byte for byte. The P-1 probe on 2026-11-08 behaved like `0dbc924`. |
 | Frontend | `frontend/public/*.js` | same | Covered for privacy (encryption, storage, third-party code) only. |
@@ -19,6 +21,8 @@ Guided Lab 3 (Adversarial Security Audit), Activities 6–11. This document beco
 Live state read on 2026-11-08: `admin()` = `0xb323821F0dFCf3b2E8727A7FBae2E34F0D4f393F` (an EOA, not a contract). `issuerOf(PROCESSOR)` and `issuerOf(INSPECTOR)` are the admin. `issuerOf(CUSTODIAN)` is unset. The admin holds a valid PROCESSOR credential. On v1, `BEEF-001` is registered by the admin (500 lbs), inspected and passed, and not recalled. v2 has no batches yet: `getBatch(BEEF-001)` reverts `BatchNotFound`, because batches do not migrate.
 
 **Update, later on 2026-11-08.** The CUSTODIAN issuer was set to the admin ([`0x2759…466f`](https://explorer.didlab.org/tx/0x2759a41fb9895676559b3cf1241d75e8c15777acd4e7d9aac9f832eaa576466f), block 7270656), and wallet A `0xc2Ad…351E` was granted PROCESSOR and CUSTODIAN. v2 now holds `BEEF-A1-014`, registered by wallet A and inspected by wallet B `0x2710…3b5b`.
+
+**Update, 2026-11-11.** v3 is deployed against the same registry and is the contract the frontend, the scripts and the dashboard index use. It has no batches yet: `getBatch(BEEF-A1-014)` reverts `BatchNotFound` on v3, because batches do not migrate. `BEEF-A1-014` and its inspection stay on v2.
 
 An earlier deployment (`0x3eC1…38B2` / `0x981a…83D8`, deployer `0x8799…b5a8`) is superseded. The frontend, the scripts and CHECKPOINT §6 all use the addresses above.
 
@@ -36,7 +40,7 @@ Out of scope: the DIDLab IPFS portal and gateway (external), the DIDLab RPC and 
 3. **AI-assisted audit (Activities 8–9).** Claude Code read the full contract, server and frontend source and made claims. Each claim was then confirmed with a test, an on-chain read or a line-by-line reason, or refuted (§4).
 4. **Live verification.** Read-only `eth_getCode` and `eth_call` against `https://eth.didlab.org`, plus one `POST /api/auth/challenge` to the live portal for P-1.
 
-`npm test`: **104 passing**. That is 92 when the review was written (35 existing + 57 new) plus 12 added to `test/BeefSupplyChain.test.js` with the v2 fixes. In the adversarial suite, each fixed `FINDING` test is now a `FIXED …` test that asserts the new custom error.
+`npm test`: **150 passing** on 2026-11-11, after the lots and custody-leg tests (§5). It was **104 passing** on 2026-11-08: 92 when the review was written (35 existing + 57 new) plus 12 added to `test/BeefSupplyChain.test.js` with the v2 fixes. In the adversarial suite, each fixed `FINDING` test is now a `FIXED …` test that asserts the new custom error.
 
 Severity scale: **High** breaks the system's core claim (inspection, custody or recall status can be falsified, or a recall blocked). **Medium** needs a trusted role or a phishing step, or harms one party. **Low** is misconfiguration or griefing by a trusted role. **Info** means no exploit, but worth recording.
 
@@ -79,8 +83,9 @@ Status values: **fixed** (in code, with a regression test), **open** (a fix is p
 | **BSC-5** | `recordRecall` | Input validation / state-ordering | `classification` accepts 0 and 4–255; USDA uses Class I–III. `noticeHash` may be zero. Re-calling `recordRecall` overwrites both, so a processor can downgrade a Class I recall to Class III and swap the notice afterwards. The event log keeps the history, but `getBatch` does not. | Low | **Fixed (v2 deployed)** (`InvalidClassification`, `EmptyNoticeHash`, `RecallNotEscalated`) | `FIXED BSC-5` ×3 |
 | **BSC-6** | `registerBatch`, `recordInspection` | Input validation | `weightLbs = 0` and `2^256−1` are accepted; the frontend checks `> 0`, the contract does not. `reportHash = 0` records an inspection that points at no report. Trusted roles only; the record is misleading but nothing is stolen. | Low | **Fixed (v2 deployed)** (`ZeroWeight`, `EmptyReportHash`); no upper bound on weight (accepted) | `FIXED BSC-6` ×2; `FINDING BSC-6 (residual)` |
 | BSC-7 | `recordShipment` | Input validation | The holder ships to itself and confirms: an empty custody leg in the history. | Info | Accepted | `FINDING BSC-7` |
-| BSC-8 | `recordShipment` / `confirmReceipt` | State-ordering | A recalled or failed batch can still change custody. This is correct: recalled product must still be tracked while it is retrieved. | Info | N/A (intended) | `FINDING BSC-8` |
+| BSC-8 | `recordShipment` / `confirmReceipt` / `splitBatch` | State-ordering | A recalled or failed batch can still change custody, and (v3) can still be split into lots. This is correct: recalled product must still be tracked while it is retrieved. Each lot carries the batch's recall and failed inspection (`_effective`), so a split cannot hide either. | Info | N/A (intended) | `FINDING BSC-8`; `a recalled batch can still be split and its lots shipped (BSC-8)`; `FIXED BSC-1: splitting cannot launder a failed inspection or a recall` |
 | BSC-9 | `recordShipment` | Access control (availability) | When the current holder's CUSTODIAN credential lapses, nobody can move the batch, and there is no admin override. Live: the CUSTODIAN issuer is now set and wallet A holds CUSTODIAN; a handoff still needs a second custodian. | Low | Accepted; CUSTODIAN issuer now set | `FINDING BSC-9`; on-chain read in §1 |
+| **BSC-10** | `registerBatch` / `splitBatch` (v3) | State-ordering / access control | Lot IDs are predictable: a split of `BEEF-01` names its lots `BEEF-01-L1` … `-Ln`. Without a guard, a rival processor registers `BEEF-01-L1` as an ordinary batch first. The real split then reverts `BatchAlreadyExists`, so the holder cannot split that batch at all. Same root cause as BSC-3, found while designing lots, before deployment. | Medium | **Fixed (v3 deployed)** (`ReservedLotName`: `registerBatch` refuses any ID ending in `-L` followed by digits, so lot names come only from `splitBatch`) | `FIXED BSC-10` |
 | CR-1 | `setIssuer` | Access control (recovery) | A compromised PROCESSOR issuer grants an attacker a 1-year credential. The admin replaces the issuer, but the grant stays valid. The new issuer must find each grant from `CredentialGranted` events and revoke it by hand; there is no on-chain enumeration and no per-issuer invalidation. | Medium | Accepted (runbook in §7) | `FINDING CR-1` |
 | CR-2 | `grant` | State-ordering | `grant` after `revoke` silently clears `revoked`. A revocation for cause is indistinguishable from a lapse, and any issuer can quietly reinstate a revoked holder. Documented as "grant or renew". | Low | Accepted | `FINDING CR-2` |
 | CR-3 | `grant` | Input validation | `grant(address(0), …)` succeeds, and `isValid(0, …)` returns true. No one can sign as the zero address, so the harm is a misleading event or count. | Low | Deferred (needs a registry redeploy) | `FINDING CR-3` |
@@ -158,6 +163,8 @@ Status values: **fixed** (in code, with a regression test), **open** (a fix is p
 | BSC-5 | `classification` must be 1–3 (`InvalidClassification`); `noticeHash != 0` (`EmptyNoticeHash`). A later recall must use a strictly lower class number (`RecallNotEscalated`), so the notice cannot be swapped at the same class. | `FIXED BSC-5` ×3; D1 tests | Yes (v2) |
 | BSC-6 | `weightLbs > 0` (`ZeroWeight`); `reportHash != 0` (`EmptyReportHash`). No upper bound on weight. | `FIXED BSC-6` ×2; `FINDING BSC-6 (residual)` | Yes (v2) |
 
+| BSC-10 | `registerBatch` reverts `ReservedLotName` for an ID ending in `-L` plus digits. Lot IDs are built on chain by `splitBatch` from the parent's name. | `FIXED BSC-10`; `rejects registering a batch under a lot-style name` | Yes (v3) |
+
 **Not fixed:** BSC-3 is accepted (§6). CR-3 and CR-4 are deferred, because only `BeefSupplyChain` is redeployed; v2 points at the live `CredentialRegistry` `0x9ef5…AB2E`.
 
 **Redeploy evidence (Activity 10).** Deployed with `npm run deploy:supply-chain`, which deploys `BeefSupplyChain` only and reuses the live registry. `frontend/public/chain.js`, `scripts/registerBatch.js` and CHECKPOINT §6 now use the v2 address. The frontend still needs to be deployed to the host. The CUSTODIAN issuer has since been set and wallet A holds CUSTODIAN (§1, update); a handoff on v2 still needs a second custodian. `BEEF-001` and other v1 records do not migrate.
@@ -175,6 +182,27 @@ registry()       0x9ef5cb328aE86C968dDcb1Fd60887bd021D7AB2E (reused)
 bytecode         full match with the v2 build, metadata included (registry immutable masked)
 ```
 
+**v3 redeploy (2026-11-11): lots and custody legs.** v3 keeps every v2 fix and adds two features, so it reuses the v2 rules above.
+
+- **Lots.** `splitBatch(batchId, weights)` lets the current holder, with a valid CUSTODIAN credential, split a batch once into 2–20 lots named `<batch>-L1` … `-Ln`. The weights must add up to the batch weight (`LotWeightMismatch`; the checked sum panics on overflow). A split is refused while a shipment is pending (`ShipmentPending`), a lot cannot be split (`LotCannotBeSplit`), and a split batch cannot be shipped (`AlreadySplit`), so the same product is never counted twice. Each lot is its own custody record. `getBatch` on a lot returns the parent's inspection, and the parent's recall when it is the more serious one, read at query time, so a recall of the parent after the split still reaches every lot. A lot cannot be inspected on its own (`InspectParentBatch`). The processor of record can recall one lot, but only at a more serious class than the parent's (`RecallNotEscalated`, BSC-5 across the split). `getLotInfo` returns a lot's parent or a batch's lots.
+- **Custody legs.** `custodyLeg(batchId)` counts confirmed receipts, so a separate contract can key a record to one holder's stretch of custody (ADR 0005). It is a read-only counter; it changes no access rule.
+- **Gas.** A 20-lot split uses 3,150,472 gas on Hardhat, 67% of DIDLab's 4,700,000 block gas limit; a 2-lot split uses 371,980.
+
+```
+finding          BSC-10 (see §3.2); lots and custody legs (features)
+fix              BeefSupplyChain v3 (contracts/BeefSupplyChain.sol at af2fb3c)
+regression_test  FIXED BSC-10 and the lots tests in test/BeefSupplyChain.adversarial.test.js; splitBatch tests in test/BeefSupplyChain.test.js
+old_contract     0x903359014d55A25ED1d4a8DCA6740dd30A90448a
+new_contract     0x35c56b125da5d3e8CBFbB0e3f87cEC8CCD96b3e0
+deploy_tx        0xdb0037d7551dfd87a6fe19c132d842962a52e8d66b4ab4cda96a73349e3e71ab
+block            7384345 (2026-11-11 13:38:32 UTC), status success, gas 1,449,370
+deployer         0x87996A1051e98DD5586643c9a19B7C000A7eb5a8 (not the registry admin; BeefSupplyChain has no owner)
+registry()       0x9ef5cb328aE86C968dDcb1Fd60887bd021D7AB2E (reused)
+bytecode         full match with the af2fb3c build, metadata included (six registry immutable slots masked)
+```
+
+`frontend/public/chain.js`, `scripts/registerBatch.js` and the `server/chainIndex.js` defaults now use v3; the index rebuilds itself on the address change. The frontend still needs to be deployed to the host. v2 records, including `BEEF-A1-014`, do not migrate.
+
 ## 6. Residual risk
 
 - **Single admin key (CR-6).** This is accepted for a course deployment with no real users or product. A production system would make `admin` a multisig (for example, a Safe owned by the regulators) and add two-step admin transfer, which needs a registry redeploy. We do not claim this is mitigated today.
@@ -182,6 +210,7 @@ bytecode         full match with the v2 build, metadata included (registry immut
 - **Recall without a valid credential (BSC-4 fix).** A revoked or compromised processor key can still recall, and escalate, its own batches. We accept this because a false recall fails safe (product is held, not released), it is limited to that processor's own batches, and every recall is in the event log under the sender's address. The opposite risk, a recall nobody can issue, is worse.
 - **Inspection is final (BSC-1 fix).** A wrong inspection, or one later overturned, cannot be corrected on chain. A correction would need a separate, appended re-inspection record, which is not built.
 - **Lot-code squatting (BSC-3), accepted.** Every write names its sender, so a squatter is identifiable, and the INSPECTOR and CUSTODIAN steps still need honest parties. This is acceptable at course scale; not acceptable with competing real plants.
+- **Reserved lot names (BSC-10 fix).** A batch can no longer be registered under an ID ending in `-L` plus digits, such as `BEEF-L1`, even when it is not a lot. Accepted: the portal's register form refuses these names before the wallet is involved.
 - **Revocation is not retroactive (CR-1).** Records written by a since-revoked key stay. Readers must check the writer's credential status at the time of the write, using the events.
 - **P-2 encryption scheme.** It is mandated by DIDLab. Mitigation is user guidance only: never sign an "Authorize DIDLab IPFS upload" message on any other site.
 - **Public chain data (P-4).** Lot codes, weights and the supplier graph are public by design (ADR 0001). Do not put personal names in lot codes or portal-visible filenames.

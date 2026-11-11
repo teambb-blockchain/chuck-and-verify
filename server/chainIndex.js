@@ -15,9 +15,9 @@ const { keccak256Js } = require("./ethsig");
 
 const DEFAULTS = {
   rpcUrl: "https://eth.didlab.org",
-  // BeefSupplyChain v2, deployed in block 7269167 (tx 0xe97d465f…).
-  contract: "0x903359014d55a25ed1d4a8dca6740dd30a90448a",
-  fromBlock: 7269167,
+  // BeefSupplyChain with lots, deployed in block 7384345 (tx 0xdb0037d7…).
+  contract: "0x35c56b125da5d3e8cbfbb0e3f87cec8ccd96b3e0",
+  fromBlock: 7384345,
   chunk: 5000,
 };
 
