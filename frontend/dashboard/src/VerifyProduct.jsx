@@ -16,9 +16,16 @@ const ABI = [
 const provider = new ethers.JsonRpcProvider(RPC);
 const DEPLOY_BLOCK = 7384345;
 
+
 const EVENT_ABI = [
-  "event BatchRegistered(bytes32 indexed batchId, address indexed processor, uint256 weightLbs)"
+  "event BatchRegistered(bytes32 indexed batchId, address indexed processor, uint256 weightLbs)",
+  "event InspectionRecorded(bytes32 indexed batchId, address indexed inspector, bytes32 reportHash, bool passed)",
+  "event ShipmentRecorded(bytes32 indexed batchId, address indexed from, address indexed to)",
+  "event ReceiptConfirmed(bytes32 indexed batchId, address indexed receiver)",
+  "event RecallRecorded(bytes32 indexed batchId, address indexed by, bytes32 noticeHash, uint8 classification)",
+  "event LotCreated(bytes32 indexed parentId, bytes32 indexed lotId, address indexed holder, uint256 weightLbs)"
 ];
+
 
 async function fetchBatchHistory(batchId) {
   const contract = new ethers.Contract(CONTRACT, EVENT_ABI, provider);

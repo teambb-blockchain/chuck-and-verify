@@ -10,7 +10,8 @@ const REGISTRY_ABI = [
   "function issuerOf(bytes32 credentialType) view returns (address)",
   "function admin() view returns (address)",
   "function grant(address account, bytes32 credentialType, uint256 expiresAt)",
-  "function revoke(address account, bytes32 credentialType)"
+  "function revoke(address account, bytes32 credentialType)",
+  "function setIssuer(bytes32 credentialType, address issuer)"
 ];
 const REGISTRY_ADDRESS = import.meta.env.VITE_CREDENTIAL_REGISTRY_ADDRESS || "";
 const cls = "rounded-xl border border-stone-300 bg-white px-3 py-2 text-sm";
@@ -39,8 +40,91 @@ export default function AdminPanel({ portalUser, dashboardData, walletAddress })
   const [credentialStatus, setCredentialStatus] = useState({});
   const [issuerStatus, setIssuerStatus] = useState({});
   const [txLog, setTxLog] = useState([]);
+  const [selectedIssuerRole, setSelectedIssuerRole] = useState("PROCESSOR");
+  const [newIssuerAddress, setNewIssuerAddress] = useState("");
+  const [issuerBusy, setIssuerBusy] = useState(false);
 
   const registry = isAddress(REGISTRY_ADDRESS) ? new Contract(REGISTRY_ADDRESS, REGISTRY_ABI, provider) : null;
+
+async function updateIssuer() {
+  setError("");
+  setMessage("");
+
+  if (!registry) {
+    setError("Credential registry is not configured.");
+    return;
+  }
+
+  if (!isAddress(newIssuerAddress) || newIssuerAddress === ZeroAddress) {
+    setError("Enter a valid, nonzero Ethereum wallet address.");
+    return;
+  }
+
+  if (!window.ethereum) {
+    setError("MetaMask is required.");
+    return;
+  }
+
+  setIssuerBusy(true);
+
+  try {
+    const browserProvider = new BrowserProvider(window.ethereum);
+    const network = await browserProvider.getNetwork();
+
+    if (Number(network.chainId) !== CHAIN_ID) {
+      throw new Error("Switch MetaMask to the DIDLab network.");
+    }
+
+    const signer = await browserProvider.getSigner();
+    const signerAddress = await signer.getAddress();
+    const registryAdmin = await registry.admin();
+
+    if (signerAddress.toLowerCase() !== registryAdmin.toLowerCase()) {
+      throw new Error("Only the registry administrator can change issuers.");
+    }
+
+    const currentIssuer = await registry.issuerOf(id(selectedIssuerRole));
+
+    if (currentIssuer.toLowerCase() === newIssuerAddress.toLowerCase()) {
+      setMessage("This wallet is already the issuer for this role.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Change the ${selectedIssuerRole} issuer from ${currentIssuer} to ${newIssuerAddress}? This will change who can grant and revoke credentials.`
+    );
+
+    if (!confirmed) return;
+
+    const writableRegistry = registry.connect(signer);
+    const tx = await writableRegistry.setIssuer(
+      id(selectedIssuerRole),
+      newIssuerAddress
+    );
+
+    setMessage(`Transaction submitted: ${tx.hash}`);
+    await tx.wait();
+
+    const updatedIssuer = await registry.issuerOf(id(selectedIssuerRole));
+
+    if (updatedIssuer.toLowerCase() !== newIssuerAddress.toLowerCase()) {
+      throw new Error("Transaction completed, but issuer verification failed.");
+    }
+
+    setIssuerStatus(previous => ({
+      ...previous,
+      [selectedIssuerRole]: updatedIssuer
+    }));
+
+    setNewIssuerAddress("");
+    setMessage(`${selectedIssuerRole} issuer updated successfully.`);
+  } catch (e) {
+    setError(e.shortMessage || e.message || "Issuer update failed.");
+  } finally {
+    setIssuerBusy(false);
+  }
+}
+
   const refresh = useCallback(async () => {
     if (!isAdmin) return;
     setLoading(true);
@@ -192,6 +276,63 @@ export default function AdminPanel({ portalUser, dashboardData, walletAddress })
       {txLog.length > 0 && <div className="mt-4 rounded-xl bg-stone-50 p-4"><h4 className="text-sm font-semibold">Blockchain transaction log</h4>{txLog.map((line, i) => <p key={i} className="mt-2 break-all text-xs text-stone-700">{line}</p>)}</div>}
     </section>
     <section className="rounded-2xl border border-stone-200 bg-white p-6"><h3 className="font-bold">Registered portal users ({users.length})</h3><div className="mt-4 space-y-3">{users.map(u => <div key={u.address} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-stone-200 p-4"><div className="min-w-0"><p className="break-all text-sm font-medium">{u.address}</p><p className="mt-1 text-xs text-stone-500">{u.label || "No label"} · {organizations.find(o => o.key === u.organization)?.name || u.organization || "No organization"}</p><div className="mt-2 flex flex-wrap gap-2">{(u.roles || []).map(role => { const status = credentialStatus[`${u.address.toLowerCase()}:${role}`]; return <span key={role} className={`rounded-full px-2 py-1 text-xs ${status === false ? "bg-amber-100 text-amber-900" : "bg-green-50 text-green-800"}`}>{role}{CHAIN_ROLES.includes(role) ? status === true ? " · chain valid" : status === false ? " · chain missing" : " · chain unverified" : " · portal only"}</span>; })}</div></div><button className={cls} onClick={() => editUser(u)}>Edit</button></div>)}{!users.length && <p className="text-sm text-stone-500">No portal users found.</p>}</div></section>
-    {registry && <section className="rounded-2xl border border-stone-200 bg-white p-6"><h3 className="font-bold">Credential issuers</h3><p className="mt-1 text-sm text-stone-500">Only these wallets can sign grant/revoke transactions for their respective roles.</p><div className="mt-3 space-y-2">{CHAIN_ROLES.map(role => <p key={role} className="break-all text-xs"><strong>{role}:</strong> {issuerStatus[role] || "Checking…"}</p>)}</div></section>}
+    
+{registry && (
+  <section className="rounded-2xl border border-stone-200 bg-white p-6">
+    <h3 className="font-bold">Credential Issuers</h3>
+    <p className="mt-1 text-sm text-stone-500">
+      Manage which wallet can grant or revoke credentials for each role.
+      Only the blockchain registry administrator can change issuers.
+    </p>
+
+    <div className="mt-4 space-y-2">
+      {CHAIN_ROLES.map(role => (
+        <p key={role} className="break-all text-xs">
+          <strong>{role}:</strong>{" "}
+          {issuerStatus[role] || "Checking..."}
+        </p>
+      ))}
+    </div>
+
+    <div className="mt-6 space-y-3 border-t border-stone-200 pt-4">
+      <h4 className="text-sm font-semibold">Change Credential Issuer</h4>
+
+      <select
+        className={cls}
+        value={selectedIssuerRole}
+        onChange={e => setSelectedIssuerRole(e.target.value)}
+        disabled={issuerBusy}
+      >
+        {CHAIN_ROLES.map(role => (
+          <option key={role} value={role}>{role}</option>
+        ))}
+      </select>
+
+      <input
+        className={`${cls} w-full`}
+        type="text"
+        placeholder="New issuer wallet address (0x...)"
+        value={newIssuerAddress}
+        onChange={e => setNewIssuerAddress(e.target.value)}
+        disabled={issuerBusy}
+      />
+
+      <button
+        type="button"
+        className={btn}
+        onClick={updateIssuer}
+        disabled={issuerBusy || !isAddress(newIssuerAddress)}
+      >
+        {issuerBusy ? "Updating Issuer..." : "Set Issuer"}
+      </button>
+
+      <p className="text-xs text-amber-700">
+        Warning: Changing an issuer immediately changes which wallet
+        is authorized to grant or revoke credentials for that role.
+      </p>
+    </div>
+  </section>
+)}
+
   </div>;
 }

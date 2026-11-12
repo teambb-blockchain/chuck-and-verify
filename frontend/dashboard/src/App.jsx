@@ -451,6 +451,35 @@ export default function App() {
           </section>
         )}
           {activePage === "Overview" ? <>
+            
+{custodian && Number(custodian.recalledInCustody) > 0 && (
+  <section
+    role="alert"
+    className="rounded-2xl border-2 border-red-300 bg-red-50 p-6"
+  >
+    <div className="flex items-start gap-3">
+      <ShieldAlert className="mt-1 shrink-0 text-red-700" size={28} />
+      <div>
+        <h3 className="text-lg font-bold text-red-900">
+          Recall Safety Alert
+        </h3>
+        <p className="mt-2 text-sm text-red-800">
+          You currently hold {custodian.recalledInCustody} recalled
+          beef batch(es). Stop distribution, isolate the affected
+          products, and review their recall records immediately.
+        </p>
+        <button
+          type="button"
+          onClick={() => setActivePage("Recalls")}
+          className="mt-4 rounded-xl bg-red-700 px-4 py-2 text-sm font-semibold text-white hover:bg-red-800"
+        >
+          View Recalls
+        </button>
+      </div>
+    </div>
+  </section>
+)}
+
             <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{displayMetrics.map(({ title, value, icon, color }) => <MetricCard key={title} title={title} value={value} icon={icon} color={color} subtitle={roleMetrics.length ? "From the portal dashboard API" : "Awaiting authorized role data"} />)}</section>
             <section className="grid gap-5 lg:grid-cols-3">
               <div className="rounded-2xl border border-stone-200 bg-white p-6 lg:col-span-2"><h3 className="text-lg font-bold">Supply Chain Lifecycle</h3><p className="mt-1 text-sm text-stone-500">Follow every stage from registration to verification.</p><div className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-4">{[["Register", Package], ["Inspect", ClipboardCheck], ["Ship", Truck], ["Verify", ScanLine]].map(([label, Icon]) => <div key={label} className="rounded-xl bg-ivory p-4 text-center"><Icon className="mx-auto text-forest" size={25} /><p className="mt-3 text-sm font-medium">{label}</p></div>)}</div></div>
