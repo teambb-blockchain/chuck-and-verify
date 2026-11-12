@@ -9,6 +9,7 @@ const { createPortal } = require("./server/portal");
 
 const root = __dirname;
 const publicDir = path.join(root, "frontend", "public");
+const dashboardDir = path.join(root, "frontend", "dashboard", "dist");
 const port = Number(process.env.PORT) || 3000;
 
 // The portal does not send Access-Control-Allow-Origin, so the browser
@@ -59,23 +60,37 @@ function fileInPublic(requestPath) {
   return filePath;
 }
 
+
 function resolveFile(urlPath) {
   const decoded = decodeURIComponent((urlPath || "/").split("?")[0]);
-  // nginx serves this file for `/`. Node does the same, and keeps the
-  // scripts and styles in frontend/public, which is where `./x.js` imports
-  // are rewritten to.
+
   if (decoded === "/" || decoded === "/index.html") {
-    return path.join(root, "index.html");
+    return path.join(dashboardDir, "index.html");
   }
-  const candidate = fileInPublic(decoded);
-  if (!candidate) {
-    return null;
+
+  const dashboardFile = path.resolve(dashboardDir, "." + decoded);
+
+  if (
+    isInside(dashboardDir, dashboardFile) &&
+    fs.existsSync(dashboardFile) &&
+    fs.statSync(dashboardFile).isFile()
+  ) {
+    return dashboardFile;
   }
-  if (!fs.existsSync(candidate) || !fs.statSync(candidate).isFile()) {
-    return null;
+
+  const legacyFile = fileInPublic(decoded);
+
+  if (
+    legacyFile &&
+    fs.existsSync(legacyFile) &&
+    fs.statSync(legacyFile).isFile()
+  ) {
+    return legacyFile;
   }
-  return candidate;
+
+  return null;
 }
+
 
 function proxyIpfsAdd(req, res) {
   const chunks = [];
