@@ -13,7 +13,15 @@ const ABI = [
   "function getBatch(bytes32) view returns (address,uint256,address,address,bool,bool,bytes32,bool,bytes32,uint8)"
 ];
 
-const provider = new ethers.JsonRpcProvider(RPC);
+
+const provider = new ethers.JsonRpcProvider(
+  RPC,
+  252501,
+  {
+    batchMaxCount: 1
+  }
+);
+
 const DEPLOY_BLOCK = 7384345;
 
 
