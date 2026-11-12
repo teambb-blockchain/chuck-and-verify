@@ -36,6 +36,7 @@
     "hardhat": "^2.29.1"
   },
   "dependencies": {
+    "ethers": "^6.17.0",
     "sqlite3": "^5.1.7"
   }
 }
