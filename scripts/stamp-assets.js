@@ -7,9 +7,14 @@
 // Rewrites index.html in place:
 //   - <link rel="stylesheet" href="/frontend/public/styles.css?v=<hash>">
 //   - <script type="module" src="/frontend/public/app.js?v=<hash>">
-//   - an import map remapping every "./x.js" import to
-//     "/frontend/public/x.js?v=<hash>", which also covers imports between
-//     modules (a ?v= on app.js alone would not).
+//   - an import map remapping "/frontend/public/x.js" to
+//     "/frontend/public/x.js?v=<hash>", so imports between modules get the
+//     versioned URL too (a ?v= on app.js alone would not).
+//     The keys must be the full path. A module at /frontend/public/a.js
+//     resolves `import "./x.js"` to /frontend/public/x.js before the map is
+//     consulted, while a "./x.js" key resolves against the page (`/`) to
+//     /x.js and never matches. With "./x.js" keys, every module but app.js
+//     loaded unversioned, and a stale cached chain.js broke the deployed page.
 // Each hash covers one file, so only changed files get a new URL.
 //
 // Run before each deploy: npm run stamp
@@ -41,7 +46,7 @@ const cssVersion = hashOf("styles.css");
 
 const importMap = {
   imports: Object.fromEntries(
-    modules.map((f) => [`./${f}`, `${assetRoot}/${f}?v=${versions[f]}`])
+    modules.map((f) => [`${assetRoot}/${f}`, `${assetRoot}/${f}?v=${versions[f]}`])
   )
 };
 const block =
