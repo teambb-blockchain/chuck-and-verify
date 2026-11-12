@@ -5,6 +5,8 @@ import AdminPanel from "./AdminPanel";
 import BatchRegistration from "./BatchRegistration";
 import VerifyProduct from "./VerifyProduct";
 import Inspections from "./Inspections";
+import Shipments from "./Shipments";
+import Recalls from "./Recalls";
 import {
   LayoutDashboard, Package, ClipboardCheck, Truck, ShieldAlert,
   ScanLine, Users, History, ShieldCheck, Wallet, Menu, Activity,
@@ -460,8 +462,18 @@ export default function App() {
               portalUser={portalUser}
               dashboardData={dashboardData}
             />
-          ) : activePage === "Inspections" ? (
+                    ) : activePage === "Inspections" ? (
             <Inspections
+              portalUser={portalUser}
+              dashboardData={dashboardData}
+            />
+                    ) : activePage === "Shipments" ? (
+            <Shipments
+              portalUser={portalUser}
+              dashboardData={dashboardData}
+            />
+          ) : activePage === "Recalls" ? (
+            <Recalls
               portalUser={portalUser}
               dashboardData={dashboardData}
             />
