@@ -1,0 +1,188 @@
+
+import { useState } from "react";
+import { BrowserProvider, Contract, encodeBytes32String } from "ethers";
+import { PackagePlus, FileUp, ExternalLink, Download } from "lucide-react";
+
+const CHAIN_ID = 252501;
+const CONTRACT_ADDRESS = "0x35c56b125da5d3e8CBFbB0e3f87cEC8CCD96b3e0";
+const EXPLORER = "https://explorer.didlab.org";
+const MAX_FILE_BYTES = 25 * 1024 * 1024;
+
+const ABI = [
+  "function registerBatch(bytes32 batchId, uint256 weightLbs)"
+];
+
+export default function BatchRegistration({ portalUser, dashboardData }) {
+  const [batchId, setBatchId] = useState("");
+  const [weight, setWeight] = useState("");
+  const [file, setFile] = useState(null);
+  const [status, setStatus] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [transaction, setTransaction] = useState(null);
+
+  const roles = dashboardData?.roles || [];
+  const isProcessor = roles.includes("PROCESSOR");
+
+  async function register(event) {
+    event.preventDefault();
+    if (busy) return;
+
+    setBusy(true);
+    setError("");
+    setTransaction(null);
+
+    try {
+      if (!portalUser?.address) {
+        throw new Error("Sign in to the portal first.");
+      }
+      if (!isProcessor) {
+        throw new Error("A PROCESSOR role is required.");
+      }
+      if (!window.ethereum) {
+        throw new Error("Install MetaMask to register batches.");
+      }
+
+      const name = batchId.trim();
+
+      if (!name || new TextEncoder().encode(name).length > 31) {
+        throw new Error("Batch ID must contain 1–31 UTF-8 bytes.");
+      }
+      if (/-L[0-9]+$/.test(name)) {
+        throw new Error("This ID ending is reserved for split lots.");
+      }
+      if (!/^[0-9]+$/.test(weight) || BigInt(weight) === 0n) {
+        throw new Error("Enter a positive whole-number weight.");
+      }
+      if (!file || !file.name.toLowerCase().endsWith(".pdf")) {
+        throw new Error("Select a PDF lot form.");
+      }
+      if (file.size === 0 || file.size > MAX_FILE_BYTES) {
+        throw new Error("PDF must be between 1 byte and 25 MB.");
+      }
+
+      const walletProvider = new BrowserProvider(window.ethereum);
+      const network = await walletProvider.getNetwork();
+
+      if (Number(network.chainId) !== CHAIN_ID) {
+        throw new Error("Switch MetaMask to the DIDLab network.");
+      }
+
+      const signer = await walletProvider.getSigner();
+      const account = await signer.getAddress();
+
+      if (account.toLowerCase() !== portalUser.address.toLowerCase()) {
+        throw new Error("Your wallet does not match your portal session.");
+      }
+
+      const contract = new Contract(CONTRACT_ADDRESS, ABI, signer);
+      const encodedId = encodeBytes32String(name);
+
+      setStatus("Checking contract permissions and batch availability...");
+      await contract.registerBatch.staticCall(encodedId, BigInt(weight));
+
+      setStatus("Validation successful. Ready for document encryption.");
+
+      // The existing DIDLab encryption and IPFS upload workflow
+      // must be connected before submitting a transaction.
+      throw new Error(
+        "Blockchain validation passed. Encrypted IPFS publishing must be connected before registration can continue."
+      );
+
+    } catch (err) {
+      setError(err.reason || err.shortMessage || err.message);
+      setStatus("");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      <section className="rounded-2xl border border-stone-200 bg-white p-6 shadow-sm">
+        <div className="flex items-center gap-3">
+          <PackagePlus className="text-forest" size={26} />
+          <div>
+            <h3 className="text-xl font-bold">Register New Beef Batch</h3>
+            <p className="text-sm text-stone-500">
+              Record a new beef batch on DIDLab.
+            </p>
+          </div>
+        </div>
+
+        {!isProcessor && (
+          <div className="mt-5 rounded-xl bg-amber-50 p-4 text-sm text-amber-800">
+            Registration requires a PROCESSOR role assigned by an administrator.
+          </div>
+        )}
+
+        <form onSubmit={register} className="mt-6 space-y-5">
+          <div>
+            <label className="mb-2 block text-sm font-medium">Batch ID</label>
+            <input
+              value={batchId}
+              onChange={(e) => setBatchId(e.target.value)}
+              placeholder="Example: BEEF-A1-002"
+              required
+              className="w-full rounded-xl border border-stone-300 px-4 py-3"
+            />
+          </div>
+
+          <div>
+            <label className="mb-2 block text-sm font-medium">
+              Weight (lbs)
+            </label>
+            <input
+              type="number"
+              min="1"
+              step="1"
+              value={weight}
+              onChange={(e) => setWeight(e.target.value)}
+              placeholder="Example: 1200"
+              required
+              className="w-full rounded-xl border border-stone-300 px-4 py-3"
+            />
+          </div>
+
+          <div>
+            <label className="mb-2 block text-sm font-medium">
+              Lot Documentation (PDF)
+            </label>
+            <label className="flex cursor-pointer items-center gap-3 rounded-xl border-2 border-dashed border-stone-300 p-5">
+              <FileUp className="text-forest" size={23} />
+              <span className="text-sm text-stone-600">
+                {file ? file.name : "Choose a PDF (maximum 25 MB)"}
+              </span>
+              <input
+                type="file"
+                accept=".pdf,application/pdf"
+                onChange={(e) => setFile(e.target.files?.[0] || null)}
+                className="hidden"
+              />
+            </label>
+          </div>
+
+          {status && (
+            <p className="rounded-xl bg-green-50 p-4 text-sm text-green-800">
+              {status}
+            </p>
+          )}
+
+          {error && (
+            <p role="alert" className="rounded-xl bg-red-50 p-4 text-sm text-red-700">
+              {error}
+            </p>
+          )}
+
+          <button
+            type="submit"
+            disabled={busy || !isProcessor || !portalUser?.address}
+            className="rounded-xl bg-forest px-6 py-3 font-semibold text-white disabled:opacity-50"
+          >
+            {busy ? "Validating..." : "Validate Batch Registration"}
+          </button>
+        </form>
+      </section>
+    </div>
+  );
+}
