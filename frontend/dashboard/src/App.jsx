@@ -3,6 +3,8 @@ import { useEffect, useRef, useState } from "react";
 import { provider } from "./lib/blockchain";
 import AdminPanel from "./AdminPanel";
 import BatchRegistration from "./BatchRegistration";
+import VerifyProduct from "./VerifyProduct";
+import Inspections from "./Inspections";
 import {
   LayoutDashboard, Package, ClipboardCheck, Truck, ShieldAlert,
   ScanLine, Users, History, ShieldCheck, Wallet, Menu, Activity,
@@ -359,17 +361,70 @@ export default function App() {
           </div>
         </header>
         {walletError && <div role="alert" className="border-b border-red-200 bg-red-50 px-6 py-3 text-sm text-red-700">{walletError}</div>}
-        <div className="mx-auto max-w-7xl space-y-7 p-5 md:p-8">
-          {portalUser?.address && <section className="rounded-2xl border border-stone-200 bg-white p-5">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div><h3 className="font-bold text-forest">Live Portal Dashboard</h3><p className="mt-1 text-xs text-stone-500">{dashboardData?.organization ? `Organization: ${ORGANIZATIONS.find((o) => o.value === dashboardData.organization)?.label || dashboardData.organization}` : "Organization not assigned"}</p></div>
-              <span className="inline-flex items-center gap-2 text-xs text-stone-500"><RefreshCw size={14} className={dashboardLoading ? "animate-spin" : ""} />{dashboardUpdatedAt ? `Updated ${dashboardUpdatedAt.toLocaleTimeString()}` : "Not updated yet"}</span>
-            </div>
-            <p className="mt-3 text-sm text-stone-600">{dashboardLoading && !dashboardData ? "Loading dashboard data..." : dashboardError ? `Error: ${dashboardError}` : dashboardData ? "Connected to the portal API Â· Refreshes every 15 seconds" : "Waiting for dashboard data"}</p>
-            {dashboardData && <div className="mt-3 flex flex-wrap gap-2">{(dashboardData.roles || []).map((role) => <span key={role} className="rounded-full bg-green-50 px-3 py-1 text-xs font-semibold text-green-700">{role}</span>)}{dashboardData.roles?.length === 0 && <p className="text-sm text-amber-700">No role assigned. Request access below.</p>}</div>}
-          </section>}
 
-          {needsRole && <section className="rounded-2xl border border-stone-200 bg-white p-6 shadow-sm">
+<div className="mx-auto max-w-7xl space-y-7 p-5 md:p-8">
+  {activePage === "Overview" && portalUser?.address && (
+    <section className="rounded-2xl border border-stone-200 bg-white p-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h3 className="font-bold text-forest">
+            Live Portal Dashboard
+          </h3>
+          <p className="mt-1 text-xs text-stone-500">
+            {dashboardData?.organization
+              ? `Organization: ${
+                  ORGANIZATIONS.find(
+                    (o) => o.value === dashboardData.organization
+                  )?.label || dashboardData.organization
+                }`
+              : "Organization not assigned"}
+          </p>
+        </div>
+
+        <span className="inline-flex items-center gap-2 text-xs text-stone-500">
+          <RefreshCw
+            size={14}
+            className={dashboardLoading ? "animate-spin" : ""}
+          />
+          {dashboardUpdatedAt
+            ? `Updated ${dashboardUpdatedAt.toLocaleTimeString()}`
+            : "Not updated yet"}
+        </span>
+      </div>
+
+      <p className="mt-3 text-sm text-stone-600">
+        {dashboardLoading && !dashboardData
+          ? "Loading dashboard data..."
+          : dashboardError
+          ? `Error: ${dashboardError}`
+          : dashboardData
+          ? "Connected to the portal API · Refreshes every 15 seconds"
+          : "Waiting for dashboard data"}
+      </p>
+
+      {dashboardData && (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {(dashboardData.roles || []).map((role) => (
+            <span
+              key={role}
+              className="rounded-full bg-green-50 px-3 py-1 text-xs font-semibold text-green-700"
+            >
+              {role}
+            </span>
+          ))}
+
+          {dashboardData.roles?.length === 0 && (
+            <p className="text-sm text-amber-700">
+              No role assigned. Request access below.
+            </p>
+          )}
+        </div>
+      )}
+    </section>
+  )}
+
+
+          {activePage === "Overview" && needsRole && <section className="rounded-2xl border border-stone-200 bg-white p-6 shadow-sm">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div><h3 className="text-lg font-bold text-forest">Request Portal Access</h3><p className="mt-1 text-sm text-stone-500">Choose your organization type. Your requested role is selected automatically.</p></div>
               {request && <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800">Request submitted Â· Awaiting review</span>}
@@ -385,12 +440,14 @@ export default function App() {
             </form>
           </section>}
 
-          <section className="rounded-2xl bg-forest p-7 text-white md:p-9">
+          {activePage === "Overview" && (
+            <section className="rounded-2xl bg-forest p-7 text-white md:p-9">
             <p className="text-sm font-medium text-amber-200">BLOCKCHAIN-POWERED TRACEABILITY</p>
             <h2 className="mt-3 text-2xl font-bold md:text-3xl">Welcome to Chuck & Verify</h2>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-white/75">Track beef batches, verify inspections, monitor custody transfers, and review recalls through a transparent blockchain-backed supply chain.</p>
             <div className="mt-6 inline-flex items-center gap-2 text-sm text-amber-200">DIDLab Network <ArrowRight size={16} /></div>
           </section>
+        )}
           {activePage === "Overview" ? <>
             <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{displayMetrics.map(({ title, value, icon, color }) => <MetricCard key={title} title={title} value={value} icon={icon} color={color} subtitle={roleMetrics.length ? "From the portal dashboard API" : "Awaiting authorized role data"} />)}</section>
             <section className="grid gap-5 lg:grid-cols-3">
@@ -398,13 +455,34 @@ export default function App() {
               <div className="rounded-2xl border border-stone-200 bg-white p-6"><div className="flex items-center gap-2"><Activity className="text-forest" size={21} /><h3 className="text-lg font-bold">Network Status</h3></div><div className="mt-6 space-y-4 text-sm"><div className="flex justify-between gap-3"><span className="text-stone-500">Network</span><span className="font-medium">DIDLab</span></div><div className="flex justify-between gap-3"><span className="text-stone-500">Chain ID</span><span className="font-medium">{CHAIN_ID}</span></div><div className="flex justify-between gap-3"><span className="text-stone-500">Latest Block</span><span className="font-medium">{latestBlock === null ? "â€”" : latestBlock.toLocaleString()}</span></div><div className="flex justify-between gap-3"><span className="text-stone-500">Connection</span><span className={networkStatus === "Connected" ? "font-medium text-green-700" : "font-medium text-beef"}>{networkStatus}</span></div></div></div>
             </section>
             <section className="rounded-2xl border border-stone-200 bg-white p-6"><h3 className="text-lg font-bold">Recent Supply Chain Records</h3><p className="mt-2 text-sm text-stone-500">Batch records available to your assigned portal roles.</p>{uniqueRows.length ? <div className="mt-5 overflow-x-auto"><table className="w-full text-left text-sm"><thead className="border-b border-stone-200 text-stone-500"><tr><th className="px-3 py-3">Batch</th><th className="px-3 py-3">Inspection</th><th className="px-3 py-3">Recall</th><th className="px-3 py-3">Holder</th></tr></thead><tbody>{uniqueRows.slice(0, 8).map((item, index) => <tr key={item.batchId || index} className="border-b border-stone-100"><td className="px-3 py-3 font-medium">{item.batchId || "â€”"}</td><td className="px-3 py-3">{item.inspected ? "Inspected" : "Pending"}</td><td className="px-3 py-3">{item.recalled ? "Recalled" : "Clear"}</td><td className="px-3 py-3">{item.holder || "â€”"}</td></tr>)}</tbody></table></div> : <div className="mt-6 rounded-xl border border-dashed border-stone-200 p-10 text-center"><History className="mx-auto text-stone-400" size={28} /><p className="mt-3 text-sm text-stone-500">{portalUser?.address ? "No accessible batch records loaded yet." : "Sign in to load authorized batch records."}</p></div>}</section>
-          </> : activePage === "Batches" ? (
-  <BatchRegistration
-    portalUser={portalUser}
-    dashboardData={dashboardData}
-  />
-) : activePage === "Users & Roles" ? <AdminPanel portalUser={portalUser} dashboardData={dashboardData} walletAddress={walletAddress} /> : <section className="rounded-2xl border border-stone-200 bg-white p-8"><h3 className="text-xl font-bold">{activePage}</h3><p className="mt-3 text-sm text-stone-500">This module is ready for its next implementation step. Blockchain actions and backend data are not connected yet.</p></section>}
-        </div>
+                    </> : activePage === "Batches" ? (
+            <BatchRegistration
+              portalUser={portalUser}
+              dashboardData={dashboardData}
+            />
+          ) : activePage === "Inspections" ? (
+            <Inspections
+              portalUser={portalUser}
+              dashboardData={dashboardData}
+            />
+          ) : activePage === "Verify Product" ? (
+            <VerifyProduct />
+          ) : activePage === "Users & Roles" ? (
+            <AdminPanel
+              portalUser={portalUser}
+              dashboardData={dashboardData}
+              walletAddress={walletAddress}
+            />
+          ) : (
+            <section className="rounded-2xl border border-stone-200 bg-white p-8">
+              <h3 className="text-xl font-bold">{activePage}</h3>
+              <p className="mt-3 text-sm text-stone-500">
+                This module is ready for its next implementation step.
+                Blockchain actions and backend data are not connected yet.
+              </p>
+            </section>
+          )}
+                  </div>
       </main>
     </div>
   );

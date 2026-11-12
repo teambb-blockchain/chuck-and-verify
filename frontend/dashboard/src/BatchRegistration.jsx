@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { BrowserProvider, Contract, encodeBytes32String } from "ethers";
 import { PackagePlus, FileUp, ExternalLink, Download } from "lucide-react";
+import { publishEncryptedForm } from "./lib/ipfs";
 
 const CHAIN_ID = 252501;
 const CONTRACT_ADDRESS = "0x35c56b125da5d3e8CBFbB0e3f87cEC8CCD96b3e0";
@@ -81,13 +82,94 @@ export default function BatchRegistration({ portalUser, dashboardData }) {
       setStatus("Checking contract permissions and batch availability...");
       await contract.registerBatch.staticCall(encodedId, BigInt(weight));
 
-      setStatus("Validation successful. Ready for document encryption.");
+      setStatus("Validation successful. Preparing encrypted documentation...");
 
-      // The existing DIDLab encryption and IPFS upload workflow
-      // must be connected before submitting a transaction.
-      throw new Error(
-        "Blockchain validation passed. Encrypted IPFS publishing must be connected before registration can continue."
-      );
+const bundle = await publishEncryptedForm({
+  file,
+  account,
+  signMessage: (message) => signer.signMessage(message),
+  onStatus: (message) => setStatus(message),
+});
+
+const recoveryData = bundle;
+
+const recoveryBlob = new Blob(
+  [JSON.stringify(recoveryData, null, 2)],
+  { type: "application/json" }
+);
+
+const recoveryUrl = URL.createObjectURL(recoveryBlob);
+
+const recoveryLink = document.createElement("a");
+recoveryLink.href = recoveryUrl;
+recoveryLink.download = `ipfs-upload-${bundle.cid}.json`;
+document.body.appendChild(recoveryLink);
+recoveryLink.click();
+recoveryLink.remove();
+
+setTimeout(() => URL.revokeObjectURL(recoveryUrl), 1000);
+
+setStatus("Documentation encrypted and published. Confirm registration in MetaMask.");
+
+const tx = await contract.registerBatch(encodedId, BigInt(weight));
+
+setStatus("Transaction submitted. Waiting for blockchain confirmation...");
+
+const receipt = await tx.wait(1);
+
+if (receipt.status !== 1) {
+  throw new Error("Registration transaction failed.");
+}
+
+setTransaction({
+  hash: tx.hash,
+  batchId: name,
+  cid: bundle.cid,
+});
+// Save the document using Britt's original localStorage key.
+const FORM_STORE = "chuck-and-verify.formBundles";
+
+let stored = {};
+
+try {
+  const parsed = JSON.parse(localStorage.getItem(FORM_STORE) || "{}");
+
+  if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+    stored = parsed;
+  }
+} catch {
+  stored = {};
+}
+
+stored[name] = bundle;
+localStorage.setItem(FORM_STORE, JSON.stringify(stored));
+
+// Save the document metadata to the portal database.
+try {
+  const response = await fetch("/api/documents", {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      kind: "lot",
+      batchId: name,
+      bundle,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Portal returned HTTP ${response.status}`);
+  }
+} catch (documentError) {
+  console.error("Document metadata save failed:", documentError);
+
+  setError(
+    "Batch registered on the blockchain, but document metadata could not be saved to the portal."
+  );
+}
+setStatus("Batch registered successfully on DIDLab!");
 
     } catch (err) {
       setError(err.reason || err.shortMessage || err.message);
@@ -179,9 +261,34 @@ export default function BatchRegistration({ portalUser, dashboardData }) {
             disabled={busy || !isProcessor || !portalUser?.address}
             className="rounded-xl bg-forest px-6 py-3 font-semibold text-white disabled:opacity-50"
           >
-            {busy ? "Validating..." : "Validate Batch Registration"}
+            {busy ? "Processing..." : "Register Beef Batch"}
           </button>
         </form>
+        {transaction && (
+  <div className="mt-6 rounded-xl border border-green-200 bg-green-50 p-5">
+    <h4 className="font-semibold text-green-800">
+      Batch Registered Successfully
+    </h4>
+
+    <p className="mt-2 text-sm">
+      Batch ID: {transaction.batchId}
+    </p>
+
+    <p className="mt-1 text-sm">
+      IPFS CID: {transaction.cid}
+    </p>
+
+    <a
+      href={`${EXPLORER}/tx/${transaction.hash}`}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-green-800 underline"
+    >
+      View Blockchain Transaction
+      <ExternalLink size={16} />
+    </a>
+  </div>
+)}
       </section>
     </div>
   );
