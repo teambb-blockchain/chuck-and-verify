@@ -7,6 +7,7 @@ import VerifyProduct from "./VerifyProduct";
 import Inspections from "./Inspections";
 import Shipments from "./Shipments";
 import Recalls from "./Recalls";
+import AuditHistory from "./AuditHistory";
 import {
   LayoutDashboard, Package, ClipboardCheck, Truck, ShieldAlert,
   ScanLine, Users, History, ShieldCheck, Wallet, Menu, Activity,
@@ -514,6 +515,8 @@ export default function App() {
               dashboardData={dashboardData}
               walletAddress={walletAddress}
             />
+                    ) : activePage === "Audit History" ? (
+            <AuditHistory />
           ) : (
             <section className="rounded-2xl border border-stone-200 bg-white p-8">
               <h3 className="text-xl font-bold">{activePage}</h3>
