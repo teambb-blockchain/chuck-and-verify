@@ -18,7 +18,7 @@ import {
 import { loadAdmin } from "./admin.js";
 import { renderForSession, refreshDashboard } from "./dashboard.js";
 import "./actions.js";
-import { showBatch } from "./consumer.js";
+import { route, syncWork, viewBatchControl } from "./consumer.js";
 import {
   gatewayUrlForCid,
   publishEncryptedForm
@@ -48,7 +48,6 @@ const sessionRoles = document.getElementById("sessionRoles");
 let session = SIGNED_OUT;
 let adminLoaded = false;
 
-
 function shortAddress(address) {
   return address.slice(0, 6) + "…" + address.slice(-4);
 }
@@ -73,11 +72,26 @@ function syncWalletChrome(accounts) {
   );
   applyPermissions(signedIn ? session.permissions : []);
   renderForSession(signedIn ? session : null);
-
+  const needsAccess = signedIn && session.roles.length === 0;
+  const workLink = document.getElementById("workLink");
+  const workBanner = document.getElementById("workBanner");
+  workLink.hidden = !signedIn;
+  workBanner.hidden = !signedIn;
+  if (signedIn) {
+    const workLabel = needsAccess ? "Request access" : "Your work";
+    workLink.textContent = workLabel;
+    document.getElementById("workBannerLink").textContent = workLabel;
+    document.getElementById("workBannerText").textContent = needsAccess
+      ? " to register, inspect, or move batches."
+      : " is where you register, inspect, and move batches.";
+  }
   if (signedIn && session.permissions.includes("users.manage") && !adminLoaded) {
     adminLoaded = true;
-    loadAdmin();
+    loadAdmin().catch(() => {
+      adminLoaded = false;
+    });
   }
+  syncWork();
 
   if (!account) {
     connectWalletLabel.textContent = LOGGED_OUT_LABEL;
@@ -196,6 +210,13 @@ connectWalletBtn.onclick = async () => {
       session = await signIn(accounts[0]);
       walletNotice.hidden = true;
     }
+    if (session.address === account) {
+      const onWork = new URLSearchParams(location.search).get("page") === "work";
+      if (!onWork) {
+        history.pushState(null, "", "/?page=work");
+        route();
+      }
+    }
     await updateNetworkStatus();
   } catch (error) {
     if (isUserRejection(error)) {
@@ -267,14 +288,46 @@ if (window.ethereum && window.ethereum.on) {
   });
 }
 
-const eventList = document.getElementById("events");
-
 function decodeBatchId(value) {
   try {
     return hexToString(value, { size: 32 });
   } catch {
     return value;
   }
+}
+
+const registerButton = document.getElementById("registerBatch");
+const transactionStatus = document.getElementById("transactionStatus");
+const batchFormFile = document.getElementById("batchFormFile");
+const formReceipt = document.getElementById("formReceipt");
+const downloadRecovery = document.getElementById("downloadRecovery");
+
+const REGISTER_REVERTS = {
+  BatchAlreadyExists: "A batch with that ID is already on the ledger.",
+  Unauthorized: "This wallet isn't authorized to register batches.",
+  ReservedLotName: "IDs ending in -L and a number are kept for lots. Choose another batch ID.",
+  ZeroWeight: "Weight must be a positive whole number.",
+  EmptyBatchId: "Enter a batch ID."
+};
+
+function explorerLink(hash) {
+  return Object.assign(document.createElement("a"), {
+    href: EXPLORER_BASE + "/tx/" + hash,
+    target: "_blank",
+    rel: "noopener noreferrer",
+    textContent: "View transaction"
+  });
+}
+
+// The watcher and the click handler both land here. Neither one leaves the task.
+function showRegisterSuccess(batchName, hash) {
+  const line = document.getElementById("registerSuccessLine");
+  const nodes = [document.createTextNode(batchName + " is on the DIDLab ledger. ")];
+  if (hash) nodes.push(explorerLink(hash), document.createTextNode(" "));
+  nodes.push(viewBatchControl(batchName));
+  line.replaceChildren(...nodes);
+  document.getElementById("registerSuccess").hidden = false;
+  transactionStatus.textContent = "Batch registered.";
 }
 
 publicClient.watchContractEvent({
@@ -284,23 +337,13 @@ publicClient.watchContractEvent({
   onLogs: (logs) => {
     for (const log of logs) {
       const batchName = decodeBatchId(log.args.batchId);
-      const args = {
-        batchId: batchName,
-        processor: log.args.processor,
-        weightLbs:
-          typeof log.args.weightLbs === "bigint"
-            ? log.args.weightLbs.toString()
-            : log.args.weightLbs
-      };
-      const item = document.createElement("li");
-      item.textContent =
-        "block " + log.blockNumber + " · " + JSON.stringify(args);
-      eventList.prepend(item);
-
-      // Open the result only for a batch this wallet just registered; other
-      // visitors keep the page they are on.
-      if (session.address && args.processor.toLowerCase() === session.address) {
-        showBatch(batchName);
+      const processor = log.args.processor;
+      if (
+        session.address &&
+        processor &&
+        processor.toLowerCase() === session.address
+      ) {
+        showRegisterSuccess(batchName, log.transactionHash);
       }
     }
   },
@@ -308,13 +351,6 @@ publicClient.watchContractEvent({
     console.error(error);
   }
 });
-
-const registerButton = document.getElementById("registerBatch");
-const transactionStatus = document.getElementById("transactionStatus");
-const transactionDetails = document.getElementById("transactionDetails");
-const batchFormFile = document.getElementById("batchFormFile");
-const formReceipt = document.getElementById("formReceipt");
-const downloadRecovery = document.getElementById("downloadRecovery");
 
 const FORM_STORE = "chuck-and-verify.formBundles";
 
@@ -396,9 +432,9 @@ let preparedForm = null;
 
 registerButton.onclick = async () => {
   registerButton.disabled = true;
-  transactionDetails.textContent = "";
   formReceipt.hidden = true;
   downloadRecovery.hidden = true;
+  document.getElementById("registerSuccess").hidden = true;
   let formPublished = false;
 
   try {
@@ -419,7 +455,7 @@ registerButton.onclick = async () => {
     }
 
     const batchName = document.getElementById("newBatchId").value.trim();
-    const weightText = document.getElementById("newBatchWeight").value;
+    const weightText = document.getElementById("newBatchWeight").value.trim();
 
     if (!batchName || new TextEncoder().encode(batchName).length > 31) {
       throw new Error("Batch ID must contain 1–31 UTF-8 bytes.");
@@ -428,13 +464,11 @@ registerButton.onclick = async () => {
     if (/-L[0-9]+$/.test(batchName)) {
       throw new Error("IDs ending in -L and a number are kept for lots. Choose another batch ID.");
     }
-
-    const weight = BigInt(weightText);
-
-    if (weight <= 0n) {
-      throw new Error("Weight must be greater than zero.");
+    if (!/^[1-9]\d*$/.test(weightText)) {
+      throw new Error("Weight must be a positive whole number.");
     }
 
+    const weight = BigInt(weightText);
     const batchId = stringToHex(batchName, { size: 32 });
 
     const walletClient = createWalletClient({
@@ -448,8 +482,7 @@ registerButton.onclick = async () => {
     // Simulate first. A call that would revert (no PROCESSOR credential,
     // duplicate batch id) is reported here, before the form is published
     // and before any gas is spent.
-    transactionStatus.textContent =
-      "Simulating against DIDLab. No transaction sent yet.";
+    transactionStatus.textContent = "Checking permissions…";
 
     const { request } = await publicClient.simulateContract({
       address: beefSupplyChainAddress,
@@ -482,22 +515,11 @@ registerButton.onclick = async () => {
     showFormReceipt(bundle);
     formPublished = true;
 
-    transactionStatus.textContent =
-      "Waiting for MetaMask approval of batch registration. The form is already published.";
+    transactionStatus.textContent = "Confirm registration in your wallet.";
 
     const hash = await walletClient.writeContract(request);
 
-    transactionStatus.textContent =
-      "PENDING: Transaction sent. Waiting for blockchain confirmation.";
-
-    transactionDetails.replaceChildren();
-    transactionDetails.append("Transaction: ");
-    const txLink = document.createElement("a");
-    txLink.target = "_blank";
-    txLink.rel = "noopener noreferrer";
-    txLink.href = EXPLORER_BASE + "/tx/" + hash;
-    txLink.textContent = hash;
-    transactionDetails.append(txLink);
+    transactionStatus.textContent = "Waiting for the blockchain…";
 
     const receipt = await publicClient.waitForTransactionReceipt({
       hash,
@@ -505,27 +527,16 @@ registerButton.onclick = async () => {
     });
 
     if (receipt.status !== "success") {
-      transactionStatus.textContent =
-        "REVERTED: Transaction reached the blockchain but failed. Gas was consumed.";
-      transactionDetails.textContent +=
-        " | Block: " + receipt.blockNumber +
-        " | Gas used: " + receipt.gasUsed;
+      transactionStatus.replaceChildren(
+        "The registration reached the blockchain but failed. Gas was used. ",
+        explorerLink(hash)
+      );
       return;
     }
 
-    transactionStatus.textContent =
-      "CONFIRMED: Batch successfully registered on DIDLab.";
-
     saveFormBundle(batchName, bundle);
     recordDocument("lot", batchName, bundle);
-
-    // Do not open the result here. The BatchRegistered watcher opens it
-    // once the log is observed on chain.
-    transactionDetails.textContent =
-      "Transaction: " + hash +
-      " | Block: " + receipt.blockNumber +
-      " | Gas used: " + receipt.gasUsed;
-
+    showRegisterSuccess(batchName, hash);
   } catch (error) {
     const reverted =
       error instanceof BaseError
@@ -534,17 +545,14 @@ registerButton.onclick = async () => {
 
     if (isUserRejection(error)) {
       transactionStatus.textContent = formPublished
-        ? "REJECTED: You declined batch registration. The encrypted form is published. No batch transaction was sent and no gas was used."
-        : "REJECTED: You declined in MetaMask. No transaction was sent and no gas was used.";
+        ? "Cancelled. The encrypted form is published. No batch transaction was sent and no gas was used."
+        : "Cancelled. Nothing was recorded.";
     } else if (reverted) {
       transactionStatus.textContent =
-        "WOULD REVERT: " +
-        (reverted.data?.errorName || reverted.shortMessage) +
-        ". No transaction was sent and no gas was used.";
+        REGISTER_REVERTS[reverted.data?.errorName] ||
+        "This batch can't be registered.";
     } else {
-      transactionStatus.textContent =
-        "Transaction not completed: " +
-        (error.shortMessage || error.message);
+      transactionStatus.textContent = error.shortMessage || error.message;
     }
   } finally {
     registerButton.disabled = false;
@@ -674,10 +682,11 @@ inspectButton.onclick = async () => {
     }
     inspectStatus.replaceChildren(
       "Inspection recorded: " + batchName + " " + (passed ? "passed" : "failed") + ". ",
-      txLink
+      txLink,
+      " ",
+      viewBatchControl(batchName)
     );
     recordDocument("inspection", batchName, bundle);
-    showBatch(batchName);
   } catch (error) {
     const reverted =
       error instanceof BaseError

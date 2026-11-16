@@ -74,7 +74,11 @@ export async function signOut() {
 export function applyPermissions(permissions) {
   const held = new Set(permissions || []);
   for (const el of document.querySelectorAll("[data-requires]")) {
-    el.hidden = !held.has(el.dataset.requires);
+    const ok = held.has(el.dataset.requires);
+    // `hidden` is also how the work view shows one task. Keep the
+    // permission on the element so a later refresh can hide the rest.
+    el.dataset.permitted = ok ? "true" : "false";
+    el.hidden = !ok;
   }
 }
 

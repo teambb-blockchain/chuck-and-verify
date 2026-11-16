@@ -18,7 +18,7 @@
       "/frontend/public/abi.js": "/frontend/public/abi.js?v=3f6e603cba",
       "/frontend/public/actions.js": "/frontend/public/actions.js?v=2fd3c00728",
       "/frontend/public/admin.js": "/frontend/public/admin.js?v=1c69d0a249",
-      "/frontend/public/app.js": "/frontend/public/app.js?v=2e0b249888",
+      "/frontend/public/app.js": "/frontend/public/app.js?v=b84650ae75",
       "/frontend/public/chain.js": "/frontend/public/chain.js?v=a8a4945a3a",
       "/frontend/public/consumer.js": "/frontend/public/consumer.js?v=99ddebbf31",
       "/frontend/public/dashboard.js": "/frontend/public/dashboard.js?v=f2787aa344",
@@ -43,6 +43,7 @@
         <nav class="site-nav" aria-label="Site">
           <a href="/?page=about" data-page="about">About</a>
           <a href="/?page=team" data-page="team">Team</a>
+          <a href="/?page=work" data-page="work" id="workLink" hidden>Your work</a>
         </nav>
         <div class="header-actions">
           <form id="headerSearch" class="header-search result-only" role="search" novalidate>
@@ -128,7 +129,64 @@
           </figure>
         </div>
 
-        <div id="handlerTools" class="handler-tools">
+        <p id="workBanner" class="work-banner" hidden>
+          <a href="/?page=work" data-page="work" id="workBannerLink">Your work</a><span id="workBannerText"> is where you register, inspect, and move batches.</span>
+        </p>
+
+        <section aria-labelledby="checksHeading" class="checks">
+          <h2 id="checksHeading" class="eyebrow eyebrow-muted">What gets checked</h2>
+          <div class="checks-grid">
+            <div class="check-card">
+              <div class="check-card-top">
+                <span class="tile-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7l8-4 8 4-8 4-8-4z"></path><path d="M4 12l8 4 8-4"></path><path d="M4 17l8 4 8-4"></path></svg></span>
+                <span class="check-num" aria-hidden="true">01</span>
+              </div>
+              <h3>Resolve the batch</h3>
+              <p>Reads the batch record and every custody handoff from the BeefSupplyChain contract.</p>
+            </div>
+            <div class="check-card">
+              <div class="check-card-top">
+                <span class="tile-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v5c0 4.5-3 8.5-7 10-4-1.5-7-5.5-7-10V6l7-3z"></path><path d="M9 12l2 2 4-4"></path></svg></span>
+                <span class="check-num" aria-hidden="true">02</span>
+              </div>
+              <h3>Check every signer</h3>
+              <p>Confirms each handler held an active credential in the CredentialRegistry at the moment they signed.</p>
+            </div>
+            <div class="check-card">
+              <div class="check-card-top">
+                <span class="tile-icon tile-amber"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13.5V5a2 2 0 1 1 4 0v8.5a4 4 0 1 1-4 0z"></path><path d="M12 9v6"></path></svg></span>
+                <span class="check-num" aria-hidden="true">03</span>
+              </div>
+              <h3>Replay the cold chain</h3>
+              <p>Compares logged IoT temperature readings against the safe range for the whole journey.</p>
+            </div>
+          </div>
+        </section>
+
+        <section aria-labelledby="sourcesHeading" class="sources">
+          <div class="sources-head">
+            <h2 id="sourcesHeading">On-chain sources</h2>
+            <span>Read-only · DIDLab testnet · Chain ID <span id="chainIdValue" class="mono ink">252501</span></span>
+          </div>
+          <div id="sourceRows"></div>
+        </section>
+
+      </div>
+
+      <div id="workView" class="work" hidden>
+        <nav class="work-nav" aria-label="Your work">
+          <a href="/?page=work" data-page="work">Overview</a>
+          <a href="/?page=work&task=register" data-page="work" data-task="register" data-requires="batch.register" hidden>Register</a>
+          <a href="/?page=work&task=inspect" data-page="work" data-task="inspect" data-requires="batch.inspect" hidden>Inspect</a>
+          <a href="/?page=work&task=ship" data-page="work" data-task="ship" data-requires="custody.transfer" hidden>Ship</a>
+          <a href="/?page=work&task=split" data-page="work" data-task="split" data-requires="custody.transfer" id="splitNav" hidden>Split</a>
+          <a href="/?page=work&task=recall" data-page="work" data-task="recall" data-requires="batch.recall" hidden>Recall</a>
+          <a href="/?page=work&task=users" data-page="work" data-task="users" data-requires="users.manage" hidden>Users</a>
+        </nav>
+        <div class="work-stage">
+          <p id="workSignedOut" class="work-note" hidden>Sign in to see your work.</p>
+          <p id="workDenied" class="work-note" role="status" hidden></p>
+
           <section id="onboarding" class="card onboard" aria-labelledby="onboard-heading" hidden>
             <h1 id="onboard-heading">This wallet doesn't have a role yet</h1>
             <p class="lede">You can verify any batch, like any consumer. To register, inspect, move or recall batches, tell a portal admin what kind of organization you are.</p>
@@ -170,12 +228,12 @@
             <h2>Register New Beef Batch</h2>
             <div class="field-row">
               <div class="field">
-                <label for="newBatchId">New Batch ID:</label>
-                <input id="newBatchId" value="BEEF-A1-001" maxlength="31" autocomplete="off" spellcheck="false">
+                <label for="newBatchId">New Batch ID</label>
+                <input id="newBatchId" placeholder="e.g. BEEF-A1-002" maxlength="31" autocomplete="off" spellcheck="false">
               </div>
               <div class="field">
-                <label for="newBatchWeight">Weight (lbs):</label>
-                <input id="newBatchWeight" type="number" min="1" value="500">
+                <label for="newBatchWeight">Weight (lbs)</label>
+                <input id="newBatchWeight" type="number" min="1" placeholder="500">
               </div>
             </div>
             <div class="field">
@@ -184,17 +242,17 @@
             </div>
             <p class="muted">The form is encrypted in this browser before it is published. IPFS stores the ciphertext. The filename and the recovery file stay off the chain. Register then records the batch id and weight.</p>
             <button id="registerBatch" class="btn btn-accent" type="button">Register Batch</button>
-            <p id="transactionStatus" role="status" aria-live="polite">No transaction submitted.</p>
-            <p id="transactionDetails"></p>
+            <p id="transactionStatus" role="status" aria-live="polite"></p>
             <div id="formReceipt" class="batch-record" hidden>
               <h3>Encrypted form</h3>
               <p><strong>CID:</strong> <span><a id="formCidLink" target="_blank" rel="noopener noreferrer"></a></span></p>
               <p><strong>Ciphertext SHA-256:</strong> <span id="formDigest"></span></p>
             </div>
             <button id="downloadRecovery" class="btn btn-ghost" type="button" hidden>Download recovery file</button>
-            <h3>Activity</h3>
-            <p class="muted">New registrations appear here when <code>BatchRegistered</code> is observed on chain — not when Register is clicked.</p>
-            <ul id="events" aria-live="polite"></ul>
+            <div id="registerSuccess" class="work-success" hidden>
+              <h3>Batch registered</h3>
+              <p id="registerSuccessLine"></p>
+            </div>
           </section>
 
           <section id="inspectSection" class="card" data-requires="batch.inspect" aria-labelledby="inspect-heading" hidden>
@@ -202,7 +260,7 @@
             <div class="field-row">
               <div class="field">
                 <label for="inspectBatchId">Batch ID</label>
-                <input id="inspectBatchId" value="BEEF-001" maxlength="31" autocomplete="off" spellcheck="false">
+                <input id="inspectBatchId" placeholder="Batch ID" maxlength="31" autocomplete="off" spellcheck="false">
               </div>
               <div class="field">
                 <label for="inspectResult">Result</label>
@@ -361,45 +419,6 @@
             </form>
           </section>
         </div>
-
-        <section aria-labelledby="checksHeading" class="checks">
-          <h2 id="checksHeading" class="eyebrow eyebrow-muted">What gets checked</h2>
-          <div class="checks-grid">
-            <div class="check-card">
-              <div class="check-card-top">
-                <span class="tile-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7l8-4 8 4-8 4-8-4z"></path><path d="M4 12l8 4 8-4"></path><path d="M4 17l8 4 8-4"></path></svg></span>
-                <span class="check-num" aria-hidden="true">01</span>
-              </div>
-              <h3>Resolve the batch</h3>
-              <p>Reads the batch record and every custody handoff from the BeefSupplyChain contract.</p>
-            </div>
-            <div class="check-card">
-              <div class="check-card-top">
-                <span class="tile-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v5c0 4.5-3 8.5-7 10-4-1.5-7-5.5-7-10V6l7-3z"></path><path d="M9 12l2 2 4-4"></path></svg></span>
-                <span class="check-num" aria-hidden="true">02</span>
-              </div>
-              <h3>Check every signer</h3>
-              <p>Confirms each handler held an active credential in the CredentialRegistry at the moment they signed.</p>
-            </div>
-            <div class="check-card">
-              <div class="check-card-top">
-                <span class="tile-icon tile-amber"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13.5V5a2 2 0 1 1 4 0v8.5a4 4 0 1 1-4 0z"></path><path d="M12 9v6"></path></svg></span>
-                <span class="check-num" aria-hidden="true">03</span>
-              </div>
-              <h3>Replay the cold chain</h3>
-              <p>Compares logged IoT temperature readings against the safe range for the whole journey.</p>
-            </div>
-          </div>
-        </section>
-
-        <section aria-labelledby="sourcesHeading" class="sources">
-          <div class="sources-head">
-            <h2 id="sourcesHeading">On-chain sources</h2>
-            <span>Read-only · DIDLab testnet · Chain ID <span id="chainIdValue" class="mono ink">252501</span></span>
-          </div>
-          <div id="sourceRows"></div>
-        </section>
-
       </div>
 
       <article id="aboutView" class="info-page" aria-labelledby="aboutHeading" hidden>
@@ -497,6 +516,6 @@
     </footer>
   </div>
 
-  <script type="module" src="/frontend/public/app.js?v=2e0b249888"></script>
+  <script type="module" src="/frontend/public/app.js?v=b84650ae75"></script>
 </body>
 </html>

@@ -36,6 +36,11 @@ const navigation = [
   { name: "Audit History", icon: History },
 ];
 
+// The public batch lookup. Signed-out visitors belong there, and signing out
+// returns there. In `npm run dev` this app runs on its own port, so point at
+// the portal server; the session cookie is shared across localhost ports.
+const HOME_URL = import.meta.env.DEV ? "http://localhost:3000/" : "/";
+
 async function apiRequest(url, options = {}) {
   const response = await fetch(url, {
     credentials: "same-origin",
@@ -54,7 +59,7 @@ function MetricCard({ title, value, icon: Icon, color, subtitle }) {
         <p className="text-sm text-stone-500">{title}</p>
         <Icon className={color} size={22} />
       </div>
-      <p className="mt-5 text-3xl font-bold">{value ?? "â€”"}</p>
+      <p className="mt-5 text-3xl font-bold">{value ?? "—"}</p>
       <p className="mt-2 text-xs text-stone-400">{subtitle}</p>
     </div>
   );
@@ -80,8 +85,27 @@ export default function App() {
   const [requestBusy, setRequestBusy] = useState(false);
   const [requestMessage, setRequestMessage] = useState("");
   const [requestError, setRequestError] = useState("");
+  const [sessionChecked, setSessionChecked] = useState(false);
   const sessionVersion = useRef(0);
   const sessionBusyRef = useRef(false);
+
+  // People sign in on the public page, which then sends them here. Pick up
+  // that session; anyone without one goes back to the public page.
+  useEffect(() => {
+    let active = true;
+    apiRequest("/api/me")
+      .then((user) => {
+        if (!active) return;
+        if (!user?.address) throw new Error("Signed out");
+        setPortalUser(user);
+        setWalletAddress(user.address);
+        setSessionChecked(true);
+      })
+      .catch(() => {
+        if (active) window.location.replace(HOME_URL);
+      });
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -118,6 +142,7 @@ export default function App() {
       setWalletError("Wallet changed. Connect and sign in again.");
       try {
         await apiRequest("/api/auth/logout", { method: "POST" });
+        window.location.assign(HOME_URL);
       } catch (error) {
         setWalletError(`Session logout failed: ${error.message}. Reload before signing in.`);
       } finally {
@@ -247,6 +272,7 @@ export default function App() {
     setWalletError("");
     try {
       await apiRequest("/api/auth/logout", { method: "POST" });
+      window.location.assign(HOME_URL);
     } catch (error) {
       setWalletError(`Logout failed: ${error.message}. Reload before signing in.`);
     } finally {
@@ -328,6 +354,9 @@ export default function App() {
   const needsRole = Boolean(portalUser?.address && dashboardData && !(dashboardData.roles || []).length);
   const selectedRole = ORGANIZATIONS.find((item) => item.value === organization)?.role;
 
+  // Nothing to show until the session check decides between here and home.
+  if (!sessionChecked) return null;
+
   return (
     <div className="min-h-screen bg-ivory text-slate-navy md:flex">
       {sidebarOpen && <button aria-label="Close navigation" className="fixed inset-0 z-30 bg-black/40 md:hidden" onClick={() => setSidebarOpen(false)} />}
@@ -358,7 +387,7 @@ export default function App() {
             </button>
             {walletAddress && !portalUser?.address && <button type="button" onClick={signInToPortal} disabled={signingIn || sessionBusy} className="rounded-xl bg-forest px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50">{signingIn ? "Signing in..." : "Sign In"}</button>}
             {portalUser?.address && <>
-              <span className="rounded-full bg-green-50 px-3 py-2 text-xs font-medium text-green-700">Signed in{portalUser.roles?.length ? ` Â· ${portalUser.roles.join(", ")}` : " Â· No role assigned"}</span>
+              <span className="rounded-full bg-green-50 px-3 py-2 text-xs font-medium text-green-700">Signed in{portalUser.roles?.length ? ` · ${portalUser.roles.join(", ")}` : " · No role assigned"}</span>
               <button type="button" onClick={logoutPortal} disabled={sessionBusy} className="inline-flex items-center gap-2 rounded-xl border border-stone-200 px-3 py-2 text-sm font-medium hover:bg-stone-100 disabled:opacity-50"><LogOut size={15} />Logout</button>
             </>}
           </div>
@@ -430,7 +459,7 @@ export default function App() {
           {activePage === "Overview" && needsRole && <section className="rounded-2xl border border-stone-200 bg-white p-6 shadow-sm">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div><h3 className="text-lg font-bold text-forest">Request Portal Access</h3><p className="mt-1 text-sm text-stone-500">Choose your organization type. Your requested role is selected automatically.</p></div>
-              {request && <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800">Request submitted Â· Awaiting review</span>}
+              {request && <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800">Request submitted · Awaiting review</span>}
             </div>
             {request && <p className="mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">A request is saved for this wallet. You can update it below or cancel it. Approval is handled by an administrator.</p>}
             <form onSubmit={submitAccessRequest} className="mt-5 space-y-4">
@@ -484,9 +513,9 @@ export default function App() {
             <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{displayMetrics.map(({ title, value, icon, color }) => <MetricCard key={title} title={title} value={value} icon={icon} color={color} subtitle={roleMetrics.length ? "From the portal dashboard API" : "Awaiting authorized role data"} />)}</section>
             <section className="grid gap-5 lg:grid-cols-3">
               <div className="rounded-2xl border border-stone-200 bg-white p-6 lg:col-span-2"><h3 className="text-lg font-bold">Supply Chain Lifecycle</h3><p className="mt-1 text-sm text-stone-500">Follow every stage from registration to verification.</p><div className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-4">{[["Register", Package], ["Inspect", ClipboardCheck], ["Ship", Truck], ["Verify", ScanLine]].map(([label, Icon]) => <div key={label} className="rounded-xl bg-ivory p-4 text-center"><Icon className="mx-auto text-forest" size={25} /><p className="mt-3 text-sm font-medium">{label}</p></div>)}</div></div>
-              <div className="rounded-2xl border border-stone-200 bg-white p-6"><div className="flex items-center gap-2"><Activity className="text-forest" size={21} /><h3 className="text-lg font-bold">Network Status</h3></div><div className="mt-6 space-y-4 text-sm"><div className="flex justify-between gap-3"><span className="text-stone-500">Network</span><span className="font-medium">DIDLab</span></div><div className="flex justify-between gap-3"><span className="text-stone-500">Chain ID</span><span className="font-medium">{CHAIN_ID}</span></div><div className="flex justify-between gap-3"><span className="text-stone-500">Latest Block</span><span className="font-medium">{latestBlock === null ? "â€”" : latestBlock.toLocaleString()}</span></div><div className="flex justify-between gap-3"><span className="text-stone-500">Connection</span><span className={networkStatus === "Connected" ? "font-medium text-green-700" : "font-medium text-beef"}>{networkStatus}</span></div></div></div>
+              <div className="rounded-2xl border border-stone-200 bg-white p-6"><div className="flex items-center gap-2"><Activity className="text-forest" size={21} /><h3 className="text-lg font-bold">Network Status</h3></div><div className="mt-6 space-y-4 text-sm"><div className="flex justify-between gap-3"><span className="text-stone-500">Network</span><span className="font-medium">DIDLab</span></div><div className="flex justify-between gap-3"><span className="text-stone-500">Chain ID</span><span className="font-medium">{CHAIN_ID}</span></div><div className="flex justify-between gap-3"><span className="text-stone-500">Latest Block</span><span className="font-medium">{latestBlock === null ? "—" : latestBlock.toLocaleString()}</span></div><div className="flex justify-between gap-3"><span className="text-stone-500">Connection</span><span className={networkStatus === "Connected" ? "font-medium text-green-700" : "font-medium text-beef"}>{networkStatus}</span></div></div></div>
             </section>
-            <section className="rounded-2xl border border-stone-200 bg-white p-6"><h3 className="text-lg font-bold">Recent Supply Chain Records</h3><p className="mt-2 text-sm text-stone-500">Batch records available to your assigned portal roles.</p>{uniqueRows.length ? <div className="mt-5 overflow-x-auto"><table className="w-full text-left text-sm"><thead className="border-b border-stone-200 text-stone-500"><tr><th className="px-3 py-3">Batch</th><th className="px-3 py-3">Inspection</th><th className="px-3 py-3">Recall</th><th className="px-3 py-3">Holder</th></tr></thead><tbody>{uniqueRows.slice(0, 8).map((item, index) => <tr key={item.batchId || index} className="border-b border-stone-100"><td className="px-3 py-3 font-medium">{item.batchId || "â€”"}</td><td className="px-3 py-3">{item.inspected ? "Inspected" : "Pending"}</td><td className="px-3 py-3">{item.recalled ? "Recalled" : "Clear"}</td><td className="px-3 py-3">{item.holder || "â€”"}</td></tr>)}</tbody></table></div> : <div className="mt-6 rounded-xl border border-dashed border-stone-200 p-10 text-center"><History className="mx-auto text-stone-400" size={28} /><p className="mt-3 text-sm text-stone-500">{portalUser?.address ? "No accessible batch records loaded yet." : "Sign in to load authorized batch records."}</p></div>}</section>
+            <section className="rounded-2xl border border-stone-200 bg-white p-6"><h3 className="text-lg font-bold">Recent Supply Chain Records</h3><p className="mt-2 text-sm text-stone-500">Batch records available to your assigned portal roles.</p>{uniqueRows.length ? <div className="mt-5 overflow-x-auto"><table className="w-full text-left text-sm"><thead className="border-b border-stone-200 text-stone-500"><tr><th className="px-3 py-3">Batch</th><th className="px-3 py-3">Inspection</th><th className="px-3 py-3">Recall</th><th className="px-3 py-3">Holder</th></tr></thead><tbody>{uniqueRows.slice(0, 8).map((item, index) => <tr key={item.batchId || index} className="border-b border-stone-100"><td className="px-3 py-3 font-medium">{item.batchId || "—"}</td><td className="px-3 py-3">{item.inspected ? "Inspected" : "Pending"}</td><td className="px-3 py-3">{item.recalled ? "Recalled" : "Clear"}</td><td className="px-3 py-3">{item.holder || "—"}</td></tr>)}</tbody></table></div> : <div className="mt-6 rounded-xl border border-dashed border-stone-200 p-10 text-center"><History className="mx-auto text-stone-400" size={28} /><p className="mt-3 text-sm text-stone-500">{portalUser?.address ? "No accessible batch records loaded yet." : "Sign in to load authorized batch records."}</p></div>}</section>
                     </> : activePage === "Batches" ? (
             <BatchRegistration
               portalUser={portalUser}

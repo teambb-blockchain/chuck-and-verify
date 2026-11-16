@@ -14,6 +14,7 @@ import { api } from "./session.js";
 import { openEncryptedForm } from "./ipfs.js";
 import { chain, publicClient, credentialRegistryAddress, isUserRejection } from "./chain.js";
 import { registryAbi } from "./registryAbi.js";
+import { route } from "./consumer.js";
 
 const ROLE_ORDER = ["PROCESSOR", "INSPECTOR", "CUSTODIAN", "ADMIN"];
 const ROLE_NAME = {
@@ -168,17 +169,27 @@ function storage(get, key, value) {
   return null;
 }
 
-// --- Navigation into the existing action cards ------------------------------
+// --- Navigation into one work-view task -------------------------------------
+
+const SECTION_TASK = {
+  registerSection: "register",
+  recallSection: "recall",
+  inspectSection: "inspect",
+  custodySection: "ship",
+  splitSection: "split",
+  adminSection: "users"
+};
 
 function goTo(sectionId, fill = {}, focusId) {
+  const task = SECTION_TASK[sectionId];
   const section = $(sectionId);
-  if (!section || section.hidden) return;
+  if (!task || !section || section.dataset.permitted === "false") return;
   for (const [id, value] of Object.entries(fill)) {
     const input = $(id);
     if (input) input.value = value;
   }
-  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  section.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
+  history.pushState(null, "", "/?page=work&task=" + task);
+  route();
   section.classList.remove("is-arrived");
   void section.offsetWidth;
   section.classList.add("is-arrived");
@@ -226,8 +237,8 @@ const ACTIONS = {
     label: "Verify a batch",
     hint: "Look up any batch on the blockchain.",
     run: () => {
-      const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-      $("batchId").scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "center" });
+      history.pushState(null, "", "/");
+      route();
       $("batchId").focus({ preventScroll: true });
     }
   }
@@ -955,8 +966,14 @@ export function renderForSession(next) {
     session.roles.join() !== next.roles.join() || session.organization !== next.organization;
   session = signedIn ? next : null;
 
-  dashboard.hidden = !signedIn || !next.roles.length;
-  onboarding.hidden = !signedIn || next.roles.length > 0;
+  // data-live survives a task switch. The work view hides the card that
+  // isn't open, then shows this one again when Overview is the task.
+  function markLive(el, on) {
+    el.dataset.live = on ? "true" : "false";
+    el.hidden = !on;
+  }
+  markLive(dashboard, signedIn && next.roles.length > 0);
+  markLive(onboarding, signedIn && next.roles.length === 0);
   if (!signedIn) {
     loadRun++;
     backfilled = false;
@@ -966,7 +983,15 @@ export function renderForSession(next) {
   }
   // A custodian whose business doesn't split lots doesn't need the card.
   // The contract would still accept a split; this only trims the page.
-  if (!custodyProfile().split) $("splitSection").hidden = true;
+  if (!custodyProfile().split) {
+    $("splitSection").dataset.permitted = "false";
+    $("splitSection").hidden = true;
+    const splitNav = $("splitNav");
+    if (splitNav) {
+      splitNav.dataset.permitted = "false";
+      splitNav.hidden = true;
+    }
+  }
   if (!changed) return;
   if (next.roles.length) {
     active = storage(true, TAB_KEY) || null;

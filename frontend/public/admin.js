@@ -190,6 +190,7 @@ async function annotateOnChain(users) {
       ?.querySelector(`.role-chip[data-role="${role}"]`);
     if (!chip || results[i] === null) return;
     chip.classList.toggle("role-chip-warn", !results[i]);
+    chip.textContent = role + (results[i] ? " · chain valid" : " · chain missing");
     chip.title = results[i]
       ? "Valid credential in CredentialRegistry."
       : "No valid credential in CredentialRegistry. Contract writes for this role will revert.";
@@ -485,7 +486,11 @@ async function loadRequests() {
     requestsBlock.hidden = true;
     return;
   }
-  requestsBlock.hidden = requests.length === 0;
+  requestsBlock.hidden = false;
+  if (requests.length === 0) {
+    requestList.replaceChildren(el("li", { className: "muted" }, "No pending requests."));
+    return;
+  }
   requestList.replaceChildren(
     ...requests.map((request) => {
       const fill = el("button", { type: "button", className: "btn btn-accent btn-small" }, "Fill in form");

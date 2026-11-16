@@ -23,6 +23,7 @@ import {
   isUserRejection
 } from "./chain.js";
 import { refreshDashboard } from "./dashboard.js";
+import { viewBatchControl } from "./consumer.js";
 
 const MAX_LOTS = 20; // BeefSupplyChain.MAX_LOTS
 const LOT_COUNT_HINT = `Split into 2 to ${MAX_LOTS} lots.`;
@@ -81,7 +82,7 @@ function batchIdFrom(inputId) {
 }
 
 // Simulate, send, wait. Returns true when the change is on chain.
-async function send({ account, walletClient, functionName, args, status, done }) {
+async function send({ account, walletClient, functionName, args, status, done, batchName }) {
   status.textContent = "Checking…";
   const { request } = await publicClient.simulateContract({
     address: beefSupplyChainAddress,
@@ -98,7 +99,9 @@ async function send({ account, walletClient, functionName, args, status, done })
     status.replaceChildren("It couldn't be recorded. ", txLink(hash));
     return false;
   }
-  status.replaceChildren(done + " ", txLink(hash));
+  const nodes = [done + " ", txLink(hash)];
+  if (batchName) nodes.push(" ", viewBatchControl(batchName));
+  status.replaceChildren(...nodes);
   refreshDashboard();
   return true;
 }
@@ -134,6 +137,7 @@ $("recordShipment").onclick = () =>
       functionName: "recordShipment",
       args: [batch.id, to],
       status: custodyStatus,
+      batchName: batch.name,
       done: "Shipment recorded: " + batch.name + ". It stays in your custody until the receiver confirms."
     });
   });
@@ -147,6 +151,7 @@ $("confirmReceipt").onclick = () =>
       functionName: "confirmReceipt",
       args: [batch.id],
       status: custodyStatus,
+      batchName: batch.name,
       done: "Received: " + batch.name + " is now in your custody."
     });
   });
@@ -259,6 +264,7 @@ $("splitBatch").onclick = () =>
         functionName: "splitBatch",
         args: [batch.id, weights],
         status: splitStatus,
+        batchName: batch.name,
         done: `Split ${batch.name} into ${weights.length} lots: ${lotName(batch.name, 1)} to ${lotName(batch.name, weights.length)}.`
       });
     },
@@ -320,6 +326,7 @@ recallButton.onclick = async () => {
       functionName: "recordRecall",
       args: [batch.id, "0x" + bundle.ciphertextSha256, classification],
       status: recallStatus,
+      batchName: batch.name,
       done: "Recall recorded: " + batch.name + ", Class " + ["I", "II", "III"][classification - 1] + "."
     });
     if (ok) {

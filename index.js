@@ -9,6 +9,8 @@ const { createPortal } = require("./server/portal");
 
 const root = __dirname;
 const publicDir = path.join(root, "frontend", "public");
+// The signed-in dashboard, built from frontend/dashboard (npm run build there).
+const portalDir = path.join(root, "portal");
 const port = Number(process.env.PORT) || 3000;
 
 // The portal does not send Access-Control-Allow-Origin, so the browser
@@ -67,7 +69,15 @@ function resolveFile(urlPath) {
   if (decoded === "/" || decoded === "/index.html") {
     return path.join(root, "index.html");
   }
-  const candidate = fileInPublic(decoded);
+  let candidate;
+  if (decoded === "/portal" || decoded.startsWith("/portal/")) {
+    let rel = decoded.slice("/portal".length) || "/";
+    if (rel.endsWith("/")) rel += "index.html";
+    candidate = path.resolve(portalDir, "." + rel);
+    if (!isInside(portalDir, candidate)) return null;
+  } else {
+    candidate = fileInPublic(decoded);
+  }
   if (!candidate) {
     return null;
   }

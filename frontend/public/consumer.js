@@ -3,7 +3,9 @@
 // without a wallet; it reads DIDLab through chain.js's public client.
 //
 // Routes: `/` is the lookup page, `/?batch=<id>` is a batch result, so a
-// batch result can be linked to directly. (A query string rather than a
+// batch result can be linked to directly. `/?page=about` and `/?page=team`
+// are the info pages. `/?page=work` is the signed-in workspace, and
+// `/?page=work&task=` opens one handler task. (A query string rather than a
 // /verify/<id> path because the DIDLab host's nginx serves `/` and the static
 // files itself; a new path would need a proxy rule there.)
 
@@ -319,6 +321,16 @@ export function showBatch(name) {
   const url = "/?batch=" + encodeURIComponent(id);
   if (location.pathname + location.search !== url) history.pushState(null, "", url);
   route();
+}
+
+// Stays on the task page until the handler chooses to open the result.
+export function viewBatchControl(name) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "link-btn";
+  button.textContent = "View batch";
+  button.addEventListener("click", () => showBatch(name));
+  return button;
 }
 
 function bindLookup(form, input, status) {
@@ -1013,26 +1025,126 @@ function backToLookup(event) {
 
 let renderToken = 0;
 
-// Info pages: /?page=about and /?page=team.
+// Info pages: /?page=about and /?page=team. Work is separate because a
+// task query picks one handler section inside that view.
 const PAGES = {
   about: { view: "aboutView", title: "About — Chuck and Verify" },
   team: { view: "teamView", title: "Team — Chuck and Verify" }
 };
-const VIEWS = ["lookupView", "resultView", "aboutView", "teamView"];
+const VIEWS = ["lookupView", "resultView", "aboutView", "teamView", "workView"];
+
+const WORK_TASKS = {
+  register: {
+    section: "registerSection",
+    title: "Register a batch — Chuck and Verify",
+    denied: "Registration needs a processor role."
+  },
+  inspect: {
+    section: "inspectSection",
+    title: "Record an inspection — Chuck and Verify",
+    denied: "Recording an inspection needs an inspector role."
+  },
+  ship: {
+    section: "custodySection",
+    title: "Move a batch — Chuck and Verify",
+    denied: "Shipping needs a custodian role."
+  },
+  split: {
+    section: "splitSection",
+    title: "Split a batch — Chuck and Verify",
+    denied: "Splitting a batch needs a custodian who can split lots."
+  },
+  recall: {
+    section: "recallSection",
+    title: "Recall a batch — Chuck and Verify",
+    denied: "A recall needs the processor who registered the batch."
+  },
+  users: {
+    section: "adminSection",
+    title: "Portal users — Chuck and Verify",
+    denied: "Managing users needs an administrator."
+  }
+};
+const WORK_SECTIONS = Object.values(WORK_TASKS).map((task) => task.section);
 
 function showView(id) {
   for (const v of VIEWS) $(v).hidden = v !== id;
 }
 
-async function route() {
-  const params = new URLSearchParams(location.search);
-  const name = params.get("batch");
-  const page = !name && Object.hasOwn(PAGES, params.get("page") || "") ? params.get("page") : null;
-  const result = $("resultView");
-  document.body.dataset.view = name ? "result" : page || "lookup";
+function markSiteNav(page) {
   for (const link of document.querySelectorAll(".site-nav a")) {
     if (link.dataset.page === page) link.setAttribute("aria-current", "page");
     else link.removeAttribute("aria-current");
+  }
+}
+
+// Overview cards keep data-live from the session render. `hidden` on a task
+// section is only "this task is not open"; data-permitted is the role check.
+function applyWorkTask(task) {
+  const spec = WORK_TASKS[task];
+  const signedIn =
+    $("onboarding").dataset.live === "true" || $("dashboard").dataset.live === "true";
+  const overview = !spec;
+  for (const id of ["onboarding", "dashboard"]) {
+    const el = $(id);
+    el.hidden = !overview || el.dataset.live !== "true";
+  }
+  for (const id of WORK_SECTIONS) $(id).hidden = true;
+
+  const denied = $("workDenied");
+  const signedOut = $("workSignedOut");
+  signedOut.hidden = !overview || signedIn;
+  let title = $("onboarding").dataset.live === "true"
+    ? "Request access — Chuck and Verify"
+    : "Your work — Chuck and Verify";
+
+  if (spec) {
+    title = spec.title;
+    const section = $(spec.section);
+    const allowed = signedIn && section.dataset.permitted === "true";
+    if (allowed) {
+      section.hidden = false;
+      denied.hidden = true;
+      denied.textContent = "";
+    } else {
+      denied.hidden = false;
+      denied.textContent = signedIn ? spec.denied : "Sign in to see your work.";
+    }
+  } else {
+    denied.hidden = true;
+    denied.textContent = "";
+  }
+
+  const current = spec ? task : "";
+  for (const link of document.querySelectorAll(".work-nav a")) {
+    if ((link.dataset.task || "") === current) link.setAttribute("aria-current", "page");
+    else link.removeAttribute("aria-current");
+  }
+  return title;
+}
+
+// Re-apply the open task after a permission refresh. No-op off the work view,
+// where every section stays inside a hidden parent.
+export function syncWork() {
+  if (document.body.dataset.view !== "work") return;
+  const task = new URLSearchParams(location.search).get("task") || "";
+  document.title = applyWorkTask(task);
+}
+
+export async function route() {
+  const params = new URLSearchParams(location.search);
+  const name = params.get("batch");
+  const requested = !name ? params.get("page") : null;
+  const page = requested && Object.hasOwn(PAGES, requested) ? requested : null;
+  const result = $("resultView");
+  document.body.dataset.view = name ? "result" : requested === "work" ? "work" : page || "lookup";
+  markSiteNav(requested === "work" ? "work" : page);
+
+  if (requested === "work") {
+    showView("workView");
+    syncWork();
+    window.scrollTo(0, 0);
+    return;
   }
 
   if (page) {
@@ -1081,7 +1193,7 @@ async function route() {
 for (const link of document.querySelectorAll("[data-home]")) {
   link.addEventListener("click", backToLookup);
 }
-for (const link of document.querySelectorAll(".site-nav a")) {
+for (const link of document.querySelectorAll("a[data-page]")) {
   link.addEventListener("click", (event) => {
     if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return;
     event.preventDefault();
