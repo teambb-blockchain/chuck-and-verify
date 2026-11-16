@@ -1,0 +1,147 @@
+{
+  "note": "Fixed example of layout v1 (scripts/lib/sensor-summary.js). A device given this log and privateKey must produce exactly these readingBytes, leaves, summary (logRoot included), typeHash, domainSeparator, structHash and digest, and a signature that recovers to sensor. The signature here is RFC 6979 deterministic; a device using random nonces produces a different, equally valid one. readingProof shows one reading belongs to the log without the rest. Test key only.",
+  "privateKey": "0xfb7bfb3c393229245f312867b0fc70179c1499ff5da29f94770b09cc35408d22",
+  "log": {
+    "batch": "BB-2026-014",
+    "leg": 1,
+    "custodian": "0x000000000000000000000000000000000000beef",
+    "startTime": 1793750400,
+    "endTime": 1793772000,
+    "rangeLowCentiC": -220,
+    "rangeHighCentiC": 444,
+    "readings": [
+      {
+        "seq": 1001,
+        "timestamp": 1793750400,
+        "tempCentiC": 210
+      },
+      {
+        "seq": 1002,
+        "timestamp": 1793752200,
+        "tempCentiC": 180
+      },
+      {
+        "seq": 1003,
+        "timestamp": 1793754000,
+        "tempCentiC": 190
+      },
+      {
+        "seq": 1004,
+        "timestamp": 1793755800,
+        "tempCentiC": 230
+      },
+      {
+        "seq": 1005,
+        "timestamp": 1793757600,
+        "tempCentiC": 520
+      },
+      {
+        "seq": 1006,
+        "timestamp": 1793759400,
+        "tempCentiC": 610
+      },
+      {
+        "seq": 1008,
+        "timestamp": 1793761200,
+        "tempCentiC": 300
+      },
+      {
+        "seq": 1009,
+        "timestamp": 1793763000,
+        "tempCentiC": 220
+      },
+      {
+        "seq": 1010,
+        "timestamp": 1793764800,
+        "tempCentiC": 200
+      },
+      {
+        "seq": 1011,
+        "timestamp": 1793766600,
+        "tempCentiC": 190
+      },
+      {
+        "seq": 1012,
+        "timestamp": 1793768400,
+        "tempCentiC": 185
+      },
+      {
+        "seq": 1013,
+        "timestamp": 1793770200,
+        "tempCentiC": 180
+      }
+    ]
+  },
+  "readingBytes": [
+    "0x000003e9000000006aea758000d2",
+    "0x000003ea000000006aea7c8800b4",
+    "0x000003eb000000006aea839000be",
+    "0x000003ec000000006aea8a9800e6",
+    "0x000003ed000000006aea91a00208",
+    "0x000003ee000000006aea98a80262",
+    "0x000003f0000000006aea9fb0012c",
+    "0x000003f1000000006aeaa6b800dc",
+    "0x000003f2000000006aeaadc000c8",
+    "0x000003f3000000006aeab4c800be",
+    "0x000003f4000000006aeabbd000b9",
+    "0x000003f5000000006aeac2d800b4"
+  ],
+  "leaves": [
+    "0x93419fe0014a70b4fa53b4a9dbed6eb662cadb38c573c0f60391dfb0b5ee4922",
+    "0xa471431a1fef6bce59700dbf8a8d1c0dff059b0f76028664fd69e253bb099522",
+    "0x6668fcacabd17d1f4d588779d25c813b6907411578e12223589733f6abe68b1f",
+    "0x7f3c7eac60d1f4cdb86b3eee3a0bea73426318eeb9ff243d4a720625e7f15893",
+    "0x2b88d9bea12eb1b3b74517dc63ae7ae25e64f7b0d1e58bae828f01e703b51be0",
+    "0x983c1ddb9aa3e36cf75c44895fa4dccd54ed6d037c6a96495092e6028aba350b",
+    "0x435d6c9a2134637a930e9ca97ba62e020c5b2407f2a07cc5f02363a105cb8be3",
+    "0x226fbc3bdb0c27a82d55088478690906314136e7e2ab48bd0df25a9c25cc73f5",
+    "0x85ece707e4e0503b8b6f6cbdb6cef8420a4e0bc32ce9e3fc3751d2a7fdf1938b",
+    "0x3aa027f6a6ba0d31f3d641e07d5f8c8153e0cc5c4e9b431ef3c52cf7bb40f882",
+    "0xde940fe08c71d01aeb0250c12fcade7047f0991f748f653f6d8275956bad85af",
+    "0x38599034fa083c7c90e2872a906aaef7a055c3b5f5c47800fd3a5dfa2921cd1b"
+  ],
+  "readingProof": {
+    "index": 5,
+    "reading": {
+      "seq": 1006,
+      "timestamp": 1793759400,
+      "tempCentiC": 610
+    },
+    "prevLeaf": "0x2b88d9bea12eb1b3b74517dc63ae7ae25e64f7b0d1e58bae828f01e703b51be0",
+    "proof": [
+      "0x2b88d9bea12eb1b3b74517dc63ae7ae25e64f7b0d1e58bae828f01e703b51be0",
+      "0xb8993842f8283fb74b011330d62b24670ed179eaffee0819c2d19131b07c5e3e",
+      "0x66be9429fbc15a925873841562daf2707500aecea0f4ae1bf78875cbb4b6756f",
+      "0xb10f80a1f80129ff657c6fa02b338489c8c79af07ff6d3fcd5d6c71e0b9ba73b"
+    ]
+  },
+  "sensor": "0x52cdBe274f1bf3B1b2427197Aa809Fbed2537AA8",
+  "domain": {
+    "name": "Chuck and Verify Sensor",
+    "version": "1",
+    "chainId": 252501,
+    "verifyingContract": "0x000000000000000000000000000000000000c0DE"
+  },
+  "summary": {
+    "batchId": "0x42422d323032362d303134000000000000000000000000000000000000000000",
+    "leg": 1,
+    "custodian": "0x000000000000000000000000000000000000bEEF",
+    "startTime": 1793750400,
+    "endTime": 1793772000,
+    "rangeLowCentiC": -220,
+    "rangeHighCentiC": 444,
+    "minCentiC": 180,
+    "maxCentiC": 610,
+    "secondsOutOfRange": 3600,
+    "readingCount": 12,
+    "firstSeq": 1001,
+    "lastSeq": 1013,
+    "logRoot": "0xdfe34bec99b6fb0e09d62eba248ceb844f033c43e50329a9f6702c1b55af7c3c"
+  },
+  "missingReadings": 1,
+  "typeHash": "0x815ea47b310169b11609da4d84bcefaddc34a6e06db4236ddb9c5eb52da16cd5",
+  "domainSeparator": "0x13c5ddbeff7218042870bf269b00c55782c70dab785c8d0a6b6eb224f2912175",
+  "structHash": "0x4f42deedf78c426c0ea9d763532535ec1ff782c0ec21a6b498f2a6660eb7a114",
+  "digest": "0xc6f41723beeac998c01c70f14784921d58212a2b9a3bb591fd1c2fb11122e3a8",
+  "signature": "0x2893beee9fbb582c3e94f301581cd22b9ee09a17f5346c7a73da75c8386fc4363b3c2e5473d1ac3433c5556951ec4225bc4a866499e3a81c4c90d90591ca6a2d1c"
+}

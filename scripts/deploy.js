@@ -1,7 +1,129 @@
 
 const hre = require("hardhat");
 
+// Which contracts to deploy against the registry, comma-separated.
+// Default is BeefSupplyChain only, as before. SensorSignatureVerifier deploys
+// the signing feasibility verifier (ADR 0004) and sets the SENSOR issuer.
+const KNOWN_CONTRACTS = ["BeefSupplyChain", "SensorSignatureVerifier"];
+
+function contractsToDeploy() {
+  const list = (process.env.DEPLOY_CONTRACTS || "BeefSupplyChain")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  for (const name of list) {
+    if (!KNOWN_CONTRACTS.includes(name)) {
+      throw new Error(
+        `Unknown contract in DEPLOY_CONTRACTS: ${name}. Known: ${KNOWN_CONTRACTS.join(", ")}`
+      );
+    }
+  }
+  if (list.length === 0) throw new Error("DEPLOY_CONTRACTS is empty.");
+  return list;
+}
+
+async function deployBeefSupplyChain(registryAddress) {
+  const SupplyChain = await hre.ethers.getContractFactory("BeefSupplyChain");
+
+  const supplyChain = await SupplyChain.deploy(registryAddress);
+  await supplyChain.waitForDeployment();
+
+  const supplyChainAddress = await supplyChain.getAddress();
+  const supplyChainTx = supplyChain.deploymentTransaction();
+
+  console.log("BeefSupplyChain:", supplyChainAddress);
+  console.log("SupplyChain deployment TX:", supplyChainTx.hash);
+
+  // Read back from the chain: the supply chain must point at the registry
+  // we just deployed, not at a stale address from an earlier run.
+  const linkedRegistry = await supplyChain.registry();
+
+  if (linkedRegistry.toLowerCase() !== registryAddress.toLowerCase()) {
+    throw new Error(
+      `registry() mismatch: expected ${registryAddress}, got ${linkedRegistry}`
+    );
+  }
+
+  console.log("SupplyChain registry:", linkedRegistry);
+}
+
+async function deploySensorVerifier(registry, registryAddress, deployer, admin) {
+  const Verifier = await hre.ethers.getContractFactory("SensorSignatureVerifier");
+  const verifier = await Verifier.deploy(registryAddress);
+  await verifier.waitForDeployment();
+
+  console.log("SensorSignatureVerifier:", await verifier.getAddress());
+  console.log("Verifier deployment TX:", verifier.deploymentTransaction().hash);
+
+  const linkedRegistry = await verifier.registry();
+  if (linkedRegistry.toLowerCase() !== registryAddress.toLowerCase()) {
+    throw new Error(
+      `verifier registry() mismatch: expected ${registryAddress}, got ${linkedRegistry}`
+    );
+  }
+  console.log("Verifier registry:", linkedRegistry);
+
+  // The registry accepts any bytes32 type, so SENSOR needs no registry
+  // redeploy. Check the verifier uses the string the registry will be given.
+  const CRED_SENSOR = await verifier.CRED_SENSOR();
+  if (CRED_SENSOR !== hre.ethers.id("SENSOR")) {
+    throw new Error(`CRED_SENSOR is not keccak256("SENSOR"): ${CRED_SENSOR}`);
+  }
+
+  await setSensorIssuer(registry, CRED_SENSOR, deployer, admin);
+}
+
+// SENSOR_ISSUER stands in for the calibration lab (0003). Without it, an
+// unset SENSOR issuer becomes the deployer, and an issuer that is already
+// set is left alone.
+async function setSensorIssuer(registry, CRED_SENSOR, deployer, admin) {
+  const requested = process.env.SENSOR_ISSUER;
+  if (requested !== undefined) {
+    if (!hre.ethers.isAddress(requested) || requested === hre.ethers.ZeroAddress) {
+      throw new Error(`SENSOR_ISSUER is not a usable address: ${requested}`);
+    }
+  }
+
+  const current = await registry.issuerOf(CRED_SENSOR);
+  const target = requested
+    ? hre.ethers.getAddress(requested)
+    : current !== hre.ethers.ZeroAddress
+      ? current
+      : deployer.address;
+
+  if (current.toLowerCase() === target.toLowerCase()) {
+    console.log("SENSOR issuer: already", current);
+    return;
+  }
+
+  if (admin.toLowerCase() !== deployer.address.toLowerCase()) {
+    console.warn(
+      `SENSOR issuer NOT set: only the registry admin ${admin} can call setIssuer.\n` +
+        `  The admin must call setIssuer(${CRED_SENSOR}, ${target}) on the registry.`
+    );
+    return;
+  }
+
+  if (target.toLowerCase() === admin.toLowerCase()) {
+    console.warn(
+      "Note: the admin is also the SENSOR issuer. Set SENSOR_ISSUER to a separate wallet for the calibration lab (§14 row 2)."
+    );
+  }
+
+  const tx = await registry.setIssuer(CRED_SENSOR, target);
+  console.log("setIssuer(SENSOR) TX:", tx.hash);
+  await tx.wait();
+
+  const after = await registry.issuerOf(CRED_SENSOR);
+  if (after.toLowerCase() !== target.toLowerCase()) {
+    throw new Error(`issuerOf(SENSOR) mismatch: expected ${target}, got ${after}`);
+  }
+  console.log("SENSOR issuer:", after);
+}
+
 async function main() {
+  const contracts = contractsToDeploy();
+
   const [deployer] = await hre.ethers.getSigners();
   const network = await hre.ethers.provider.getNetwork();
 
@@ -54,32 +176,14 @@ async function main() {
   }
 
   console.log("Registry admin:", admin);
+  console.log("Deploying:", contracts.join(", "));
 
-  // Deploy the supply chain contract using the registry address.
-  const SupplyChain = await hre.ethers.getContractFactory(
-    "BeefSupplyChain"
-  );
-
-  const supplyChain = await SupplyChain.deploy(registryAddress);
-  await supplyChain.waitForDeployment();
-
-  const supplyChainAddress = await supplyChain.getAddress();
-  const supplyChainTx = supplyChain.deploymentTransaction();
-
-  console.log("BeefSupplyChain:", supplyChainAddress);
-  console.log("SupplyChain deployment TX:", supplyChainTx.hash);
-
-  // Read back from the chain: the supply chain must point at the registry
-  // we just deployed, not at a stale address from an earlier run.
-  const linkedRegistry = await supplyChain.registry();
-
-  if (linkedRegistry.toLowerCase() !== registryAddress.toLowerCase()) {
-    throw new Error(
-      `registry() mismatch: expected ${registryAddress}, got ${linkedRegistry}`
-    );
+  if (contracts.includes("BeefSupplyChain")) {
+    await deployBeefSupplyChain(registryAddress);
   }
-
-  console.log("SupplyChain registry:", linkedRegistry);
+  if (contracts.includes("SensorSignatureVerifier")) {
+    await deploySensorVerifier(registry, registryAddress, deployer, admin);
+  }
 
   console.log("Deployment completed successfully!");
 }
