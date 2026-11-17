@@ -10,23 +10,25 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600&family=JetBrains+Mono:wght@400;500&family=Big+Shoulders+Display:wght@700;800&display=swap">
-  <link rel="stylesheet" href="/frontend/public/styles.css?v=c8e9d399ea">
+  <link rel="stylesheet" href="/frontend/public/styles.css?v=2ec343b37a">
   <!-- asset-versions:start -->
   <script type="importmap">
   {
     "imports": {
-      "/frontend/public/abi.js": "/frontend/public/abi.js?v=3f6e603cba",
-      "/frontend/public/actions.js": "/frontend/public/actions.js?v=2fd3c00728",
-      "/frontend/public/admin.js": "/frontend/public/admin.js?v=1c69d0a249",
-      "/frontend/public/app.js": "/frontend/public/app.js?v=b84650ae75",
-      "/frontend/public/chain.js": "/frontend/public/chain.js?v=a8a4945a3a",
-      "/frontend/public/consumer.js": "/frontend/public/consumer.js?v=99ddebbf31",
-      "/frontend/public/dashboard.js": "/frontend/public/dashboard.js?v=f2787aa344",
+      "/frontend/public/abi.js": "/frontend/public/abi.js?v=bc2ecab287",
+      "/frontend/public/actions.js": "/frontend/public/actions.js?v=f08c013896",
+      "/frontend/public/admin.js": "/frontend/public/admin.js?v=70e96b0963",
+      "/frontend/public/app.js": "/frontend/public/app.js?v=788ca8aea5",
+      "/frontend/public/chain.js": "/frontend/public/chain.js?v=f3760a5e69",
+      "/frontend/public/consumer.js": "/frontend/public/consumer.js?v=893d644ab5",
+      "/frontend/public/dashboard.js": "/frontend/public/dashboard.js?v=b0115f90ca",
       "/frontend/public/ipfs.js": "/frontend/public/ipfs.js?v=93f5458b4e",
+      "/frontend/public/qr.js": "/frontend/public/qr.js?v=c06e70fe6d",
       "/frontend/public/registryAbi.js": "/frontend/public/registryAbi.js?v=3f9db4a2f2",
-      "/frontend/public/session.js": "/frontend/public/session.js?v=2ccf39cfcb",
+      "/frontend/public/scan.js": "/frontend/public/scan.js?v=c8b46f3379",
+      "/frontend/public/session.js": "/frontend/public/session.js?v=01e4d8c8e0",
       "/frontend/public/slides.js": "/frontend/public/slides.js?v=7a84acb1e9",
-      "/frontend/public/verify-core.js": "/frontend/public/verify-core.js?v=6c49fc4189"
+      "/frontend/public/verify-core.js": "/frontend/public/verify-core.js?v=aca3fd2f3d"
     }
   }
   </script>
@@ -49,7 +51,7 @@
           <form id="headerSearch" class="header-search result-only" role="search" novalidate>
             <label for="headerBatchId" class="visually-hidden">Look up another batch</label>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#7A847E" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"></circle><path d="M20 20l-4.2-4.2"></path></svg>
-            <input id="headerBatchId" type="text" placeholder="Another batch ID" maxlength="31" autocomplete="off" spellcheck="false" enterkeyhint="search">
+            <input id="headerBatchId" type="text" placeholder="Another batch ID" autocomplete="off" spellcheck="false" enterkeyhint="search">
           </form>
           <span id="sessionRoles" class="role-chips" hidden></span>
           <button id="switchNetwork" class="btn-secondary" type="button" hidden>Switch to DIDLab</button>
@@ -95,8 +97,12 @@
               <div class="search-row">
                 <div class="search-field">
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#7A847E" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"></circle><path d="M20 20l-4.2-4.2"></path></svg>
-                  <input id="batchId" type="text" value="BEEF-A1-001" placeholder="e.g. BEEF-A1-001" maxlength="31" autocomplete="off" spellcheck="false" autocapitalize="characters" enterkeyhint="go" aria-describedby="lookupStatus">
+                  <input id="batchId" type="text" value="BEEF-A1-001" placeholder="e.g. BEEF-A1-001" autocomplete="off" spellcheck="false" autocapitalize="characters" enterkeyhint="go" aria-describedby="lookupStatus">
                 </div>
+                <button id="scanBatch" type="button" class="scan-btn" hidden>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8V6a2 2 0 0 1 2-2h2"></path><path d="M16 4h2a2 2 0 0 1 2 2v2"></path><path d="M20 16v2a2 2 0 0 1-2 2h-2"></path><path d="M8 20H6a2 2 0 0 1-2-2v-2"></path><rect x="8" y="8" width="3" height="3"></rect><rect x="13" y="8" width="3" height="3"></rect><rect x="8" y="13" width="3" height="3"></rect><path d="M13 13h3v3"></path></svg>
+                  Scan label
+                </button>
                 <button id="verifyBatch" type="submit" class="btn-primary verify-btn">
                   Verify batch
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"></path><path d="M13 6l6 6-6 6"></path></svg>
@@ -328,6 +334,7 @@
             </div>
             <button id="splitBatch" class="btn btn-accent" type="button">Split batch</button>
             <p id="splitStatus" role="status" aria-live="polite"></p>
+            <div id="splitLabels" hidden></div>
           </section>
 
           <section id="recallSection" class="card recall-card" data-requires="batch.recall" aria-labelledby="recall-heading" hidden>
@@ -516,6 +523,6 @@
     </footer>
   </div>
 
-  <script type="module" src="/frontend/public/app.js?v=b84650ae75"></script>
+  <script type="module" src="/frontend/public/app.js?v=788ca8aea5"></script>
 </body>
 </html>

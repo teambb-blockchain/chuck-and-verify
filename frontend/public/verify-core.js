@@ -50,6 +50,29 @@ export function shortHex(value, tail = 5) {
   return text.slice(0, 6) + "…" + text.slice(-tail);
 }
 
+// --- Batch links (QR labels) -------------------------------------------------
+
+// The link a batch's QR label carries. A label is just this link drawn as a
+// QR code: nothing about it is stored on chain, so a lot split needs no
+// change to the contract. Each lot already has its own ID, so it gets its
+// own link and label, and the parent's label keeps opening the parent.
+export function batchLink(name, origin) {
+  return String(origin).replace(/\/+$/, "") + "/?batch=" + encodeURIComponent(String(name).trim());
+}
+
+// What the lookup box received: a typed batch ID, or a whole label link from
+// a handheld scanner (they type out what they read) or a paste. A link gives
+// up its `batch` value; anything else is taken as typed.
+export function batchFromScan(text) {
+  const value = String(text || "").trim();
+  if (!/^https?:\/\//i.test(value)) return value;
+  try {
+    return (new URL(value).searchParams.get("batch") || "").trim();
+  } catch {
+    return value;
+  }
+}
+
 const MINUTE = 60 * 1000;
 const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;

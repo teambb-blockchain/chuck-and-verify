@@ -24,6 +24,7 @@ import {
 } from "./chain.js";
 import { refreshDashboard } from "./dashboard.js";
 import { viewBatchControl } from "./consumer.js";
+import { labelSheet } from "./qr.js";
 
 const MAX_LOTS = 20; // BeefSupplyChain.MAX_LOTS
 const LOT_COUNT_HINT = `Split into 2 to ${MAX_LOTS} lots.`;
@@ -161,6 +162,7 @@ const splitStatus = $("splitStatus");
 const splitEqual = $("splitEqual");
 const splitCount = $("splitCount");
 const splitWeights = $("splitWeights");
+const splitLabels = $("splitLabels");
 
 // Lot names mirror the contract's: "<batch>-L1" … "<batch>-Ln".
 const lotName = (batchName, n) => batchName + "-L" + n;
@@ -258,7 +260,9 @@ $("splitBatch").onclick = () =>
         throw new Error(`The lots add up to ${sum} lbs, but ${batch.name} weighs ${total} lbs.`);
       }
       const wallet = await walletOnDidLab();
-      await send({
+      splitLabels.hidden = true;
+      splitLabels.replaceChildren();
+      const ok = await send({
         ...wallet,
         functionName: "splitBatch",
         args: [batch.id, weights],
@@ -266,6 +270,15 @@ $("splitBatch").onclick = () =>
         batchName: batch.name,
         done: `Split ${batch.name} into ${weights.length} lots: ${lotName(batch.name, 1)} to ${lotName(batch.name, weights.length)}.`
       });
+      // Each new lot has its own ID, so it gets its own label. The old
+      // label still opens the parent batch, which now lists its lots.
+      if (ok) {
+        const lots = weights.map((_, i) => lotName(batch.name, i + 1));
+        splitLabels.replaceChildren(
+          labelSheet(lots, { note: "Print a new label for each lot. The old label still opens " + batch.name + "." })
+        );
+        splitLabels.hidden = false;
+      }
     },
     splitStatus,
     "This batch can't be split right now."

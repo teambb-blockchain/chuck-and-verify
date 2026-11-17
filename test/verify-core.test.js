@@ -25,6 +25,29 @@ describe("verify-core", function () {
     core = await loadCore();
   });
 
+  describe("batch links", function () {
+    it("builds the link a label carries, one per lot", function () {
+      expect(core.batchLink("BEEF-A1-001", "https://teambb.didlab.org"))
+        .to.equal("https://teambb.didlab.org/?batch=BEEF-A1-001");
+      expect(core.batchLink("BEEF-A1-001-L2-L1", "https://teambb.didlab.org/"))
+        .to.equal("https://teambb.didlab.org/?batch=BEEF-A1-001-L2-L1");
+      expect(core.batchLink("LOT 7&x", "http://localhost:3000")).to.equal("http://localhost:3000/?batch=LOT%207%26x");
+    });
+
+    it("reads a batch ID back out of a scanned or pasted link", function () {
+      const link = core.batchLink("BEEF-A1-001-L3", "https://teambb.didlab.org");
+      expect(core.batchFromScan(link)).to.equal("BEEF-A1-001-L3");
+      expect(core.batchFromScan("  " + link + "\n")).to.equal("BEEF-A1-001-L3");
+      expect(core.batchFromScan(core.batchLink("LOT 7&x", "http://localhost:3000"))).to.equal("LOT 7&x");
+    });
+
+    it("takes a typed ID as typed and a link with no batch as empty", function () {
+      expect(core.batchFromScan(" BEEF-A1-001 ")).to.equal("BEEF-A1-001");
+      expect(core.batchFromScan("https://teambb.didlab.org/?page=about")).to.equal("");
+      expect(core.batchFromScan("")).to.equal("");
+    });
+  });
+
   describe("°C to °F", function () {
     it("converts with F = C × 9/5 + 32", function () {
       expect(core.cToF(0)).to.equal(32);

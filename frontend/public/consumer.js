@@ -39,8 +39,11 @@ import {
   deriveChecklist,
   deriveVerdict,
   summarizeReadings,
-  cToF
+  cToF,
+  batchFromScan
 } from "./verify-core.js";
+import { labelSheet } from "./qr.js";
+import { canScan, openScanner } from "./scan.js";
 
 const $ = (id) => document.getElementById(id);
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -336,7 +339,9 @@ export function viewBatchControl(name) {
 function bindLookup(form, input, status) {
   form.addEventListener("submit", (event) => {
     event.preventDefault();
-    const id = input.value.trim();
+    // A scanner or paste may bring the whole label link; keep just the ID.
+    const id = batchFromScan(input.value);
+    if (id !== input.value.trim()) input.value = id;
     if (!validId(id)) {
       if (status) status.textContent = "Enter the batch ID printed on the package label (up to 31 characters).";
       input.focus();
@@ -357,6 +362,26 @@ function setupLookup() {
     showBatch(sample);
   });
   setupTip($("batchIdTipWrap"));
+
+  // Camera scan of a package's QR label. Hidden where the browser can't
+  // reach a camera; typing the ID always works.
+  const scan = $("scanBatch");
+  if (canScan()) {
+    scan.hidden = false;
+    scan.addEventListener("click", () => {
+      $("lookupStatus").textContent = "";
+      openScanner({
+        onResult: (id) => {
+          $("batchId").value = id;
+          showBatch(id);
+        },
+        onError: (message) => {
+          $("lookupStatus").textContent = message;
+          scan.focus();
+        }
+      });
+    });
+  }
 }
 
 // Tooltip: shows on hover and keyboard focus (CSS), and a tap or click pins
@@ -761,6 +786,33 @@ function proofSection(record, steps) {
   const row = (k, v) => [h("dt", {}, k), v];
   const mono = (text, title) => h("dd", { title }, text);
 
+  // QR labels, drawn on demand. A split batch lives on as its lots, so it
+  // offers their labels; its own label still opens this page.
+  const labelPanel = h("div", { className: "proof-labels", id: "proofLabels", hidden: true });
+  const { lotNames } = record.lot;
+  const labelButton = h(
+    "button",
+    {
+      type: "button",
+      className: "proof-share",
+      "aria-expanded": "false",
+      "aria-controls": "proofLabels",
+      onClick: (event) => {
+        const open = labelPanel.hidden;
+        if (open && !labelPanel.firstChild) {
+          labelPanel.append(
+            lotNames.length
+              ? labelSheet(lotNames, { note: "This batch was split into " + lotNames.length + " lots. Label each lot with its own code." })
+              : labelSheet([record.name])
+          );
+        }
+        labelPanel.hidden = !open;
+        event.currentTarget.setAttribute("aria-expanded", String(open));
+      }
+    },
+    lotNames.length ? "Lot labels" : "QR label"
+  );
+
   return h(
     "section",
     { className: "proof-panel", id: "proof", "aria-labelledby": "proofHeading", tabindex: "-1" },
@@ -788,9 +840,11 @@ function proofSection(record, steps) {
         "View on explorer",
         icon("external", 16, 2)
       ),
-      h("button", { type: "button", className: "proof-share", onClick: () => share(record.name, shareStatus) }, "Share")
+      h("button", { type: "button", className: "proof-share", onClick: () => share(record.name, shareStatus) }, "Share"),
+      labelButton
     ),
-    shareStatus
+    shareStatus,
+    labelPanel
   );
 }
 
