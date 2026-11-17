@@ -26,6 +26,13 @@
   --danger: #B42318;
   --danger-tint: #FDECEA;
   --line-timeline: #CFE0D5;
+  /* The signed-in sidebar, in the forest green of the React dashboard
+     (frontend/dashboard/src/index.css --color-forest). */
+  --forest: #203d32;
+  --forest-ink: rgba(255, 255, 255, 0.78);
+  --forest-hover: rgba(255, 255, 255, 0.10);
+  --forest-current: rgba(255, 255, 255, 0.15);
+  --forest-accent: #FDE68A;
   --focus-ring: 0 0 0 4px rgba(31, 92, 69, 0.12);
   --shadow-card: 0 1px 2px rgba(19, 32, 26, 0.04), 0 12px 32px -12px rgba(19, 32, 26, 0.12);
   --font-body: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -1345,6 +1352,9 @@ body[data-view="result"] .lookup-only { display: none !important; }
   gap: 4px;
   position: sticky;
   top: 24px;
+  padding: 12px;
+  border-radius: 16px;
+  background: var(--forest);
 }
 .work-nav a {
   display: flex;
@@ -1352,13 +1362,14 @@ body[data-view="result"] .lookup-only { display: none !important; }
   min-height: 44px;
   padding: 0 12px;
   border-radius: 10px;
-  color: var(--ink-2);
+  color: var(--forest-ink);
   font-size: 15px;
   font-weight: 500;
   text-decoration: none;
 }
-.work-nav a:hover { color: var(--brand); background: var(--surface-muted); }
-.work-nav a[aria-current="page"] { color: var(--brand); background: var(--brand-tint); }
+.work-nav a:hover { color: #FFFFFF; background: var(--forest-hover); }
+.work-nav a[aria-current="page"] { color: var(--forest-accent); background: var(--forest-current); font-weight: 600; }
+.work-nav a:focus-visible { outline: 2px solid var(--forest-accent); outline-offset: 2px; }
 .work-stage {
   min-width: 0;
   display: flex;
@@ -1825,6 +1836,8 @@ body[data-view="result"] .lookup-only { display: none !important; }
     overflow-x: auto;
     position: static;
     gap: 8px;
+    padding: 8px;
+    border-radius: 14px;
   }
   .work-nav a { white-space: nowrap; }
 
