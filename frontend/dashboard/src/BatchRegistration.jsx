@@ -5,7 +5,7 @@ import { PackagePlus, FileUp, ExternalLink, Download } from "lucide-react";
 import { publishEncryptedForm } from "./lib/ipfs";
 
 const CHAIN_ID = 252501;
-const CONTRACT_ADDRESS = "0x35c56b125da5d3e8CBFbB0e3f87cEC8CCD96b3e0";
+const CONTRACT_ADDRESS = "0x7b9D401F1D62193b59e7b3d1C6dC6A5b7c7A4a49";
 const EXPLORER = "https://explorer.didlab.org";
 const MAX_FILE_BYTES = 25 * 1024 * 1024;
 

@@ -46,7 +46,7 @@ Current deployment on chain 252501:
 
 | Contract | Address |
 |----------|---------|
-| `BeefSupplyChain` v3 (lots) | [`0x35c56b125da5d3e8CBFbB0e3f87cEC8CCD96b3e0`](https://explorer.didlab.org/address/0x35c56b125da5d3e8CBFbB0e3f87cEC8CCD96b3e0), deployed in block 7384345 |
+| `BeefSupplyChain` v4 (repeated lot splitting) | [`0x7b9D401F1D62193b59e7b3d1C6dC6A5b7c7A4a49`](https://explorer.didlab.org/address/0x7b9D401F1D62193b59e7b3d1C6dC6A5b7c7A4a49), deployed in block 7649714 |
 | `CredentialRegistry` | [`0x9ef5cb328aE86C968dDcb1Fd60887bd021D7AB2E`](https://explorer.didlab.org/address/0x9ef5cb328aE86C968dDcb1Fd60887bd021D7AB2E) |
 
 Earlier deployments are listed in [docs/CHECKPOINT_REPORT.md](docs/CHECKPOINT_REPORT.md) §6.
@@ -166,7 +166,7 @@ Optional, read only by `scripts/setupCredentials.js`:
 - `DATA_DIR`: folder holding `portal.db` (default `/srv/data` if it exists, otherwise `./data`)
 - `PORTAL_ORIGINS`: comma-separated public URLs trusted for the sign-in domain (default `https://teambb.didlab.org`)
 - `CHAIN_RPC`: RPC the dashboard index reads events from (default `https://eth.didlab.org`)
-- `BSC_ADDRESS`, `BSC_FROM_BLOCK`: the `BeefSupplyChain` contract to index and its deployment block (defaults: the current deployment, block 7384345). Changing the address rebuilds the index. Update both after a redeploy.
+- `BSC_ADDRESS`, `BSC_FROM_BLOCK`: the `BeefSupplyChain` contract to index and its deployment block (defaults: the current deployment, block 7649714). Changing the address rebuilds the index. Update both after a redeploy.
 
 ## Team docs
 

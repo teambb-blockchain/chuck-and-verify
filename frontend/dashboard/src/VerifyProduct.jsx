@@ -6,7 +6,7 @@ import {
 } from "lucide-react";
 
 const RPC = "https://eth.didlab.org";
-const CONTRACT = "0x35c56b125da5d3e8CBFbB0e3f87cEC8CCD96b3e0";
+const CONTRACT = "0x7b9D401F1D62193b59e7b3d1C6dC6A5b7c7A4a49";
 const EXPLORER = "https://explorer.didlab.org";
 
 const ABI = [
@@ -22,7 +22,7 @@ const provider = new ethers.JsonRpcProvider(
   }
 );
 
-const DEPLOY_BLOCK = 7384345;
+const DEPLOY_BLOCK = 7649714;
 
 
 const EVENT_ABI = [
