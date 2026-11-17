@@ -67,11 +67,6 @@ export const abi = [
   },
   {
     "inputs": [],
-    "name": "LotCannotBeSplit",
-    "type": "error"
-  },
-  {
-    "inputs": [],
     "name": "LotNameTooLong",
     "type": "error"
   },

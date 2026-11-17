@@ -65,6 +65,23 @@ describe("verify-core", function () {
       ev("ReceiptConfirmed", { receiver: STORE })
     ];
 
+    it("shows each split on the way to a lot split from a lot", function () {
+      const up = (e) => ({ ...e, fromParent: true });
+      const events = [
+        up(ev("BatchRegistered", { processor: PROC, weightLbs: "1000" })),
+        up(ev("LotCreated", { parentId: "BEEF-001", lotId: "BEEF-001-L1", holder: CARRIER, weightLbs: "600" })),
+        up(ev("ShipmentRecorded", { from: CARRIER, to: STORE })),
+        up(ev("ReceiptConfirmed", { receiver: STORE })),
+        ev("LotCreated", { parentId: "BEEF-001-L1", lotId: "BEEF-001-L1-L2", holder: STORE, weightLbs: "250" })
+      ];
+      const steps = core.buildTimeline(events, { batchName: "BEEF-001-L1-L2", batch: batch() });
+      const splits = steps.filter((s) => s.kind === "split").map((s) => [s.title, s.detail]);
+      expect(splits).to.deep.equal([
+        ["Split from BEEF-001", "600 lb lot BEEF-001-L1"],
+        ["Split from BEEF-001-L1", "250 lb lot"]
+      ]);
+    });
+
     it("passes a fully confirmed journey and marks the holder", function () {
       const b = batch();
       const steps = core.buildTimeline(journey(), { batchName: "BEEF-001", batch: b });

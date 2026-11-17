@@ -1984,14 +1984,14 @@ body[data-view="result"] .lookup-only { display: none !important; }
 .lots tr.is-open > th,
 .lots tr.is-open > td { border-bottom-color: transparent; }
 .lots tr.is-lot { background: var(--surface-muted); }
-.lots tr.is-lot > th { padding-left: 28px; box-shadow: inset 3px 0 0 var(--line-timeline); }
+.lots tr.is-lot > th { padding-left: calc(28px + var(--lot-depth, 0) * 18px); box-shadow: inset 3px 0 0 var(--line-timeline); }
 .lots tr.is-lot .lot-id { font-weight: 500; }
 .lots tr.is-lot.is-recalled > th { box-shadow: inset 4px 0 0 var(--recall); }
 
 @media (prefers-reduced-motion: reduce) { .lots-caret { transition: none; } }
 
 @media (max-width: 560px) {
-  .lots tr.is-lot { padding-left: 16px; box-shadow: inset 3px 0 0 var(--line-timeline); }
+  .lots tr.is-lot { padding-left: calc(16px + var(--lot-depth, 0) * 12px); box-shadow: inset 3px 0 0 var(--line-timeline); }
   .lots tr.is-lot > th { padding-left: 0; box-shadow: none; }
   .lots-toggle { min-height: 44px; }
 }

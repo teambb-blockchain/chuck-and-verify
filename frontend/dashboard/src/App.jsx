@@ -6,12 +6,13 @@ import BatchRegistration from "./BatchRegistration";
 import VerifyProduct from "./VerifyProduct";
 import Inspections from "./Inspections";
 import Shipments from "./Shipments";
+import SplitLots from "./SplitLots";
 import Recalls from "./Recalls";
 import AuditHistory from "./AuditHistory";
 import {
   LayoutDashboard, Package, ClipboardCheck, Truck, ShieldAlert,
   ScanLine, Users, History, ShieldCheck, Wallet, Menu, Activity,
-  ArrowRight, LogOut, RefreshCw,
+  ArrowRight, LogOut, RefreshCw, Scissors,
 } from "lucide-react";
 
 const CHAIN_ID = 252501;
@@ -30,6 +31,7 @@ const navigation = [
   { name: "Batches", icon: Package },
   { name: "Inspections", icon: ClipboardCheck },
   { name: "Shipments", icon: Truck },
+  { name: "Split Lots", icon: Scissors },
   { name: "Recalls", icon: ShieldAlert },
   { name: "Verify Product", icon: ScanLine },
   { name: "Users & Roles", icon: Users },
@@ -528,6 +530,11 @@ export default function App() {
             />
                     ) : activePage === "Shipments" ? (
             <Shipments
+              portalUser={portalUser}
+              dashboardData={dashboardData}
+            />
+          ) : activePage === "Split Lots" ? (
+            <SplitLots
               portalUser={portalUser}
               dashboardData={dashboardData}
             />

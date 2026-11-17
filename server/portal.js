@@ -145,11 +145,12 @@ async function createPortal(db, auth, chainIndex) {
   // Attach this wallet's documents to a batch row. A lot form counts only if
   // this wallet registered the batch; an inspection report only if its
   // fingerprint is the one recorded on chain. A form published for an attempt
-  // that never landed is left out. A lot shares the documents of the batch it
-  // was split from, since it carries that batch's form, inspection and recall.
+  // that never landed is left out. A lot shares the documents of every batch
+  // or lot it was split from, since it carries the original batch's form and
+  // inspection and the most serious recall above it.
   function documentsFor(batch, docs, me) {
     const out = [];
-    const ids = [batch.batchId, batch.parentId];
+    const ids = batch.lineage;
     const pick = (kind, ok) => {
       const d = docs.find((x) => ids.includes(x.batch_id) && x.kind === kind && ok(x));
       if (d) {

@@ -40,7 +40,7 @@ const ORGS = {
   storage: { role: "CUSTODIAN", name: "Storage facility", desc: "You keep beef cold between handoffs. Confirm deliveries and ship batches on." },
   distributor: { role: "CUSTODIAN", name: "Distributor", desc: "You receive batches, split them into lots, and send lots to buyers." },
   carrier: { role: "CUSTODIAN", name: "Carrier", desc: "You haul beef. Confirm each pickup and hand it to the receiver." },
-  retailer: { role: "CUSTODIAN", name: "Retailer", desc: "You sell beef in your store. Confirm each delivery that arrives." },
+  retailer: { role: "CUSTODIAN", name: "Retailer", desc: "You sell beef in your store. Confirm each delivery and split lots into smaller ones for your shelves." },
   restaurant: { role: "CUSTODIAN", name: "Restaurant", desc: "You prepare beef for diners. Confirm each delivery that arrives." }
 };
 const ORG_ORDER = Object.keys(ORGS);
@@ -90,10 +90,11 @@ const CUSTODY_PROFILE = {
     hold: ["It's on your truck. Don't deliver it. Hold it", "They're on your trucks. Don't deliver them. Hold them"],
     empty: "Nothing is on your trucks. A batch shows up here once a shipper names your wallet."
   },
+  // A grocery store splits what it receives into smaller lots for its
+  // shelves. A restaurant uses what it receives, so it doesn't split.
   retailer: {
-    actions: ["receive", "ship"],
+    actions: ["receive", "split", "ship"],
     ship: false,
-    split: false,
     here: "In your store",
     inCustody: "in your store",
     passedOn: "Sent back",
@@ -364,15 +365,15 @@ function rowAction(r, role) {
   if (role === "CUSTODIAN" && r.incomingToYou) keys = ["receive"];
   // A recall is serious and rare, so it lives in "What you can do", not on
   // every row. Shipping is the everyday next step for a batch you hold, and
-  // a batch that isn't a lot can be split first. A split batch has no
-  // actions: its lots carry on.
+  // a batch or lot can be split into smaller lots first. A split batch or
+  // lot has no actions: its lots carry on.
   // Each kind of custodian gets only the steps its business takes: a
-  // retailer doesn't ship on, a carrier doesn't split.
+  // retailer doesn't ship on, and a carrier or restaurant doesn't split.
   const profile = custodyProfile(role);
   if ((role === "CUSTODIAN" || role === "PROCESSOR") && withYou(r)) {
     keys = [
       ...(r.recalled || !profile.ship ? [] : ["ship"]),
-      ...(r.parentId || !profile.split ? [] : ["split"])
+      ...(profile.split ? ["split"] : [])
     ];
   }
   keys = keys.filter((key) => perms.has(key === "inspect" ? "batch.inspect" : "custody.transfer"));
@@ -462,20 +463,30 @@ function sortRows(rows, state) {
 }
 
 // The table lists batches. A split batch's lots sit under it and show on
-// request. A lot whose batch isn't in this list (a carrier who received only
-// one lot) is listed on its own.
+// request, and so do the smaller lots split from those lots, at any depth.
+// A lot whose batch isn't in this list (a carrier who received only one lot)
+// is listed on its own, with any lots split from it under it. `depth` says
+// how many splits a lot is below the row it's listed under.
 function groupRows(rows) {
-  const ids = new Set(rows.map((r) => r.batchId));
+  const byBatch = new Map(rows.map((r) => [r.batchId, r]));
   const lotsOf = new Map();
   const tops = [];
   for (const r of rows) {
-    if (r.parentId && ids.has(r.parentId)) {
-      if (!lotsOf.has(r.parentId)) lotsOf.set(r.parentId, []);
-      lotsOf.get(r.parentId).push(r);
-    } else {
-      tops.push(r);
+    let top = r;
+    let depth = 0;
+    while (top.parentId && byBatch.has(top.parentId)) {
+      top = byBatch.get(top.parentId);
+      depth++;
     }
+    if (top === r) {
+      tops.push(r);
+      continue;
+    }
+    if (!lotsOf.has(top.batchId)) lotsOf.set(top.batchId, []);
+    lotsOf.get(top.batchId).push({ ...r, depth });
   }
+  // Numeric ID order puts each lot right after the lot it came from:
+  // -L1, -L1-L1, -L1-L2, -L2, … -L10.
   return tops.map((top) => ({ top, lots: (lotsOf.get(top.batchId) || []).sort(byId) }));
 }
 
@@ -551,7 +562,7 @@ function lotTable(rows, role, empty) {
 
   function batchRow(r, { lot = false, group = null, matches = null, open = false } = {}) {
     const meta = lot
-      ? r.weightLbs + " lbs, split " + day(r.registeredAt)
+      ? (r.depth > 1 ? "Lot of " + r.parentId + ", " : "") + r.weightLbs + " lbs, split " + day(r.registeredAt)
       : r.parentId
         ? "Lot of " + r.parentId + ", " + r.weightLbs + " lbs, split " + day(r.registeredAt)
         : r.weightLbs + " lbs, registered " + day(r.registeredAt);
@@ -572,7 +583,7 @@ function lotTable(rows, role, empty) {
       };
       toggle.dataset.toggle = r.batchId;
     }
-    return el(
+    const tr = el(
       "tr",
       { className: [r.recalled ? "is-recalled" : "", lot ? "is-lot" : "", open ? "is-open" : ""].filter(Boolean).join(" ") },
       el("th", { scope: "row" },
@@ -584,6 +595,9 @@ function lotTable(rows, role, empty) {
       ...cols.map((c) => el("td", { dataset: { label: c } }, cell[c](r))),
       el("td", { className: "lot-action" }, rowAction(r, role))
     );
+    // Lots split from lots sit further in, so the tree reads at a glance.
+    if (lot && r.depth > 1) tr.style.setProperty("--lot-depth", r.depth - 1);
+    return tr;
   }
 
   function render() {

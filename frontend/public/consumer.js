@@ -521,16 +521,29 @@ async function fetchRecord(name) {
   };
 
   let events = await batchLogs(idHex, latest);
-  if (parentHex) {
-    // A lot's story starts with its parent: everything up to the split, plus
-    // the parent's inspection and recall, which the lot reads through.
-    const own = events.find((e) => e.name === "LotCreated" && e.args.lotId === name);
-    const splitBlock = own ? own.blockNumber : Infinity;
-    const parentEvents = (await batchLogs(parentHex, latest))
-      .filter((e) => e.name !== "LotCreated")
-      .filter((e) => e.blockNumber < splitBlock || e.name === "InspectionRecorded" || e.name === "RecallRecorded")
-      .map((e) => ({ ...e, fromParent: true }));
-    events = events.concat(parentEvents);
+  // A lot's story starts with the batch or lot it came from: everything up to
+  // the split, plus inspections and recalls, which the lot reads through. A
+  // lot can be split from a lot, so walk up to the original batch. From each
+  // one above, keep its own "split from" step but not the splits that made
+  // its other lots.
+  let childName = name;
+  let childEvents = events;
+  let aboveHex = parentHex;
+  while (aboveHex) {
+    const aboveName = decodeName(aboveHex);
+    const split = childEvents.find((e) => e.name === "LotCreated" && e.args.lotId === childName);
+    const splitBlock = split ? split.blockNumber : Infinity;
+    const aboveEvents = await batchLogs(aboveHex, latest);
+    events = events.concat(
+      aboveEvents
+        .filter((e) => e.name !== "LotCreated" || e.args.lotId === aboveName)
+        .filter((e) => e.blockNumber < splitBlock || e.name === "InspectionRecorded" || e.name === "RecallRecorded")
+        .map((e) => ({ ...e, fromParent: true }))
+    );
+    const made = aboveEvents.find((e) => e.name === "LotCreated" && e.args.lotId === aboveName);
+    aboveHex = made ? stringToHex(made.args.parentId, { size: 32 }) : null;
+    childName = aboveName;
+    childEvents = aboveEvents;
   }
 
   const blocks = [...new Set(events.map((e) => e.blockNumber))];

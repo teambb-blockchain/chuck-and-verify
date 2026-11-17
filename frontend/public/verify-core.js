@@ -122,7 +122,12 @@ function describe(event, batchName) {
     case "ReceiptConfirmed":
       return { kind: "receive", title: "Received", detail: "Took custody" };
     case "LotCreated":
-      return { kind: "split", title: "Split from " + a.parentId, detail: a.weightLbs + " lb lot" };
+      // A lot split from a lot also shows the split that made its parent.
+      return {
+        kind: "split",
+        title: "Split from " + a.parentId,
+        detail: a.weightLbs + " lb lot" + (a.lotId === batchName ? "" : " " + a.lotId)
+      };
     case "LotSplit":
       return { kind: "split", title: "Split into " + a.lots.length + " lots", detail: a.lots.join(", ") };
     case "RecallRecorded":
@@ -145,7 +150,8 @@ export function buildTimeline(events, { batchName, batch, credentialOk = () => t
   const sorted = [];
   for (const event of sortEvents(events)) {
     const prev = sorted[sorted.length - 1];
-    const ownLot = event.name === "LotCreated" && event.args.lotId === batchName;
+    // Its own LotCreated, or one that made a lot above it, reads "Split from".
+    const ownLot = event.name === "LotCreated" && (event.args.lotId === batchName || event.fromParent);
     if (event.name === "LotCreated" && !ownLot && prev && prev.name === "LotSplit" && prev.txHash === event.txHash) {
       prev.args.lots.push(event.args.lotId);
       continue;

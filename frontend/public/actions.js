@@ -41,7 +41,6 @@ const REVERT_MESSAGES = {
   EmptyNoticeHash: "The notice couldn't be read. Choose the file again.",
   AlreadySplit: "This batch has been split into lots. Use the lots instead.",
   ShipmentPending: "This batch has a shipment waiting. It can be split once the receiver confirms it.",
-  LotCannotBeSplit: "A lot can't be split again.",
   BadLotCount: LOT_COUNT_HINT,
   LotWeightMismatch: "The lot weights must add up to the batch weight.",
   LotNameTooLong: "Use a shorter batch ID so the lot numbers fit."

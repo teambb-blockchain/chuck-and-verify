@@ -245,7 +245,7 @@ async function createChainIndex(db, options = {}) {
 // returns, plus who did what and when.
 function batchesFrom(events) {
   const batches = new Map();
-  const newBatch = (e, { processor, holder, weightLbs, parentId = null }) => ({
+  const newBatch = (e, { processor, holder, weightLbs, parentId = null, lineage = [] }) => ({
     batchId: e.batch_id,
     processor,
     weightLbs,
@@ -265,6 +265,9 @@ function batchesFrom(events) {
     recallHash: null,
     recalledAt: null,
     parentId,
+    // This batch, then each batch or lot it was split from, up to the
+    // original batch. A lot can be split again, so this can run several deep.
+    lineage: [e.batch_id, ...lineage],
     lotIds: [],
     handlers: new Set([holder]),
   });
@@ -282,6 +285,7 @@ function batchesFrom(events) {
         holder: e.actor,
         weightLbs: e.num,
         parentId: e.other,
+        lineage: parent.lineage,
       }));
       continue;
     }
@@ -307,7 +311,9 @@ function batchesFrom(events) {
   // A lot reads through to its parent, as getBatch does on chain: the
   // parent's inspection, and the parent's recall when it is more serious.
   // Done after the fold so a parent event recorded after the split still
-  // reaches the lots.
+  // reaches the lots. A parent is always added to the map before its lots,
+  // so by the time a lot is reached its parent has already taken on
+  // everything above it, and one pass covers lots split from lots.
   for (const b of batches.values()) {
     const p = b.parentId && batches.get(b.parentId);
     if (!p) continue;

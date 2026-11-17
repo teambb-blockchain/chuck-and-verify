@@ -10,9 +10,12 @@ import "./ICredentialRegistry.sol";
 /// docs/SECURITY_REVIEW.md §5 (BSC-1, BSC-2, BSC-4, BSC-5, BSC-6).
 ///
 /// Lots: the holder of a batch can split it once into 2–20 lots named
-/// "<batch>-L1" … "<batch>-Ln". Each lot is its own custody record. A lot
-/// reads its inspection from the batch it came from, and a recall of that
-/// batch applies to every lot (see _effective).
+/// "<batch>-L1" … "<batch>-Ln". Each lot is its own custody record, and
+/// whoever holds a lot can split it again in turn ("<batch>-L2-L1", …), so
+/// product can be divided at each custodian down the chain. The 31-byte ID
+/// limit bounds how deep the splits go. A lot reads its inspection from the
+/// original batch, and a recall of any batch or lot it came from applies to
+/// it (see _effective).
 ///
 /// Custody legs: custodyLeg counts confirmed receipts, so another contract
 /// can tie a record (such as a temperature summary) to one holder's leg.
@@ -102,7 +105,6 @@ contract BeefSupplyChain {
     error LotWeightMismatch();
     error ShipmentPending();
     error AlreadySplit();
-    error LotCannotBeSplit();
     error LotNameTooLong();
     error InspectParentBatch();
     error ReservedLotName();
@@ -130,14 +132,13 @@ contract BeefSupplyChain {
 
     /// @notice Split a batch in your custody into lots. `weights[i]` is the
     /// weight of lot i+1, and the weights must add up to the batch weight.
-    /// A batch can be split once, a lot cannot be split, and a batch with a
-    /// pending shipment cannot be split. A recalled batch can be split: its
+    /// A batch or lot can be split once, and not while a shipment is
+    /// pending. A lot can be split again by whoever holds it. A recalled batch can be split: its
     /// product still has to be tracked while it is retrieved (BSC-8).
     function splitBatch(bytes32 batchId, uint256[] calldata weights) external {
         if (!registry.isValid(msg.sender, CRED_CUSTODIAN)) revert Unauthorized();
         Batch storage parent = _requireBatch(batchId);
         if (parent.currentHolder != msg.sender) revert NotCurrentHolder();
-        if (parentOf[batchId] != bytes32(0)) revert LotCannotBeSplit();
         if (lotCount[batchId] != 0) revert AlreadySplit();
         if (parent.pendingReceiver != address(0)) revert ShipmentPending();
         uint256 n = weights.length;
@@ -170,7 +171,7 @@ contract BeefSupplyChain {
         if (!registry.isValid(msg.sender, CRED_INSPECTOR)) revert Unauthorized();
         if (reportHash == bytes32(0)) revert EmptyReportHash(); // BSC-6
         Batch storage batch = _requireBatch(batchId);
-        // A lot carries the inspection of the batch it came from.
+        // A lot carries the inspection of the original batch.
         if (parentOf[batchId] != bytes32(0)) revert InspectParentBatch();
         if (batch.processor == msg.sender) revert SelfInspection(); // BSC-2
         if (batch.recalled) revert BatchRecalled(); // BSC-1
@@ -215,8 +216,8 @@ contract BeefSupplyChain {
     /// a recall only fails safe, and a lapsed or revoked plant must still be
     /// able to pull its product (BSC-4). Classification is USDA Class I–III,
     /// and a later recall may only escalate it to a lower class number (BSC-5).
-    /// A lot can be recalled on its own; a recall of the batch it came from
-    /// already applies to it, so a lot recall must be more serious than that.
+    /// A lot can be recalled on its own; a recall of any batch or lot it came
+    /// from already applies to it, so a lot recall must be more serious.
     function recordRecall(
         bytes32 batchId,
         bytes32 noticeHash,
@@ -271,9 +272,10 @@ contract BeefSupplyChain {
         );
     }
 
-    /// @notice Where a batch sits in a split. For a lot, `parentId` is the
-    /// batch it came from and `lotIds` is empty. For a split batch,
-    /// `parentId` is zero and `lotIds` lists its lots in order.
+    /// @notice Where a batch sits in a split. `parentId` is the batch or lot
+    /// it was split from (zero for an original batch), and `lotIds` lists
+    /// the lots it was split into, in order (empty if not split). A lot that
+    /// was split again has both.
     function getLotInfo(
         bytes32 batchId
     ) external view returns (bytes32 parentId, bytes32[] memory lotIds) {
@@ -325,23 +327,29 @@ contract BeefSupplyChain {
         });
     }
 
-    /// A batch as the public should see it. A lot takes its parent's
-    /// inspection, and its parent's recall when that is the more serious one
-    /// (the lower class number). Reading through, rather than copying at
-    /// split time, means a later inspection or recall of the parent still
-    /// reaches every lot.
+    /// A batch as the public should see it. A lot takes the inspection of
+    /// the original batch at the top of its splits, and the most serious
+    /// recall (the lowest class number) among itself and every batch or lot
+    /// above it. Reading through, rather than copying at split time, means a
+    /// later inspection or recall higher up still reaches every lot. The
+    /// walk is short: each level adds at least 3 bytes to a 31-byte ID.
     function _effective(bytes32 batchId) private view returns (Batch memory b) {
         b = _requireBatch(batchId);
         bytes32 pid = parentOf[batchId];
-        if (pid == bytes32(0)) return b;
-        Batch storage p = batches[pid];
-        b.inspected = p.inspected;
-        b.inspectionPassed = p.inspectionPassed;
-        b.inspectionReportHash = p.inspectionReportHash;
-        if (p.recalled && (!b.recalled || p.recallClassification < b.recallClassification)) {
-            b.recalled = true;
-            b.recallNoticeHash = p.recallNoticeHash;
-            b.recallClassification = p.recallClassification;
+        while (pid != bytes32(0)) {
+            Batch storage p = batches[pid];
+            if (p.recalled && (!b.recalled || p.recallClassification < b.recallClassification)) {
+                b.recalled = true;
+                b.recallNoticeHash = p.recallNoticeHash;
+                b.recallClassification = p.recallClassification;
+            }
+            pid = parentOf[pid];
+            if (pid == bytes32(0)) {
+                // Only the original batch can be inspected (InspectParentBatch).
+                b.inspected = p.inspected;
+                b.inspectionPassed = p.inspectionPassed;
+                b.inspectionReportHash = p.inspectionReportHash;
+            }
         }
     }
 
