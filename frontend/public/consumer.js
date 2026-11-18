@@ -24,7 +24,7 @@ import { registryAbi } from "./registryAbi.js";
 import {
   EXPLORER_BASE,
   REQUIRED_CHAIN_ID,
-  BEEF_SUPPLY_CHAIN_DEPLOY_BLOCK,
+  BEEF_SUPPLY_CHAINS,
   beefSupplyChainAddress,
   credentialRegistryAddress,
   publicClient
@@ -40,7 +40,8 @@ import {
   deriveVerdict,
   summarizeReadings,
   cToF,
-  batchFromScan
+  batchFromScan,
+  pickDeployment
 } from "./verify-core.js";
 import { labelSheet } from "./qr.js";
 import { canScan, openScanner } from "./scan.js";
@@ -94,6 +95,7 @@ const ICON_PATHS = {
   split: '<path d="M4 7l8-4 8 4-8 4-8-4z"></path><path d="M4 12l8 4 8-4"></path><path d="M4 17l8 4 8-4"></path>',
   recall: '<path d="M12 4l9 16H3z"></path><path d="M12 10v4"></path><path d="M12 17.5v.01"></path>',
   pending: '<circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path>',
+  archive: '<rect x="3" y="4" width="18" height="5" rx="1.5"></rect><path d="M5 9v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9"></path><path d="M10 13h4"></path>',
   pause: null,
   play: null
 };
@@ -463,16 +465,16 @@ async function pooled(tasks, limit = 4) {
 // Every BeefSupplyChain event naming this batch: its own events (batch id is
 // the first indexed topic) and the LotCreated that made it, if it is a lot
 // (lot id is the second topic).
-async function batchLogs(idHex, latest) {
+async function batchLogs(idHex, latest, deployment) {
   const ranges = [];
-  for (let from = BigInt(BEEF_SUPPLY_CHAIN_DEPLOY_BLOCK); from <= latest; from += BigInt(LOG_CHUNK)) {
+  for (let from = BigInt(deployment.deployBlock); from <= latest; from += BigInt(LOG_CHUNK)) {
     const to = from + BigInt(LOG_CHUNK - 1) < latest ? from + BigInt(LOG_CHUNK - 1) : latest;
     ranges.push([toHex(from), toHex(to)]);
   }
   const query = (topics, [fromBlock, toBlock]) => () =>
     publicClient.request({
       method: "eth_getLogs",
-      params: [{ address: beefSupplyChainAddress, fromBlock, toBlock, topics }]
+      params: [{ address: deployment.address, fromBlock, toBlock, topics }]
     });
   const tasks = ranges.flatMap((range) => [
     query([null, idHex], range),
@@ -513,16 +515,22 @@ async function fetchReadings() {
 
 async function fetchRecord(name) {
   const idHex = stringToHex(name, { size: 32 });
-  const read = (functionName, args, address = beefSupplyChainAddress, contractAbi = abi) =>
+  const readAt = (address, functionName, args, contractAbi = abi) =>
     publicClient.readContract({ address, abi: contractAbi, functionName, args });
 
-  let raw;
-  try {
-    raw = await read("getBatch", [idHex]);
-  } catch (error) {
-    if (isBatchNotFound(error)) throw new NotFound(name);
-    throw error;
-  }
+  // Ask every deployment at once; the newest one that has the batch wins.
+  const probes = await Promise.all(
+    BEEF_SUPPLY_CHAINS.map((deployment) =>
+      readAt(deployment.address, "getBatch", [idHex]).then(
+        (value) => ({ deployment, value }),
+        (error) => (isBatchNotFound(error) ? { deployment, notFound: true } : { deployment, error })
+      )
+    )
+  );
+  const hit = pickDeployment(probes);
+  if (!hit) throw new NotFound(name);
+  const { deployment, value: raw } = hit;
+  const read = (functionName, args) => readAt(deployment.address, functionName, args);
   const batch = {
     processor: raw[0].toLowerCase(),
     weightLbs: Number(raw[1]),
@@ -545,7 +553,7 @@ async function fetchRecord(name) {
     lotNames: lotInfo ? lotInfo[1].map(decodeName) : []
   };
 
-  let events = await batchLogs(idHex, latest);
+  let events = await batchLogs(idHex, latest, deployment);
   // A lot's story starts with the batch or lot it came from: everything up to
   // the split, plus inspections and recalls, which the lot reads through. A
   // lot can be split from a lot, so walk up to the original batch. From each
@@ -558,7 +566,7 @@ async function fetchRecord(name) {
     const aboveName = decodeName(aboveHex);
     const split = childEvents.find((e) => e.name === "LotCreated" && e.args.lotId === childName);
     const splitBlock = split ? split.blockNumber : Infinity;
-    const aboveEvents = await batchLogs(aboveHex, latest);
+    const aboveEvents = await batchLogs(aboveHex, latest, deployment);
     events = events.concat(
       aboveEvents
         .filter((e) => e.name !== "LotCreated" || e.args.lotId === aboveName)
@@ -597,12 +605,23 @@ async function fetchRecord(name) {
     await Promise.all(
       [...pairs].map(async ([key, [address, role]]) => [
         key,
-        await read("isValid", [address, ROLE_HASH[role]], credentialRegistryAddress, registryAbi)
+        await readAt(credentialRegistryAddress, "isValid", [address, ROLE_HASH[role]], registryAbi)
       ])
     )
   );
 
-  return { name, batch, lot, events, readingsC, credentialOk: (a, role) => validity.get(a + ":" + role) !== false };
+  return {
+    name,
+    batch,
+    lot,
+    // Which BeefSupplyChain holds this record, and whether it is an older
+    // one the app no longer writes to.
+    deployment,
+    previous: deployment !== BEEF_SUPPLY_CHAINS[0],
+    events,
+    readingsC,
+    credentialOk: (a, role) => validity.get(a + ":" + role) !== false
+  };
 }
 
 // --- Result rendering ----------------------------------------------------------
@@ -822,7 +841,10 @@ function proofSection(record, steps) {
       {},
       row("Latest tx", latest ? mono(shortHex(latest.txHash, 4), latest.txHash) : mono("—")),
       row("Block", latest ? mono(latest.event.blockNumber.toLocaleString()) : mono("—")),
-      row("Supply chain", mono(shortHex(beefSupplyChainAddress, 5), beefSupplyChainAddress)),
+      row(
+        record.previous ? "Supply chain (earlier version " + record.deployment.version + ")" : "Supply chain",
+        mono(shortHex(record.deployment.address, 5), record.deployment.address)
+      ),
       row("Credentials", mono(shortHex(credentialRegistryAddress, 5), credentialRegistryAddress)),
       row("Checked", checked)
     ),
@@ -833,7 +855,7 @@ function proofSection(record, steps) {
         "a",
         {
           className: "proof-explorer",
-          href: latest ? explorerTx(latest.txHash) : explorerAddress(beefSupplyChainAddress),
+          href: latest ? explorerTx(latest.txHash) : explorerAddress(record.deployment.address),
           target: "_blank",
           rel: "noopener noreferrer"
         },
@@ -906,6 +928,7 @@ function compactView(record, steps, checklist, verdict) {
       ),
       h("h1", { id: "mBatchHeading" }, record.name),
       h("p", {}, productLine(record, steps)),
+      previousNote(record),
       (() => {
         const chip = lotChip(record.lot);
         return chip ? h("p", { className: "m-lots" }, ...chip.childNodes) : null;
@@ -973,6 +996,18 @@ function compactView(record, steps, checklist, verdict) {
   );
 }
 
+// A batch found on an older BeefSupplyChain. Its record is as real as any
+// other, but the app no longer adds steps to that contract, so say so.
+function previousNote(record) {
+  if (!record.previous) return null;
+  return h(
+    "p",
+    { className: "previous-note" },
+    icon("archive", 16, 1.9),
+    h("span", {}, h("strong", {}, "Earlier record. "), "This batch was recorded on an earlier version of Chuck and Verify. Its history is still on the blockchain, but new steps aren't added to it.")
+  );
+}
+
 function productLine(record, steps) {
   const registered = steps.find((s) => s.kind === "register");
   const parts = [record.batch.weightLbs + " lb " + (record.lot.parentName ? "lot" : "batch")];
@@ -1003,6 +1038,7 @@ function renderRecord(record) {
       badge(verdict),
       h("h1", { id: "batchHeading", className: "batch-id" }, record.name),
       h("p", { className: "product-line" }, productLine(record, steps)),
+      previousNote(record),
       h(
         "div",
         { className: "meta-chips" },

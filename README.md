@@ -82,7 +82,7 @@ export DEMO_CUSTODIAN=0x...
 
 The processor also receives the CUSTODIAN credential so it can ship a batch after registering it. Credentials expire after 30 days unless `CREDENTIAL_TTL_SECONDS` is set. Re-running step 2 is safe: it skips issuers and credentials that are already in place.
 
-After a redeploy, update the BeefSupplyChain address in `frontend/public/chain.js` and `scripts/registerBatch.js`, and the address and deployment block in the `DEFAULTS` of `server/chainIndex.js` (or set `BSC_ADDRESS` and `BSC_FROM_BLOCK`). If the contract interface changes, regenerate `frontend/public/abi.js` from the BeefSupplyChain artifact. Then run `npm run stamp` and update the table above. Batches do not move to a new contract.
+After a redeploy, add the new BeefSupplyChain (version, address, deployment block) at the top of `BEEF_SUPPLY_CHAINS` in `frontend/public/chain.js`, keeping the older entries, and update the address in `scripts/registerBatch.js`, and the address and deployment block in the `DEFAULTS` of `server/chainIndex.js` (or set `BSC_ADDRESS` and `BSC_FROM_BLOCK`). If the contract interface changes, regenerate `frontend/public/abi.js` from the BeefSupplyChain artifact. Then run `npm run stamp` and update the table above. Batches do not move to a new contract. The batch page still finds batches on every contract listed in `BEEF_SUPPLY_CHAINS`, checking the newest first, and labels a batch from an older contract "Earlier record". The portal dashboards and actions use only the newest contract.
 
 ## Temperature
 

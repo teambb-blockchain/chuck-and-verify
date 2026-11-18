@@ -103,6 +103,24 @@ export function batchFromScan(text) {
   }
 }
 
+// --- Which deployment holds a batch ------------------------------------------
+
+// Each BeefSupplyChain redeploy starts empty, so a batch lives on whichever
+// deployment it was registered on. `probes` is one entry per deployment,
+// newest first: { deployment, value } when getBatch found it, { deployment,
+// notFound: true } when it reverted BatchNotFound, or { deployment, error }
+// for anything else. The newest deployment that has the batch wins (an ID
+// can be reused after a redeploy). A failure on a newer deployment means we
+// can't tell whether that one has it, so that failure is thrown rather than
+// showing an older record. Returns null when no deployment has the batch.
+export function pickDeployment(probes) {
+  for (const probe of probes) {
+    if (probe.error) throw probe.error;
+    if (!probe.notFound) return { deployment: probe.deployment, value: probe.value };
+  }
+  return null;
+}
+
 const MINUTE = 60 * 1000;
 const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;

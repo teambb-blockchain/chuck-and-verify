@@ -48,6 +48,44 @@ describe("verify-core", function () {
     });
   });
 
+  describe("which deployment holds a batch", function () {
+    const v4 = { version: 4 };
+    const v3 = { version: 3 };
+    const v1 = { version: 1 };
+
+    it("uses the current deployment when it has the batch", function () {
+      const hit = core.pickDeployment([{ deployment: v4, value: "now" }, { deployment: v3, value: "old" }]);
+      expect(hit).to.deep.equal({ deployment: v4, value: "now" });
+    });
+
+    it("falls back to an earlier deployment, newest first", function () {
+      // BEEF-A1-001 was registered on both v1 and v3: v3 wins.
+      const hit = core.pickDeployment([
+        { deployment: v4, notFound: true },
+        { deployment: v3, value: "v3 record" },
+        { deployment: v1, value: "v1 record" }
+      ]);
+      expect(hit.deployment).to.equal(v3);
+      expect(hit.value).to.equal("v3 record");
+    });
+
+    it("returns null when no deployment has it", function () {
+      expect(core.pickDeployment([{ deployment: v4, notFound: true }, { deployment: v1, notFound: true }])).to.equal(null);
+    });
+
+    it("throws when a newer deployment couldn't be read, rather than show an older record", function () {
+      const down = new Error("RPC timed out");
+      expect(() =>
+        core.pickDeployment([{ deployment: v4, error: down }, { deployment: v3, value: "old" }])
+      ).to.throw("RPC timed out");
+    });
+
+    it("ignores a failure on an older deployment once a newer one has the batch", function () {
+      const hit = core.pickDeployment([{ deployment: v4, value: "now" }, { deployment: v1, error: new Error("down") }]);
+      expect(hit.deployment).to.equal(v4);
+    });
+  });
+
   describe("°C to °F", function () {
     it("converts with F = C × 9/5 + 32", function () {
       expect(core.cToF(0)).to.equal(32);
