@@ -96,6 +96,21 @@ DEPLOY_CONTRACTS=BeefSupplyChain,TemperatureLog npm run deploy:supply-chain   # 
 
 After deploying, add `temperatureLog: "0x…"` to that deployment's entry in `frontend/public/chain.js`. The batch page then shows a row per leg in the Temperature panel (who held it, how long the sensor logged, low and high, any time out of range, and a bar against the safe band), and the cold-chain check warns when any leg went out of range. A lot also shows the legs of the batches it was split from. Summaries from DIDLab sensors are accepted only once the registry admin sets the SENSOR issuer (`docs/references/notes.md`).
 
+## Demo data
+
+`scripts/seed-demo.js` fills a BeefSupplyChain v5 deployment with a demo supply chain: 13 fictional Texas businesses (`scripts/demo/businesses.js`) and 15 batches with stories (`scripts/demo/batches.js`). Every step is a real transaction. The batches cover splits and repeated splits, three processors on one batch, beef in transit, sold, served and disposed batches, a failed inspection, Class I and Class III recalls, a batch still in cold storage, one waiting for inspection, and one that passes its use-by date about 20 minutes after seeding. Business wallets are derived from `DEPLOYER_KEY` (or `DEMO_SEED`), so reruns find the same wallets, and no key is printed or saved.
+
+```bash
+npx hardhat run scripts/seed-demo.js                 # local dry run: deploys its own contracts, checks every batch
+npm run seed:demo                                    # DIDLab: prints the plan and the TRUST it needs, sends nothing
+DEMO_GO=1 npm run seed:demo                          # DIDLab: seed it
+```
+
+On DIDLab the deployer must be the PROCESSOR, INSPECTOR and CUSTODIAN issuer (`npm run setup:credentials`). With `TEMPERATURE_LOG_ADDRESS` set and the deployer as SENSOR issuer, it also gives each business that holds beef a demo sensor, registers it, and records a signed summary of simulated readings for every custody leg (71 in all). Two batches have problems to show: a truck's 30-minute warm spell (BEEF-TX-103) and a storage freezer failure (BEEF-TX-115). Without those settings, batches are seeded with no temperature data. The script grants each business its credentials, funds each wallet for its own transactions, publishes the slide photos and generated mock PDFs (`scripts/lib/mini-pdf.js`) to IPFS, records the batches, and then checks every batch and lot on chain against the plan. Progress is saved after each transaction (`cache/demo-progress-*.json`), so running the same command again resumes a run that stopped. It writes:
+
+- `frontend/public/demo/stories.json`: the story, photo and paperwork the batch page shows. It is used only when its `contract` matches the contract the page reads, and lots show their original batch's story.
+- `scripts/demo/directory.json`: the businesses' roles and public profiles. Load it with **Import businesses** in the Portal users card, or `npm run seed:directory` for a `portal.db` you can reach. Both can be run again safely.
+
 ## Portal roles
 
 Login is a wallet signature. The server issues a one-time message, the wallet signs it (no gas, no transaction), and the server sets an HttpOnly session cookie. Each wallet's portal roles decide which sections of the page it sees and which server routes it may call.

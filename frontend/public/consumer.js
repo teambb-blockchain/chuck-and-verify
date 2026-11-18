@@ -46,6 +46,7 @@ import {
   pickDeployment
 } from "./verify-core.js";
 import { routeBody, routeMiles } from "./routemap.js";
+import { gatewayUrlForCid } from "./ipfs.js";
 import { labelSheet } from "./qr.js";
 import { canScan, openScanner } from "./scan.js";
 
@@ -547,6 +548,22 @@ function loadDirectory() {
   return directoryLoad;
 }
 
+// Demo stories (scripts/seed-demo.js writes frontend/public/demo/stories.json).
+// Used only when the file was made for the contract this page reads, so a
+// demo story never attaches to a real batch that happens to share a name.
+let storiesLoad = null;
+function loadStories() {
+  if (!storiesLoad) {
+    storiesLoad = fetch("/frontend/public/demo/stories.json", { headers: { accept: "application/json" } })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) =>
+        data && String(data.contract).toLowerCase() === beefSupplyChainAddress.toLowerCase() ? data.batches || {} : {}
+      )
+      .catch(() => ({}));
+  }
+  return storiesLoad;
+}
+
 async function fetchRecord(name) {
   const idHex = stringToHex(name, { size: 32 });
   const readAt = (address, functionName, args, contractAbi = abi) =>
@@ -576,12 +593,13 @@ async function fetchRecord(name) {
     recallClassification: Number(raw[9])
   };
 
-  const [lotInfo, latest, readingsC, directory, status] = await Promise.all([
+  const [lotInfo, latest, readingsC, directory, status, stories] = await Promise.all([
     read("getLotInfo", [idHex]).catch(() => null),
     publicClient.getBlockNumber(),
     fetchReadings(name),
     loadDirectory(),
-    read("getStatus", [idHex]).catch(() => null)
+    read("getStatus", [idHex]).catch(() => null),
+    loadStories()
   ]);
   // Use-by date (unix seconds on chain, ms here) and final disposition.
   batch.useBy = status && status[0] ? Number(status[0]) * 1000 : null;
@@ -661,6 +679,8 @@ async function fetchRecord(name) {
     events,
     readingsC,
     credentialOk: (a, role) => validity.get(a + ":" + role) !== false,
+    // A lot (or a lot of a lot) tells its original batch's story.
+    story: stories[name.replace(/(-L\d+)+$/, "")] || null,
     who: (address) => (address && directory.get(String(address).toLowerCase())) || null
   };
 }
@@ -1084,6 +1104,51 @@ function previousNote(record) {
   );
 }
 
+// The batch's story, from the demo data: where it came from and what
+// happened to it, with a photo and the mock paperwork.
+function storySection(record) {
+  const story = record.story;
+  if (!story) return null;
+  const photo = story.photo || {};
+  const img = h("img", {
+    className: "story-photo",
+    src: photo.cid ? gatewayUrlForCid(photo.cid) : photo.src,
+    alt: photo.alt || "",
+    loading: "lazy",
+    decoding: "async"
+  });
+  // The local copy stands in if the IPFS gateway is slow or down.
+  if (photo.cid && photo.src) img.addEventListener("error", () => (img.src = photo.src), { once: true });
+  const docs = (story.documents || [])
+    .map((d) => ({ ...d, href: gatewayUrlForCid(d.cid) }))
+    .filter((d) => d.href);
+  const isLot = record.name !== record.name.replace(/(-L\d+)+$/, "");
+  return h(
+    "section",
+    { className: "panel story-panel", "aria-labelledby": "storyHeading" },
+    photo.src || photo.cid ? img : null,
+    h(
+      "div",
+      { className: "story-body" },
+      h("p", { className: "story-eyebrow" }, story.cut + (story.ranch ? " · from " + story.ranch : "")),
+      h("h2", { id: "storyHeading" }, isLot ? "The story of the batch it came from" : "The story"),
+      ...(story.story || []).map((p) => h("p", {}, p)),
+      docs.length
+        ? h(
+            "p",
+            { className: "story-docs" },
+            "Paperwork: ",
+            ...docs.flatMap((d, i) => [
+              i ? " · " : "",
+              h("a", { href: d.href, target: "_blank", rel: "noopener noreferrer" }, d.label, h("span", { className: "visually-hidden" }, " (PDF, opens in a new tab)"))
+            ])
+          )
+        : null,
+      h("p", { className: "story-note" }, "Demo data: these businesses, ranches and documents are made up. The custody steps on this page are real records on the blockchain.")
+    )
+  );
+}
+
 function productLine(record, steps) {
   const registered = steps.find((s) => s.kind === "register");
   const parts = [record.batch.weightLbs + " lb " + (record.lot.parentName ? "lot" : "batch")];
@@ -1140,6 +1205,7 @@ function renderRecord(record) {
   $("resultBody").replaceChildren(
     compactView(record, steps, checklist, verdict),
     verdictCard,
+    storySection(record),
     h(
       "div",
       { className: "result-columns full-record", id: "fullRecord" },

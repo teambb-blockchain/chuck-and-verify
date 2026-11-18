@@ -10,6 +10,8 @@
   "scripts": {
     "start": "node index.js",
     "seed:portal": "node scripts/seed-portal.js",
+    "seed:directory": "node scripts/import-directory.js",
+    "seed:demo": "hardhat run scripts/seed-demo.js --network didlab",
     "stamp": "node scripts/stamp-assets.js",
     "test": "hardhat test",
     "compile": "hardhat compile",

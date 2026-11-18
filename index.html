@@ -10,17 +10,17 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600&family=JetBrains+Mono:wght@400;500&family=Big+Shoulders+Display:wght@700;800&display=swap">
-  <link rel="stylesheet" href="/frontend/public/styles.css?v=4856f495a9">
+  <link rel="stylesheet" href="/frontend/public/styles.css?v=74d1ba32a4">
   <!-- asset-versions:start -->
   <script type="importmap">
   {
     "imports": {
       "/frontend/public/abi.js": "/frontend/public/abi.js?v=aecf0ab437",
       "/frontend/public/actions.js": "/frontend/public/actions.js?v=f6bb2a2b22",
-      "/frontend/public/admin.js": "/frontend/public/admin.js?v=82eefd3960",
+      "/frontend/public/admin.js": "/frontend/public/admin.js?v=ce0b164643",
       "/frontend/public/app.js": "/frontend/public/app.js?v=6e1df11cb6",
       "/frontend/public/chain.js": "/frontend/public/chain.js?v=b600a0a28b",
-      "/frontend/public/consumer.js": "/frontend/public/consumer.js?v=2e1e7fdc19",
+      "/frontend/public/consumer.js": "/frontend/public/consumer.js?v=b6faa255b7",
       "/frontend/public/dashboard.js": "/frontend/public/dashboard.js?v=5f030c5912",
       "/frontend/public/ipfs.js": "/frontend/public/ipfs.js?v=93f5458b4e",
       "/frontend/public/qr.js": "/frontend/public/qr.js?v=c06e70fe6d",
@@ -448,6 +448,14 @@
               <p id="adminStatus" role="status" aria-live="polite"></p>
               <ul id="adminChainLog" class="chain-log" aria-live="polite" hidden></ul>
             </form>
+
+            <div class="admin-import">
+              <h3 id="import-heading">Import businesses</h3>
+              <p class="muted">Add or update several businesses at once from a directory file, such as <code>scripts/demo/directory.json</code> from the demo seed. Each one gets the listed portal roles, organization type and public profile. On-chain credentials are not changed.</p>
+              <label class="btn btn-ghost btn-small admin-import-pick" for="adminImportFile">Choose a directory file</label>
+              <input id="adminImportFile" type="file" accept="application/json,.json" class="visually-hidden">
+              <p id="adminImportStatus" role="status" aria-live="polite"></p>
+            </div>
 
             <h3 id="issuers-heading">Credential issuers</h3>
             <p class="muted">Each on-chain role has one issuer, the only wallet that can grant or revoke it. Only the registry admin <code id="registryAdmin">…</code> can change an issuer.</p>

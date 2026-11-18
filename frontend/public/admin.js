@@ -386,6 +386,55 @@ form.onsubmit = async (event) => {
   }
 };
 
+// --- Import businesses -------------------------------------------------------
+// A directory file ({ users: [{ address, label, roles, organization, profile }] })
+// is saved one user at a time through the same route as the form above.
+// Portal only: the file's wallets already hold their on-chain credentials
+// (scripts/seed-demo.js grants them), so nothing is signed here.
+
+const importInput = document.getElementById("adminImportFile");
+const importStatus = document.getElementById("adminImportStatus");
+
+importInput.onchange = async () => {
+  const file = importInput.files && importInput.files[0];
+  importInput.value = "";
+  if (!file) return;
+  let users;
+  try {
+    users = JSON.parse(await file.text()).users;
+    if (!Array.isArray(users) || !users.length) throw new Error();
+  } catch {
+    importStatus.textContent = "That file isn't a directory file. It needs a \"users\" list.";
+    return;
+  }
+  if (!confirm("Add or update " + users.length + " business" + (users.length === 1 ? "" : "es") + " from " + file.name + "?")) return;
+  let saved = 0;
+  const failed = [];
+  let latest = null;
+  for (const user of users) {
+    importStatus.textContent = "Saving " + (saved + failed.length + 1) + " of " + users.length + "…";
+    try {
+      const result = await api("/api/admin/users/" + encodeURIComponent(String(user.address || "").toLowerCase()), {
+        method: "PUT",
+        body: JSON.stringify({
+          label: user.label || "",
+          roles: Array.isArray(user.roles) ? user.roles : [],
+          organization: user.organization || "",
+          profile: user.profile || {}
+        })
+      });
+      latest = result.users;
+      saved++;
+    } catch (error) {
+      failed.push((user.profile && user.profile.name) || user.address || "?");
+      console.error(error);
+    }
+  }
+  if (latest) renderUsers(latest);
+  importStatus.textContent =
+    "Imported " + saved + " of " + users.length + "." + (failed.length ? " Not saved: " + failed.join(", ") + "." : "");
+};
+
 // --- Credential issuers -----------------------------------------------------
 // setIssuer is onlyAdmin (registry admin(), not issuerOf), so this form checks
 // the connected wallet against admin() before asking it to sign.
