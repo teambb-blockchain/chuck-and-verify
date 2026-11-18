@@ -15,9 +15,9 @@ const { keccak256Js } = require("./ethsig");
 
 const DEFAULTS = {
   rpcUrl: "https://eth.didlab.org",
-  // BeefSupplyChain with repeated lot splitting, deployed in block 7649714 (tx 0x0075c7ef…).
-  contract: "0x7b9d401f1d62193b59e7b3d1c6dc6a5b7c7a4a49",
-  fromBlock: 7649714,
+  // BeefSupplyChain v5 (shelf life and final status), deployed in block 7693501 (tx 0x7dc2c1b5…).
+  contract: "0x246abed6468b50ac58ce056e126810433aababc9",
+  fromBlock: 7693501,
   chunk: 5000,
 };
 

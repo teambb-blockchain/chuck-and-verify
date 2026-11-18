@@ -48,7 +48,8 @@ Current deployment on chain 252501:
 
 | Contract | Address |
 |----------|---------|
-| `BeefSupplyChain` v4 (repeated lot splitting) | [`0x7b9D401F1D62193b59e7b3d1C6dC6A5b7c7A4a49`](https://explorer.didlab.org/address/0x7b9D401F1D62193b59e7b3d1C6dC6A5b7c7A4a49), deployed in block 7649714 |
+| `BeefSupplyChain` v5 (shelf life and final status) | [`0x246aBEd6468b50AC58CE056E126810433AaBAbc9`](https://explorer.didlab.org/address/0x246aBEd6468b50AC58CE056E126810433AaBAbc9), deployed in block 7693501 |
+| `TemperatureLog` (for v5) | [`0xe7c9Be7E429484618aF264Ab2E0B38078F2E0C4D`](https://explorer.didlab.org/address/0xe7c9Be7E429484618aF264Ab2E0B38078F2E0C4D), deployed in block 7693502 |
 | `CredentialRegistry` | [`0x9ef5cb328aE86C968dDcb1Fd60887bd021D7AB2E`](https://explorer.didlab.org/address/0x9ef5cb328aE86C968dDcb1Fd60887bd021D7AB2E) |
 
 Earlier deployments are listed in [docs/CHECKPOINT_REPORT.md](docs/CHECKPOINT_REPORT.md) §6.
@@ -94,7 +95,7 @@ After a redeploy, add the new BeefSupplyChain (version, address, deployment bloc
 DEPLOY_CONTRACTS=BeefSupplyChain,TemperatureLog npm run deploy:supply-chain   # v5 and its TemperatureLog, using the deployed verifier
 ```
 
-After deploying, add `temperatureLog: "0x…"` to that deployment's entry in `frontend/public/chain.js`. The batch page then shows a row per leg in the Temperature panel (who held it, how long the sensor logged, low and high, any time out of range, and a bar against the safe band), and the cold-chain check warns when any leg went out of range. A lot also shows the legs of the batches it was split from. Summaries from DIDLab sensors are accepted only once the registry admin sets the SENSOR issuer (`docs/references/notes.md`).
+After deploying, add `temperatureLog: "0x…"` to that deployment's entry in `BEEF_SUPPLY_CHAINS` (`frontend/public/chain.js`). The batch page then shows a row per leg in the Temperature panel (who held it, how long the sensor logged, low and high, any time out of range, and a bar against the safe band), and the cold-chain check warns when any leg went out of range. A lot also shows the legs of the batches it was split from. Summaries from DIDLab sensors are accepted only once the registry admin sets the SENSOR issuer (`docs/references/notes.md`).
 
 ## Demo data
 
@@ -195,7 +196,7 @@ Optional, read only by `scripts/setupCredentials.js`:
 - `DATA_DIR`: folder holding `portal.db` (default `/srv/data` if it exists, otherwise `./data`)
 - `PORTAL_ORIGINS`: comma-separated public URLs trusted for the sign-in domain (default `https://teambb.didlab.org`)
 - `CHAIN_RPC`: RPC the dashboard index reads events from (default `https://eth.didlab.org`)
-- `BSC_ADDRESS`, `BSC_FROM_BLOCK`: the `BeefSupplyChain` contract to index and its deployment block (defaults: the current deployment, block 7649714). Changing the address rebuilds the index. Update both after a redeploy.
+- `BSC_ADDRESS`, `BSC_FROM_BLOCK`: the `BeefSupplyChain` contract to index and its deployment block (defaults: the current deployment, block 7693501). Changing the address rebuilds the index. Update both after a redeploy.
 
 ## Team docs
 

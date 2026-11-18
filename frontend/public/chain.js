@@ -14,7 +14,11 @@ export const REQUIRED_CHAIN_ID = 252501;
 // Every version keeps the v1 getBatch layout and event signatures, so the
 // current ABI reads all of them; calls an old version lacks (getLotInfo,
 // getStatus) are optional on the verify page.
+// A deployment may also name its `temperatureLog` (contracts/TemperatureLog.sol,
+// deployed for that BeefSupplyChain); the verify page reads per-leg sensor
+// summaries from it. Without one, the Temperature panel says there are none.
 export const BEEF_SUPPLY_CHAINS = Object.freeze([
+  { version: 5, address: "0x246aBEd6468b50AC58CE056E126810433AaBAbc9", deployBlock: 7693501, temperatureLog: "0xe7c9Be7E429484618aF264Ab2E0B38078F2E0C4D" },
   { version: 4, address: "0x7b9D401F1D62193b59e7b3d1C6dC6A5b7c7A4a49", deployBlock: 7649714 },
   { version: 3, address: "0x35c56b125da5d3e8CBFbB0e3f87cEC8CCD96b3e0", deployBlock: 7384345 },
   { version: 2, address: "0x903359014d55A25ED1d4a8DCA6740dd30A90448a", deployBlock: 7269167 },

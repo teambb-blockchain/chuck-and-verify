@@ -2,7 +2,7 @@
 const hre = require("hardhat");
 
 const SUPPLY_CHAIN_ADDRESS =
-  "0x7b9D401F1D62193b59e7b3d1C6dC6A5b7c7A4a49";
+  "0x246aBEd6468b50AC58CE056E126810433AaBAbc9";
 
 async function main() {
   const [wallet] = await hre.ethers.getSigners();

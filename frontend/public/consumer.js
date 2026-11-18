@@ -43,10 +43,12 @@ import {
   batchFromScan,
   routeStops,
   isPastUseBy,
-  pickDeployment
+  pickDeployment,
+  durationText
 } from "./verify-core.js";
 import { routeBody, routeMiles } from "./routemap.js";
 import { gatewayUrlForCid } from "./ipfs.js";
+import { temperatureAbi } from "./temperatureAbi.js";
 import { labelSheet } from "./qr.js";
 import { canScan, openScanner } from "./scan.js";
 
@@ -525,10 +527,56 @@ function isBatchNotFound(error) {
   return reverted?.data?.errorName === "BatchNotFound";
 }
 
-// TODO(temperature): readings come from the temperature contract planned in
-// docs/decisions/0005, which is not deployed. Until then no batch has any.
-async function fetchReadings() {
-  return [];
+// Sensor summaries from TemperatureLog (ADR 0005), one per custody leg, for
+// this batch and every batch or lot it was split from (their legs come
+// first). Only a deployment that names a `temperatureLog` in chain.js has
+// any; for the others this returns null. Reads getSummary for each leg up to
+// custodyLeg instead of scanning event logs.
+async function fetchTemperature(name, deployment) {
+  if (!deployment.temperatureLog) return null;
+  const at = deployment.temperatureLog;
+  const readLog = (functionName, args = []) =>
+    publicClient.readContract({ address: at, abi: temperatureAbi, functionName, args });
+  const lineage = [];
+  for (let n = name; ; ) {
+    lineage.unshift(n);
+    const up = n.replace(/-L\d+$/, "");
+    if (up === n) break;
+    n = up;
+  }
+  try {
+    const [low, high] = await Promise.all([readLog("rangeLowCentiC"), readLog("rangeHighCentiC")]);
+    const perBatch = await Promise.all(
+      lineage.map(async (n) => {
+        const id = stringToHex(n, { size: 32 });
+        const legs = Number(
+          await publicClient.readContract({ address: deployment.address, abi, functionName: "custodyLeg", args: [id] })
+        );
+        const records = await Promise.all(
+          Array.from({ length: legs + 1 }, (_, leg) => readLog("getSummary", [id, leg]).then((r) => ({ leg, r })))
+        );
+        return records
+          .filter(({ r }) => r.recordedAt > 0n)
+          .map(({ leg, r }) => ({
+            batch: n,
+            leg,
+            custodian: r.custodian.toLowerCase(),
+            sensor: r.sensor.toLowerCase(),
+            startTime: Number(r.startTime) * 1000,
+            endTime: Number(r.endTime) * 1000,
+            minC: Number(r.minCentiC) / 100,
+            maxC: Number(r.maxCentiC) / 100,
+            secondsOut: Number(r.secondsOutOfRange),
+            readingCount: Number(r.readingCount),
+            missing: Number(r.lastSeq) - Number(r.firstSeq) + 1 - Number(r.readingCount)
+          }));
+      })
+    );
+    return { rangeC: { low: Number(low) / 100, high: Number(high) / 100 }, legs: perBatch.flat() };
+  } catch (error) {
+    console.error(error);
+    return null;
+  }
 }
 
 // Business names and places by wallet (server/db.js listDirectory). Loaded
@@ -593,10 +641,10 @@ async function fetchRecord(name) {
     recallClassification: Number(raw[9])
   };
 
-  const [lotInfo, latest, readingsC, directory, status, stories] = await Promise.all([
+  const [lotInfo, latest, temperature, directory, status, stories] = await Promise.all([
     read("getLotInfo", [idHex]).catch(() => null),
     publicClient.getBlockNumber(),
-    fetchReadings(name),
+    fetchTemperature(name, deployment),
     loadDirectory(),
     read("getStatus", [idHex]).catch(() => null),
     loadStories()
@@ -677,7 +725,10 @@ async function fetchRecord(name) {
     deployment,
     previous: deployment !== BEEF_SUPPLY_CHAINS[0],
     events,
-    readingsC,
+    // Raw readings never go on chain (only per-leg summaries), so this stays
+    // empty; the readings chart below is kept for a future log viewer.
+    readingsC: [],
+    temperature,
     credentialOk: (a, role) => validity.get(a + ":" + role) !== false,
     // A lot (or a lot of a lot) tells its original batch's story.
     story: stories[name.replace(/(-L\d+)+$/, "")] || null,
@@ -823,7 +874,64 @@ function chartLabel(summary) {
   );
 }
 
+// One row per custody leg: who held it, how long the sensor logged, low and
+// high, time out of range, and a bar of the leg's span against the safe band.
+function legRows(record, checklist, { compact = false } = {}) {
+  const sum = checklist.legSummary;
+  const legs = record.temperature.legs;
+  const lo = Math.min(sum.range.low, sum.low) - 3;
+  const hi = Math.max(sum.range.high, sum.high) + 3;
+  const pct = (f) => ((f - lo) / (hi - lo)) * 100 + "%";
+  const width = (a, b) => ((b - a) / (hi - lo)) * 100 + "%";
+  return h(
+    "ol",
+    { className: "leg-list" + (compact ? " is-compact" : "") },
+    legs.map((l) => {
+      const place = record.who(l.custodian);
+      const minF = cToF(l.minC);
+      const maxF = cToF(l.maxC);
+      const notes = [durationText((l.endTime - l.startTime) / 1000) + " logged", minF.toFixed(1) + "–" + maxF.toFixed(1) + " °F"];
+      notes.push(l.secondsOut ? durationText(l.secondsOut) + " out of range" : "in range");
+      if (l.missing > 0) notes.push(l.missing + (l.missing === 1 ? " reading" : " readings") + " missing");
+      return h(
+        "li",
+        { className: l.secondsOut ? "tone-warn" : "" },
+        h(
+          "div",
+          { className: "leg-head" },
+          h("span", { className: "leg-name" }, l.secondsOut ? h("span", { className: "visually-hidden" }, "Warning: ") : null, place ? place.name : "A business not in the directory"),
+          l.batch !== record.name ? h("span", { className: "leg-tag" }, "before the split") : null
+        ),
+        h("div", { className: "leg-sub" }, notes.join(" · ")),
+        h(
+          "div",
+          { className: "leg-bar", "aria-hidden": "true" },
+          h("span", { className: "leg-band", style: "left:" + pct(sum.range.low) + ";width:" + width(sum.range.low, sum.range.high) }),
+          h("span", { className: "leg-span", style: "left:" + pct(minF) + ";width:max(4px," + width(minF, maxF) + ")" })
+        )
+      );
+    })
+  );
+}
+
 function coldChainSection(record, steps, checklist) {
+  const legSum = checklist.legSummary;
+  if (legSum) {
+    return h(
+      "section",
+      { className: "panel cold-panel", "aria-labelledby": "coldHeading" },
+      h("div", { className: "panel-head" }, h("h2", { id: "coldHeading" }, "Temperature"), h("span", { className: "panel-meta" }, "°F · signed by each holder's sensor")),
+      h(
+        "div",
+        { className: "cold-stats" },
+        h("div", {}, h("div", { className: "cold-n" }, legSum.low.toFixed(1) + "°"), h("div", { className: "cold-k" }, "Low")),
+        h("div", {}, h("div", { className: "cold-n" }, legSum.high.toFixed(1) + "°"), h("div", { className: "cold-k" }, "High")),
+        h("div", {}, h("div", { className: "cold-n" + (legSum.secondsOut >= 3600 ? " is-long" : "") }, legSum.secondsOut ? durationText(legSum.secondsOut) : "0 min"), h("div", { className: "cold-k" }, "Out of range"))
+      ),
+      legRows(record, checklist),
+      h("p", { className: "empty-note" }, "Safe range is " + legSum.range.low + "–" + legSum.range.high + " °F. Each leg is a summary signed by the holder's certified sensor and checked on the blockchain.")
+    );
+  }
   const summary = checklist.summary;
   const readings = record.readingsC.map((c, i) => (typeof c === "number" ? { t: i, c } : c));
   const body = summary
@@ -979,9 +1087,13 @@ function compactView(record, steps, checklist, verdict) {
       "div",
       { className: "m-card-head" },
       h("h2", { id: "mColdHeading" }, "Temperature"),
-      summary ? h("span", {}, summary.low.toFixed(1) + "° – " + summary.high.toFixed(1) + "° F") : null
+      checklist.legSummary
+        ? h("span", {}, checklist.legSummary.low.toFixed(1) + "° – " + checklist.legSummary.high.toFixed(1) + "° F")
+        : summary ? h("span", {}, summary.low.toFixed(1) + "° – " + summary.high.toFixed(1) + "° F") : null
     ),
-    summary
+    checklist.legSummary
+      ? legRows(record, checklist, { compact: true })
+      : summary
       ? (() => {
           const readings = record.readingsC.map((c, i) => (typeof c === "number" ? { t: i, c } : c));
           const svg = fromHtml(chartSvg(readings, [], { height: 70, compact: true }));
@@ -1017,7 +1129,12 @@ function compactView(record, steps, checklist, verdict) {
         { className: "m-tiles" },
         tile(total ? confirmed + "/" + total : "—", total ? "Handoffs confirmed" : "No handoffs yet"),
         tile(checklist.credentials.status === "pass" ? "All" : "Lapsed", "Businesses certified"),
-        tile(summary ? (summary.excursions ? summary.excursions + " out" : SAFE_RANGE_F.low + "–" + SAFE_RANGE_F.high + "°") : "No data", "Temperature")
+        tile(
+          checklist.legSummary
+            ? checklist.legSummary.secondsOut ? durationText(checklist.legSummary.secondsOut) + " out" : "In range"
+            : summary ? (summary.excursions ? summary.excursions + " out" : SAFE_RANGE_F.low + "–" + SAFE_RANGE_F.high + "°") : "No data",
+          "Temperature"
+        )
       )
     ),
     h(
@@ -1166,7 +1283,12 @@ function renderRecord(record) {
     credentialOk: record.credentialOk,
     who: record.who
   });
-  const checklist = deriveChecklist({ steps, batch: record.batch, readingsC: record.readingsC.map((r) => (typeof r === "number" ? r : r.c)) });
+  const checklist = deriveChecklist({
+    steps,
+    batch: record.batch,
+    readingsC: record.readingsC.map((r) => (typeof r === "number" ? r : r.c)),
+    temperature: record.temperature
+  });
   const verdict = deriveVerdict({ batch: record.batch, checklist });
   const real = steps.filter((s) => !s.synthetic);
   const last = real[real.length - 1];
