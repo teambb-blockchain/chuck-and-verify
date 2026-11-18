@@ -938,6 +938,24 @@ a:hover { color: var(--brand-hover); }
   background: var(--surface-muted);
 }
 .header-search input::placeholder { color: var(--placeholder); }
+.header-search .header-scan svg { position: static; }
+.header-scan {
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  margin-left: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  border: 1px solid var(--border-input);
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+}
+.header-scan[hidden] { display: none; }
+.header-scan:hover { border-color: var(--brand); color: var(--brand); }
+.header-scan:focus-visible { outline: none; border-color: var(--brand); box-shadow: var(--focus-ring); }
 .header-search input:focus { outline: none; border-color: var(--brand); box-shadow: var(--focus-ring); background: var(--surface); }
 
 .wallet-notice {
@@ -1460,6 +1478,12 @@ body[data-view="result"] .lookup-only { display: none !important; }
   color: var(--muted);
 }
 .sources-head h2 { margin: 0; font-size: 15px; font-weight: 600; color: var(--ink); letter-spacing: 0; line-height: 1.5; }
+summary.sources-head { cursor: pointer; list-style: none; }
+summary.sources-head::-webkit-details-marker { display: none; }
+summary.sources-head h2::before { content: "▸"; display: inline-block; width: 1.1em; color: var(--muted); transition: transform 0.15s; }
+details.sources[open] summary.sources-head h2::before { transform: rotate(90deg); }
+details.sources:not([open]) summary.sources-head { border-bottom: none; }
+summary.sources-head:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; }
 .source-row {
   display: flex;
   align-items: center;
@@ -1594,6 +1618,7 @@ body[data-view="result"] .lookup-only { display: none !important; }
   align-items: flex-start;
 }
 .journey-panel { flex: 999 1 560px; min-width: 0; padding: 28px 28px 12px; }
+
 .result-side {
   flex: 1 1 340px;
   min-width: 0;
@@ -1639,6 +1664,54 @@ body[data-view="result"] .lookup-only { display: none !important; }
 .leg-span { position: absolute; top: 1px; bottom: 1px; border-radius: 3px; background: var(--brand); }
 .leg-list li.tone-warn .leg-span { background: var(--amber-ink); }
 .leg-list.is-compact { margin: 10px 0 0; gap: 10px; }
+
+/* Route map (routemap.js). Pins and lines are styled here; Leaflet only
+   positions them. */
+.map-panel .panel-head { margin-bottom: 12px; gap: 8px; }
+.map-panel .panel-head h2 { font-size: 18px; letter-spacing: 0; }
+.route-canvas {
+  height: 240px;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: var(--surface-muted);
+  z-index: 0; /* keep Leaflet's panes under the sticky header */
+}
+.route-canvas.is-failed {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  font-size: 14px;
+  color: var(--muted);
+  text-align: center;
+}
+.route-line { stroke: var(--brand); stroke-width: 3; stroke-linecap: round; fill: none; }
+.route-line.is-pending { stroke-dasharray: 6 8; stroke-opacity: 0.8; }
+.route-pin {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  background: var(--brand);
+  color: #FFFFFF;
+  border: 2px solid #FFFFFF;
+  box-shadow: 0 1px 4px rgba(19, 32, 26, 0.35);
+  font: 600 13px var(--font-body);
+}
+.route-pin.is-current { box-shadow: 0 0 0 3px var(--forest-accent), 0 1px 4px rgba(19, 32, 26, 0.35); }
+.route-pin.is-pending { background: #FFFFFF; color: var(--brand); border: 2px dashed var(--brand); }
+.route-stops { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 10px; }
+.route-stops li { display: flex; gap: 12px; align-items: flex-start; }
+.route-stops .route-pin { box-shadow: none; border-color: var(--brand); }
+.route-stops .route-pin.is-current { box-shadow: 0 0 0 3px var(--forest-accent); }
+.route-stop-name { font-weight: 600; font-size: 15px; color: var(--ink); line-height: 1.35; }
+.route-stop-sub { font-size: 13px; color: var(--muted); }
+.route-stop-sub:empty { display: none; }
+.route-canvas .leaflet-tooltip { font: 400 13px var(--font-body); color: var(--ink); }
 .cold-panel .panel-head h2 { font-size: 18px; letter-spacing: 0; }
 .panel-meta { font-size: 13px; color: var(--muted); }
 
@@ -1769,6 +1842,26 @@ body[data-view="result"] .lookup-only { display: none !important; }
   cursor: pointer;
 }
 .proof-share:hover { border-color: #FFFFFF; }
+button.proof-explorer { border: none; padding: 0 16px; font-family: var(--font-body); cursor: pointer; }
+.proof-lede { margin: -8px 0 0; font-size: 14px; color: #CFE7D9; }
+.proof-tech { margin-top: 20px; border-top: 1px solid #3A4D43; padding-top: 16px; }
+.proof-tech summary {
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  color: #CFE7D9;
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  list-style: none;
+}
+.proof-tech summary::-webkit-details-marker { display: none; }
+.proof-tech summary::before { content: "▸"; display: inline-block; width: 1.1em; transition: transform 0.15s; }
+.proof-tech[open] summary::before { transform: rotate(90deg); }
+.proof-tech summary:hover { color: #FFFFFF; }
+.proof-tech summary:focus-visible { outline: 2px solid #FFFFFF; outline-offset: 2px; border-radius: 4px; }
+.proof-tech-note { margin: 8px 0 16px; font-size: 13px; color: #A9B6AE; }
+.proof-tech .proof-explorer { display: flex; margin-top: 16px; }
 .proof-status { margin: 12px 0 0; font-size: 13px; color: #CFE7D9; }
 .proof-status:empty { display: none; }
 
@@ -1965,7 +2058,7 @@ body[data-view="result"] .lookup-only { display: none !important; }
   .m-body { padding-bottom: 14px; min-width: 0; }
   .m-journey li.is-last .m-body { padding-bottom: 12px; }
   .m-title { font-weight: 600; font-size: 14px; }
-  .m-sub { font-size: 13px; color: var(--muted); font-family: var(--font-mono); }
+  .m-sub { font-size: 13px; color: var(--muted); }
   .m-journey time, .m-time { font-size: 12px; color: var(--muted); padding-top: 1px; }
   .m-journey .tone-warn .m-dot { background: var(--amber-ink); border-color: var(--amber-ink); }
   .m-journey .tone-warn .m-title { color: var(--amber-ink); }

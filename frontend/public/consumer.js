@@ -41,8 +41,11 @@ import {
   summarizeReadings,
   cToF,
   batchFromScan,
+  routeStops,
+  isPastUseBy,
   pickDeployment
 } from "./verify-core.js";
+import { routeBody, routeMiles } from "./routemap.js";
 import { labelSheet } from "./qr.js";
 import { canScan, openScanner } from "./scan.js";
 
@@ -95,6 +98,7 @@ const ICON_PATHS = {
   split: '<path d="M4 7l8-4 8 4-8 4-8-4z"></path><path d="M4 12l8 4 8-4"></path><path d="M4 17l8 4 8-4"></path>',
   recall: '<path d="M12 4l9 16H3z"></path><path d="M12 10v4"></path><path d="M12 17.5v.01"></path>',
   pending: '<circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path>',
+  final: '<path d="M5 21V4"></path><path d="M5 4h11l-2 4 2 4H5"></path>',
   archive: '<rect x="3" y="4" width="18" height="5" rx="1.5"></rect><path d="M5 9v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9"></path><path d="M10 13h4"></path>',
   pause: null,
   play: null
@@ -263,8 +267,8 @@ function setupCarousel() {
 
 function setupSources() {
   const rows = [
-    ["BeefSupplyChain", "Batches and custody events", beefSupplyChainAddress],
-    ["CredentialRegistry", "Handler identities and licenses", credentialRegistryAddress]
+    ["BeefSupplyChain", "Batches, inspections, handoffs and recalls", beefSupplyChainAddress],
+    ["CredentialRegistry", "Which businesses are certified for each role", credentialRegistryAddress]
   ];
   $("chainIdValue").textContent = String(REQUIRED_CHAIN_ID);
   $("sourceRows").replaceChildren(
@@ -367,23 +371,35 @@ function setupLookup() {
 
   // Camera scan of a package's QR label. Hidden where the browser can't
   // reach a camera; typing the ID always works.
-  const scan = $("scanBatch");
+  // The header button lets a shopper scan the next package straight from a
+  // result page. The header has no status line, so a camera problem shows
+  // in the search field's placeholder (full message on hover).
   if (canScan()) {
-    scan.hidden = false;
-    scan.addEventListener("click", () => {
-      $("lookupStatus").textContent = "";
-      openScanner({
-        onResult: (id) => {
-          $("batchId").value = id;
-          showBatch(id);
-        },
-        onError: (message) => {
-          $("lookupStatus").textContent = message;
-          scan.focus();
-        }
-      });
+    bindScan($("scanBatch"), $("batchId"), (message) => ($("lookupStatus").textContent = message));
+    bindScan($("headerScan"), $("headerBatchId"), (message) => {
+      const input = $("headerBatchId");
+      input.placeholder = message ? "Camera unavailable. Type the ID" : "Another batch ID";
+      input.title = message;
     });
   }
+}
+
+function bindScan(button, input, report) {
+  if (!button) return;
+  button.hidden = false;
+  button.addEventListener("click", () => {
+    report("");
+    openScanner({
+      onResult: (id) => {
+        input.value = id;
+        showBatch(id);
+      },
+      onError: (message) => {
+        report(message);
+        button.focus();
+      }
+    });
+  });
 }
 
 // Tooltip: shows on hover and keyboard focus (CSS), and a tap or click pins
@@ -462,9 +478,10 @@ async function pooled(tasks, limit = 4) {
   return results;
 }
 
-// Every BeefSupplyChain event naming this batch: its own events (batch id is
+// Every event on `deployment` naming this batch: its own events (batch id is
 // the first indexed topic) and the LotCreated that made it, if it is a lot
-// (lot id is the second topic).
+// (lot id is the second topic). A lot is always on the same deployment as
+// the batch it was split from.
 async function batchLogs(idHex, latest, deployment) {
   const ranges = [];
   for (let from = BigInt(deployment.deployBlock); from <= latest; from += BigInt(LOG_CHUNK)) {
@@ -513,6 +530,23 @@ async function fetchReadings() {
   return [];
 }
 
+// Business names and places by wallet (server/db.js listDirectory). Loaded
+// once per page; if it fails, steps just don't name anyone, and the next
+// lookup tries again.
+let directoryLoad = null;
+function loadDirectory() {
+  if (!directoryLoad) {
+    directoryLoad = fetch("/api/directory", { headers: { accept: "application/json" } })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error("directory " + r.status))))
+      .then((data) => new Map((data.businesses || []).map((b) => [b.address.toLowerCase(), b])))
+      .catch(() => {
+        directoryLoad = null;
+        return new Map();
+      });
+  }
+  return directoryLoad;
+}
+
 async function fetchRecord(name) {
   const idHex = stringToHex(name, { size: 32 });
   const readAt = (address, functionName, args, contractAbi = abi) =>
@@ -542,11 +576,16 @@ async function fetchRecord(name) {
     recallClassification: Number(raw[9])
   };
 
-  const [lotInfo, latest, readingsC] = await Promise.all([
+  const [lotInfo, latest, readingsC, directory, status] = await Promise.all([
     read("getLotInfo", [idHex]).catch(() => null),
     publicClient.getBlockNumber(),
-    fetchReadings(name)
+    fetchReadings(name),
+    loadDirectory(),
+    read("getStatus", [idHex]).catch(() => null)
   ]);
+  // Use-by date (unix seconds on chain, ms here) and final disposition.
+  batch.useBy = status && status[0] ? Number(status[0]) * 1000 : null;
+  batch.disposition = status ? Number(status[1]) : 0;
   const parentHex = lotInfo && lotInfo[0] !== ZERO32 ? lotInfo[0] : null;
   const lot = {
     parentName: parentHex ? decodeName(parentHex) : null,
@@ -594,7 +633,8 @@ async function fetchRecord(name) {
     InspectionRecorded: ["inspector", "INSPECTOR"],
     ShipmentRecorded: ["from", "CUSTODIAN"],
     ReceiptConfirmed: ["receiver", "CUSTODIAN"],
-    LotCreated: ["holder", "CUSTODIAN"]
+    LotCreated: ["holder", "CUSTODIAN"],
+    DispositionRecorded: ["holder", "CUSTODIAN"]
   };
   const pairs = new Map();
   for (const e of events) {
@@ -620,7 +660,8 @@ async function fetchRecord(name) {
     previous: deployment !== BEEF_SUPPLY_CHAINS[0],
     events,
     readingsC,
-    credentialOk: (a, role) => validity.get(a + ":" + role) !== false
+    credentialOk: (a, role) => validity.get(a + ":" + role) !== false,
+    who: (address) => (address && directory.get(String(address).toLowerCase())) || null
   };
 }
 
@@ -691,15 +732,18 @@ function timelineItem(step, isLast) {
   if (step.roleLabel) {
     chips.push(
       step.credentialActive === false
-        ? h("span", { className: "cred-chip is-warn" }, icon("warn", 12, 2.4), "Credential no longer active")
+        ? h("span", { className: "cred-chip is-warn" }, icon("warn", 12, 2.4), "Certification since lapsed")
         : h("span", { className: "cred-chip" }, icon("shield", 12, 2.4), step.roleLabel)
     );
   }
-  if (step.signer) chips.push(h("code", { className: "addr-chip", title: step.signer }, shortHex(step.signer, 4)));
 
   const detail = [step.detail];
-  if (step.event && step.event.fromParent) detail.push("on the parent batch");
-  if (step.currentHolder) detail.push("Current holder");
+  // Inherited steps: an inspection or recall applies through the original
+  // batch; anything else happened before this lot was split off.
+  if (step.event && step.event.fromParent) {
+    detail.push(step.kind === "inspect" || step.kind === "recall" ? "on the original batch" : "before it was split off");
+  }
+  if (step.currentHolder) detail.push("Has it now");
 
   return h(
     "li",
@@ -769,7 +813,7 @@ function coldChainSection(record, steps, checklist) {
           { className: "cold-stats" },
           h("div", {}, h("div", { className: "cold-n" }, summary.low.toFixed(1) + "°"), h("div", { className: "cold-k" }, "Low")),
           h("div", {}, h("div", { className: "cold-n" }, summary.high.toFixed(1) + "°"), h("div", { className: "cold-k" }, "High")),
-          h("div", {}, h("div", { className: "cold-n" }, String(summary.excursions)), h("div", { className: "cold-k" }, "Excursions"))
+          h("div", {}, h("div", { className: "cold-n" }, String(summary.excursions)), h("div", { className: "cold-k" }, "Times out of range"))
         ),
         (() => {
           const svg = fromHtml(chartSvg(readings, steps.filter((s) => s.kind === "receive").map((s) => s.timestamp)));
@@ -778,13 +822,13 @@ function coldChainSection(record, steps, checklist) {
         })()
       ]
     : [
-        h("p", { className: "empty-state" }, icon("dash", 20, 1.8), "No sensor readings recorded for this batch."),
+        h("p", { className: "empty-state" }, icon("dash", 20, 1.8), "No temperature readings for this batch yet."),
         h("p", { className: "empty-note" }, "Safe range is " + SAFE_RANGE_F.low + "–" + SAFE_RANGE_F.high + " °F.")
       ];
   return h(
     "section",
     { className: "panel cold-panel", "aria-labelledby": "coldHeading" },
-    h("div", { className: "panel-head" }, h("h2", { id: "coldHeading" }, "Cold chain"), h("span", { className: "panel-meta" }, "°F · on-chain readings")),
+    h("div", { className: "panel-head" }, h("h2", { id: "coldHeading" }, "Temperature"), h("span", { className: "panel-meta" }, "°F · from sensors")),
     body
   );
 }
@@ -832,41 +876,56 @@ function proofSection(record, steps) {
     lotNames.length ? "Lot labels" : "QR label"
   );
 
-  return h(
-    "section",
-    { className: "proof-panel", id: "proof", "aria-labelledby": "proofHeading", tabindex: "-1" },
-    h("h2", { id: "proofHeading" }, "Proof"),
+  // Shoppers get sharing and labels up front. The ledger details are for
+  // anyone who wants to check the record themselves, so they start folded.
+  const technical = h(
+    "details",
+    { className: "proof-tech" },
+    h("summary", {}, "Technical details"),
+    h(
+      "p",
+      { className: "proof-tech-note" },
+      "This record is kept on DIDLab, a shared blockchain no single company controls. These details let anyone check it independently. Business names and places come from the Chuck and Verify business directory, not the blockchain."
+    ),
     h(
       "dl",
       {},
-      row("Latest tx", latest ? mono(shortHex(latest.txHash, 4), latest.txHash) : mono("—")),
+      row("Latest transaction", latest ? mono(shortHex(latest.txHash, 4), latest.txHash) : mono("—")),
       row("Block", latest ? mono(latest.event.blockNumber.toLocaleString()) : mono("—")),
       row(
-        record.previous ? "Supply chain (earlier version " + record.deployment.version + ")" : "Supply chain",
+        record.previous ? "Supply chain contract (earlier version " + record.deployment.version + ")" : "Supply chain contract",
         mono(shortHex(record.deployment.address, 5), record.deployment.address)
       ),
-      row("Credentials", mono(shortHex(credentialRegistryAddress, 5), credentialRegistryAddress)),
+      row("Credential contract", mono(shortHex(credentialRegistryAddress, 5), credentialRegistryAddress)),
       row("Checked", checked)
     ),
     h(
+      "a",
+      {
+        className: "proof-explorer",
+        href: latest ? explorerTx(latest.txHash) : explorerAddress(record.deployment.address),
+        target: "_blank",
+        rel: "noopener noreferrer"
+      },
+      "View on block explorer",
+      icon("external", 16, 2)
+    )
+  );
+
+  return h(
+    "section",
+    { className: "proof-panel", id: "proof", "aria-labelledby": "proofHeading", tabindex: "-1" },
+    h("h2", { id: "proofHeading" }, "Share this batch"),
+    h("p", { className: "proof-lede" }, "Send someone the link, or print QR labels for the package."),
+    h(
       "div",
       { className: "proof-actions" },
-      h(
-        "a",
-        {
-          className: "proof-explorer",
-          href: latest ? explorerTx(latest.txHash) : explorerAddress(record.deployment.address),
-          target: "_blank",
-          rel: "noopener noreferrer"
-        },
-        "View on explorer",
-        icon("external", 16, 2)
-      ),
-      h("button", { type: "button", className: "proof-share", onClick: () => share(record.name, shareStatus) }, "Share"),
+      h("button", { type: "button", className: "proof-explorer", onClick: () => share(record.name, shareStatus) }, "Share link"),
       labelButton
     ),
     shareStatus,
-    labelPanel
+    labelPanel,
+    technical
   );
 }
 
@@ -874,7 +933,7 @@ async function share(name, status) {
   const url = location.origin + "/?batch=" + encodeURIComponent(name);
   if (navigator.share) {
     try {
-      await navigator.share({ title: name + " — Chuck and Verify", text: "Batch " + name + " on the DIDLab ledger", url });
+      await navigator.share({ title: name + " — Chuck and Verify", text: "See where beef batch " + name + " has been", url });
       return;
     } catch (error) {
       if (error && error.name === "AbortError") return;
@@ -899,7 +958,7 @@ function compactView(record, steps, checklist, verdict) {
     h(
       "div",
       { className: "m-card-head" },
-      h("h2", { id: "mColdHeading" }, "Cold chain"),
+      h("h2", { id: "mColdHeading" }, "Temperature"),
       summary ? h("span", {}, summary.low.toFixed(1) + "° – " + summary.high.toFixed(1) + "° F") : null
     ),
     summary
@@ -909,7 +968,7 @@ function compactView(record, steps, checklist, verdict) {
           svg.setAttribute("aria-label", chartLabel(summary));
           return svg;
         })()
-      : h("p", { className: "empty-state" }, icon("dash", 18, 1.8), "No sensor readings recorded for this batch.")
+      : h("p", { className: "empty-state" }, icon("dash", 18, 1.8), "No temperature readings for this batch yet.")
   );
 
   return h(
@@ -936,9 +995,9 @@ function compactView(record, steps, checklist, verdict) {
       h(
         "div",
         { className: "m-tiles" },
-        tile(total ? confirmed + "/" + total : "—", total ? "Signed" : "No handoffs yet"),
-        tile(checklist.credentials.status === "pass" ? "Active" : "Lapsed", "Credentials"),
-        tile(summary ? (summary.excursions ? summary.excursions + " out" : SAFE_RANGE_F.low + "–" + SAFE_RANGE_F.high + "°") : "No data", "Cold chain")
+        tile(total ? confirmed + "/" + total : "—", total ? "Handoffs confirmed" : "No handoffs yet"),
+        tile(checklist.credentials.status === "pass" ? "All" : "Lapsed", "Businesses certified"),
+        tile(summary ? (summary.excursions ? summary.excursions + " out" : SAFE_RANGE_F.low + "–" + SAFE_RANGE_F.high + "°") : "No data", "Temperature")
       )
     ),
     h(
@@ -947,7 +1006,7 @@ function compactView(record, steps, checklist, verdict) {
       h(
         "div",
         { className: "m-card-head" },
-        h("h2", { id: "mJourneyHeading" }, "Journey"),
+        h("h2", { id: "mJourneyHeading" }, "Where it's been"),
         times.length ? h("span", {}, days === 0 ? "Same day" : days + (days === 1 ? " day" : " days")) : null
       ),
       h(
@@ -962,13 +1021,14 @@ function compactView(record, steps, checklist, verdict) {
               "div",
               { className: "m-body" },
               h("div", { className: "m-title" }, s.tone ? h("span", { className: "visually-hidden" }, s.tone === "fail" ? "Problem: " : "Warning: ") : null, s.title),
-              h("div", { className: "m-sub" }, s.signer ? shortHex(s.signer, 4) : s.detail)
+              h("div", { className: "m-sub" }, s.detail)
             ),
             s.timestamp ? h("time", { datetime: new Date(s.timestamp).toISOString() }, day.format(s.timestamp)) : h("span", { className: "m-time" }, "Pending")
           )
         )
       )
     ),
+    mapSection(steps, { compact: true }),
     cold,
     h(
       "div",
@@ -989,10 +1049,26 @@ function compactView(record, steps, checklist, verdict) {
             proof.focus({ preventScroll: true });
           }
         },
-        "See full record & proof",
+        "See full record",
         icon("arrowRight", 18, 2)
       )
     )
+  );
+}
+
+// "Where it's been" on a map. Shown only when the directory places at least
+// one stop; otherwise the timeline already says everything we know.
+function mapSection(steps, { compact = false } = {}) {
+  const stops = routeStops(steps);
+  if (!stops.some((s) => s.located)) return null;
+  const miles = Math.round(routeMiles(stops));
+  const meta = stops.length + (stops.length === 1 ? " stop" : " stops") + (miles ? " · about " + miles.toLocaleString() + " mi" : "");
+  const headingId = compact ? "mMapHeading" : "mapHeading";
+  return h(
+    "section",
+    { className: compact ? "m-card map-card" : "panel map-panel", "aria-labelledby": headingId },
+    h("div", { className: compact ? "m-card-head" : "panel-head" }, h("h2", { id: headingId }, "On the map"), h("span", { className: compact ? "" : "panel-meta" }, meta)),
+    routeBody(stops)
   );
 }
 
@@ -1012,6 +1088,9 @@ function productLine(record, steps) {
   const registered = steps.find((s) => s.kind === "register");
   const parts = [record.batch.weightLbs + " lb " + (record.lot.parentName ? "lot" : "batch")];
   if (registered && registered.timestamp) parts.push("Registered " + fullDate.format(registered.timestamp));
+  if (record.batch.useBy) {
+    parts.push((isPastUseBy(record.batch) ? "Use-by date passed " : "Use by ") + fullDate.format(record.batch.useBy));
+  }
   return parts.join(" · ");
 }
 
@@ -1019,7 +1098,8 @@ function renderRecord(record) {
   const steps = buildTimeline(record.events, {
     batchName: record.name,
     batch: record.batch,
-    credentialOk: record.credentialOk
+    credentialOk: record.credentialOk,
+    who: record.who
   });
   const checklist = deriveChecklist({ steps, batch: record.batch, readingsC: record.readingsC.map((r) => (typeof r === "number" ? r : r.c)) });
   const verdict = deriveVerdict({ batch: record.batch, checklist });
@@ -1043,7 +1123,7 @@ function renderRecord(record) {
         "div",
         { className: "meta-chips" },
         lotChip(record.lot),
-        h("span", { className: "meta-chip" }, real.length + (real.length === 1 ? " custody event" : " custody events")),
+        h("span", { className: "meta-chip" }, real.length + (real.length === 1 ? " step recorded" : " steps recorded")),
         last && last.timestamp ? h("span", { className: "meta-chip" }, "Last update " + relativeTime(last.timestamp).toLowerCase()) : null
       )
     ),
@@ -1053,7 +1133,7 @@ function renderRecord(record) {
   const journey = h(
     "section",
     { className: "panel journey-panel", "aria-labelledby": "journeyHeading" },
-    h("div", { className: "panel-head" }, h("h2", { id: "journeyHeading" }, "Chain of custody"), h("span", { className: "panel-meta" }, rangeLabel(steps))),
+    h("div", { className: "panel-head" }, h("h2", { id: "journeyHeading" }, "Where it's been"), h("span", { className: "panel-meta" }, rangeLabel(steps))),
     h("ol", { className: "timeline" }, steps.map((s, i) => timelineItem(s, i === steps.length - 1)))
   );
 
@@ -1064,7 +1144,7 @@ function renderRecord(record) {
       "div",
       { className: "result-columns full-record", id: "fullRecord" },
       journey,
-      h("div", { className: "result-side" }, coldChainSection(record, steps, checklist), proofSection(record, steps))
+      h("div", { className: "result-side" }, mapSection(steps), coldChainSection(record, steps, checklist), proofSection(record, steps))
     )
   );
 }
@@ -1087,7 +1167,7 @@ function renderSkeleton() {
         [0, 1, 2].map(() => h("div", { className: "sk-row" }, h("span", { className: "sk sk-node" }), h("div", { className: "sk-lines" }, bar("50%", 16), bar("35%"), bar("25%", 22))))
       )
     ),
-    h("p", { className: "visually-hidden", role: "status" }, "Reading the DIDLab ledger…")
+    h("p", { className: "visually-hidden", role: "status" }, "Looking up the batch…")
   );
 }
 
@@ -1112,8 +1192,8 @@ function renderError() {
       "section",
       { className: "notice-card", role: "status" },
       h("span", { className: "notice-icon tone-warn" }, icon("warn", 22, 2)),
-      h("h1", {}, "Couldn't read the ledger"),
-      h("p", {}, "The DIDLab network didn't answer. Your batch may be fine; try again in a moment.")
+      h("h1", {}, "Couldn't load the record"),
+      h("p", {}, "The records network didn't answer. Your batch may be fine; try again in a moment.")
     )
   );
 }

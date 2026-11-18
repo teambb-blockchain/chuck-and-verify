@@ -152,7 +152,84 @@ describe("verify-core", function () {
       expect(list.credentials.status).to.equal("pass");
       expect(list.coldChain.status).to.equal("none");
       expect(steps.filter((s) => s.currentHolder).map((s) => s.signer)).to.deep.equal([STORE]);
-      expect(core.deriveVerdict({ batch: b, checklist: list })).to.deep.equal({ tone: "pass", label: "Verified on-chain" });
+      expect(core.deriveVerdict({ batch: b, checklist: list })).to.deep.equal({ tone: "pass", label: "Verified" });
+    });
+
+    it("names businesses from the directory and leaves unknown wallets unnamed", function () {
+      const directory = {
+        [PROC]: { name: "Prairie Packers", city: "Amarillo, TX" },
+        [STORE]: { name: "Corner Market", city: "" }
+      };
+      const who = (a) => directory[a] || null;
+      const b = batch({ currentHolder: CARRIER, pendingReceiver: STORE });
+      const steps = core.buildTimeline(journey().slice(0, 5), { batchName: "BEEF-001", batch: b, who });
+      expect(steps.map((s) => s.detail)).to.deep.equal([
+        "Prairie Packers, Amarillo, TX · 500 lb batch",
+        "Inspection report on file",
+        "From Prairie Packers, Amarillo, TX",
+        "Arrived and signed for",
+        "To Corner Market",
+        "Waiting for Corner Market to confirm it arrived"
+      ]);
+      expect(steps[0].place).to.equal(directory[PROC]);
+      expect(core.placeName(null)).to.equal(null);
+      expect(core.placeName({ name: "" })).to.equal(null);
+    });
+
+    it("turns a journey into map stops, one per place, with the transit leg pending", function () {
+      const directory = {
+        [PROC]: { name: "Prairie Packers", city: "Amarillo, TX", lat: 35.2, lng: -101.8 },
+        [INSP]: { name: "USDA", city: "Dallas, TX", lat: 32.8, lng: -96.8 },
+        [CARRIER]: { name: "Lone Star Freight", city: "Dallas, TX", lat: null, lng: null }
+      };
+      const who = (a) => directory[a] || null;
+      const events = [
+        ...journey().slice(0, 4),
+        ev("LotCreated", { parentId: "BEEF-001", lotId: "BEEF-001-L1", holder: CARRIER, weightLbs: "250" }),
+        ev("ShipmentRecorded", { from: CARRIER, to: STORE })
+      ];
+      const b = batch({ currentHolder: CARRIER, pendingReceiver: STORE });
+      const stops = core.routeStops(core.buildTimeline(events, { batchName: "BEEF-001", batch: b, who }));
+      expect(stops.map((s) => [s.name, s.located, s.pending, s.current, s.titles.length])).to.deep.equal([
+        ["Prairie Packers", true, false, false, 1],
+        ["Lone Star Freight", false, false, true, 2],
+        [null, false, true, false, 1]
+      ]);
+      expect(stops[0]).to.include({ lat: 35.2, lng: -101.8, address: PROC });
+    });
+
+    it("ends the journey at a final status and stops marking a current holder", function () {
+      const events = [
+        ...journey(),
+        ev("UseBySet", { useBy: "1800000000" }),
+        ev("DispositionRecorded", { holder: STORE, disposition: 1 })
+      ];
+      const b = batch({ disposition: 1 });
+      const steps = core.buildTimeline(events, {
+        batchName: "BEEF-001",
+        batch: b,
+        who: (a) => (a === STORE ? { name: "Corner Market", city: "Austin, TX" } : null)
+      });
+      expect(steps.map((s) => s.kind)).to.not.include("other");
+      const last = steps[steps.length - 1];
+      expect(last).to.include({ kind: "final", title: "Sold to shoppers", detail: "At Corner Market, Austin, TX", role: "CUSTODIAN" });
+      expect(steps.some((s) => s.currentHolder)).to.equal(false);
+      const list = core.deriveChecklist({ steps, batch: b });
+      expect(core.deriveVerdict({ batch: b, checklist: list }).label).to.equal("Verified · Sold");
+    });
+
+    it("warns past the use-by date only while the batch is still in the chain", function () {
+      const now = Date.UTC(2026, 10, 18);
+      const steps = core.buildTimeline(journey(), { batchName: "BEEF-001", batch: batch() });
+      const list = core.deriveChecklist({ steps, batch: batch() });
+      const past = batch({ useBy: now - 1000 });
+      expect(core.isPastUseBy(past, now)).to.equal(true);
+      expect(core.deriveVerdict({ batch: past, checklist: list, nowMs: now })).to.deep.equal({ tone: "warn", label: "Past use-by date" });
+      expect(core.deriveVerdict({ batch: batch({ useBy: now + 1000 }), checklist: list, nowMs: now }).label).to.equal("Verified");
+      expect(core.deriveVerdict({ batch: batch({ useBy: now - 1000, disposition: 2 }), checklist: list, nowMs: now }).label).to.equal("Verified · Served");
+      expect(core.isPastUseBy(batch({ useBy: null }), now)).to.equal(false);
+      // A recall still outranks everything.
+      expect(core.deriveVerdict({ batch: batch({ useBy: now - 1000, recalled: true, recallClassification: 2 }), checklist: list, nowMs: now }).tone).to.equal("fail");
     });
 
     it("judges the cold chain from per-leg sensor summaries", function () {
@@ -189,7 +266,7 @@ describe("verify-core", function () {
       });
       const list = core.deriveChecklist({ steps, batch: b });
       expect(list.credentials.status).to.equal("warn");
-      expect(list.credentials.detail).to.equal("1 of 4 signers no longer holds an active credential");
+      expect(list.credentials.detail).to.equal("1 of 4 businesses has since lost its certification");
       expect(steps.filter((s) => s.tone === "warn").length).to.equal(2);
     });
 

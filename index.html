@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600&family=JetBrains+Mono:wght@400;500&family=Big+Shoulders+Display:wght@700;800&display=swap">
-  <link rel="stylesheet" href="/frontend/public/styles.css?v=97027ef550">
+  <link rel="stylesheet" href="/frontend/public/styles.css?v=4856f495a9">
   <!-- asset-versions:start -->
   <script type="importmap">
   {
@@ -20,15 +20,16 @@
       "/frontend/public/admin.js": "/frontend/public/admin.js?v=82eefd3960",
       "/frontend/public/app.js": "/frontend/public/app.js?v=6e1df11cb6",
       "/frontend/public/chain.js": "/frontend/public/chain.js?v=b600a0a28b",
-      "/frontend/public/consumer.js": "/frontend/public/consumer.js?v=0ce9a283aa",
+      "/frontend/public/consumer.js": "/frontend/public/consumer.js?v=2e1e7fdc19",
       "/frontend/public/dashboard.js": "/frontend/public/dashboard.js?v=5f030c5912",
       "/frontend/public/ipfs.js": "/frontend/public/ipfs.js?v=93f5458b4e",
       "/frontend/public/qr.js": "/frontend/public/qr.js?v=c06e70fe6d",
       "/frontend/public/registryAbi.js": "/frontend/public/registryAbi.js?v=3f9db4a2f2",
+      "/frontend/public/routemap.js": "/frontend/public/routemap.js?v=330e53079e",
       "/frontend/public/scan.js": "/frontend/public/scan.js?v=c8b46f3379",
       "/frontend/public/session.js": "/frontend/public/session.js?v=01e4d8c8e0",
       "/frontend/public/slides.js": "/frontend/public/slides.js?v=7a84acb1e9",
-      "/frontend/public/verify-core.js": "/frontend/public/verify-core.js?v=3feac74312"
+      "/frontend/public/verify-core.js": "/frontend/public/verify-core.js?v=30f234b828"
     }
   }
   </script>
@@ -52,6 +53,9 @@
             <label for="headerBatchId" class="visually-hidden">Look up another batch</label>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#7A847E" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"></circle><path d="M20 20l-4.2-4.2"></path></svg>
             <input id="headerBatchId" type="text" placeholder="Another batch ID" autocomplete="off" spellcheck="false" enterkeyhint="search">
+            <button id="headerScan" type="button" class="header-scan" aria-label="Scan another label" title="Scan another label" hidden>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8V6a2 2 0 0 1 2-2h2"></path><path d="M16 4h2a2 2 0 0 1 2 2v2"></path><path d="M20 16v2a2 2 0 0 1-2 2h-2"></path><path d="M8 20H6a2 2 0 0 1-2-2v-2"></path><rect x="8" y="8" width="3" height="3"></rect><rect x="13" y="8" width="3" height="3"></rect><rect x="8" y="13" width="3" height="3"></rect><path d="M13 13h3v3"></path></svg>
+            </button>
           </form>
           <span id="sessionRoles" class="role-chips" hidden></span>
           <button id="switchNetwork" class="btn-secondary" type="button" hidden>Switch to DIDLab</button>
@@ -87,9 +91,9 @@
         <div class="hero">
           <div class="hero-copy">
             <section aria-labelledby="lookupHeading">
-              <p class="eyebrow">Beef supply-chain provenance</p>
+              <p class="eyebrow">Beef traceability</p>
               <h1 id="lookupHeading" class="display">Trace any cut back to the ranch.</h1>
-              <p class="hero-sub">Enter the batch ID from the package label. Every handoff, sensor reading and credential is checked against the DIDLab ledger — no wallet needed to verify.</p>
+              <p class="hero-sub">Scan the QR code on the package, or type the batch ID printed on the label. See where your beef has been, whether it passed USDA inspection, and whether it was recalled. No account needed.</p>
             </section>
 
             <form id="lookupForm" class="search-card" role="search" novalidate>
@@ -147,35 +151,35 @@
                 <span class="tile-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7l8-4 8 4-8 4-8-4z"></path><path d="M4 12l8 4 8-4"></path><path d="M4 17l8 4 8-4"></path></svg></span>
                 <span class="check-num" aria-hidden="true">01</span>
               </div>
-              <h3>Resolve the batch</h3>
-              <p>Reads the batch record and every custody handoff from the BeefSupplyChain contract.</p>
+              <h3>Find the batch</h3>
+              <p>Pulls up the batch and every stop it made, from the processor to the store.</p>
             </div>
             <div class="check-card">
               <div class="check-card-top">
                 <span class="tile-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v5c0 4.5-3 8.5-7 10-4-1.5-7-5.5-7-10V6l7-3z"></path><path d="M9 12l2 2 4-4"></path></svg></span>
                 <span class="check-num" aria-hidden="true">02</span>
               </div>
-              <h3>Check every signer</h3>
-              <p>Confirms each handler held an active credential in the CredentialRegistry at the moment they signed.</p>
+              <h3>Check every business</h3>
+              <p>Confirms each business that handled it was certified for its job when it recorded its step.</p>
             </div>
             <div class="check-card">
               <div class="check-card-top">
                 <span class="tile-icon tile-amber"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13.5V5a2 2 0 1 1 4 0v8.5a4 4 0 1 1-4 0z"></path><path d="M12 9v6"></path></svg></span>
                 <span class="check-num" aria-hidden="true">03</span>
               </div>
-              <h3>Replay the cold chain</h3>
-              <p>Compares logged IoT temperature readings against the safe range for the whole journey.</p>
+              <h3>Check the temperature</h3>
+              <p>Compares temperature readings against the safe range for the whole trip.</p>
             </div>
           </div>
         </section>
 
-        <section aria-labelledby="sourcesHeading" class="sources">
-          <div class="sources-head">
-            <h2 id="sourcesHeading">On-chain sources</h2>
-            <span>Read-only · DIDLab testnet · Chain ID <span id="chainIdValue" class="mono ink">252501</span></span>
-          </div>
+        <details class="sources">
+          <summary class="sources-head">
+            <h2 id="sourcesHeading">Technical details</h2>
+            <span>Where the records live · DIDLab blockchain · Chain ID <span id="chainIdValue" class="mono ink">252501</span></span>
+          </summary>
           <div id="sourceRows"></div>
-        </section>
+        </details>
 
       </div>
 
