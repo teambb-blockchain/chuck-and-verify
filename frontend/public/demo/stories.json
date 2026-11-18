@@ -1,0 +1,381 @@
+{
+  "contract": "0x246abed6468b50ac58ce056e126810433aababc9",
+  "chainId": 252501,
+  "generatedAt": "2026-11-18T18:32:41.114Z",
+  "note": "Demo data: fictional businesses and stories. Written by scripts/seed-demo.js.",
+  "batches": {
+    "BEEF-TX-101": {
+      "cut": "Ribeye",
+      "ranch": "Double J Ranch, Hereford, TX",
+      "story": [
+        "Grass-started steers from Double J Ranch were harvested at Prairie Packers and cut into ribeyes.",
+        "A refrigerated truck carried the batch to cold storage in Fort Worth, then on to a Houston distributor, which split it three ways: two grocery stores and a Dallas steakhouse each got a lot."
+      ],
+      "photo": {
+        "src": "/frontend/public/img/slides/08-steakhouse-dinner.webp",
+        "cid": "QmVbERHJA5Sj14pHuniTzgg5VKebrFBDWLw5vrACbPVdMh",
+        "alt": "Steak dinner at a restaurant"
+      },
+      "documents": [
+        {
+          "label": "Lot form",
+          "cid": "Qmcwf9sbYeHbTchyFkFrqYoJFgpLVgQBzpTwmRiuNB1kW3",
+          "sha256": "534f8a0e88823fcf8eb6362d6f1b32f77bf4afc596938867bf926f3869707173"
+        },
+        {
+          "label": "Inspection certificate",
+          "cid": "QmT7HnbAypKTnhJBdWFM9e1avkpZEt7wz2MeL94JUbAmfv",
+          "sha256": "39602680c16db495fe4ff0daf01926582b8b4fccc172190226667db3bba31ee6"
+        }
+      ]
+    },
+    "BEEF-TX-102": {
+      "cut": "Ground beef",
+      "ranch": "Canyon Creek Cattle Co., Canyon, TX",
+      "story": [
+        "Prairie Packers sent this batch to a second processor, Hill Country Meats, to be ground. That is a common handoff: one plant harvests, another grinds and packages.",
+        "From there it went to a Central Texas distributor, which sent most of it to an Austin grocer and the rest to a barbecue joint in Lockhart."
+      ],
+      "photo": {
+        "src": "/frontend/public/img/slides/07-backyard-supper.webp",
+        "cid": "QmYAEdMEipJUc87mrHsNDdHcycFFeBWBcoeB1Mym3TjMp3",
+        "alt": "Backyard supper"
+      },
+      "documents": [
+        {
+          "label": "Lot form",
+          "cid": "QmfMZ8p9Sg9rn7eAnqwvz1fZ9YXCGGg1LH7sLULEvbunGj",
+          "sha256": "311cb21bffd9f368685240daadac2f4daf57a1612324a464a38b492e7509e544"
+        },
+        {
+          "label": "Inspection certificate",
+          "cid": "QmaJ4ebkdUYCeZhGBjs2bHaZt3yvWBRcZRrG4ASYYwjXpx",
+          "sha256": "7ed06ec2c49f904742c0fe104c0a82fef093e6fb9f74dfeb99512bfae13279e2"
+        }
+      ]
+    },
+    "BEEF-TX-103": {
+      "cut": "Brisket",
+      "ranch": "Bar M Ranch, Henrietta, TX",
+      "story": [
+        "A short trip: Red River Beef Co. packed whole briskets and a refrigerated carrier took them straight to Smoke Ring BBQ, where they were smoked and served.",
+        "The truck's sensor logged a brief warm spell when a door was left open at a fuel stop. The page shows it as time out of range on that leg."
+      ],
+      "photo": {
+        "src": "/frontend/public/img/slides/07-backyard-supper.webp",
+        "cid": "QmYAEdMEipJUc87mrHsNDdHcycFFeBWBcoeB1Mym3TjMp3",
+        "alt": "Backyard supper"
+      },
+      "documents": [
+        {
+          "label": "Lot form",
+          "cid": "QmfKrqmnbgRcnPTCWm46nnuWnpMeLiTwVhfuc2URcXC9YK",
+          "sha256": "3421f08b153e1328596de2bc556c188e04214d2c487441c5d6281ae727befee9"
+        },
+        {
+          "label": "Inspection certificate",
+          "cid": "QmcLU9BErkVhWGDfUJEZSS4ccKtZ5i9VpXwnwaYhwUhFVw",
+          "sha256": "99f260f5ec409e58a88a554b48083ae01c2785d57298a2bbd144b066d623638d"
+        }
+      ]
+    },
+    "BEEF-TX-104": {
+      "cut": "Top sirloin",
+      "ranch": "Wichita Valley Ranch, Electra, TX",
+      "story": [
+        "This batch shows beef being divided more than once. The Houston distributor split it in two. A San Antonio grocer split its lot again into smaller lots for the meat case.",
+        "Two of those small lots have sold and one is still in the store. The distributor's other lot is on its way to Waco."
+      ],
+      "photo": {
+        "src": "/frontend/public/img/slides/06-shop-aisle.webp",
+        "cid": "QmYyCryymzwmMc7xop2Gqevq38B9ge468MCrqHLUaXEXFc",
+        "alt": "Meat case in a grocery store"
+      },
+      "documents": [
+        {
+          "label": "Lot form",
+          "cid": "QmNMiLhnFcYhYEVnvnCxGSE2tSvQJ2spq6Ec6oRbSAeduU",
+          "sha256": "c240f164744f8d39909ba513b395530ad83af5d2703ab56e0741bf137d31f4d4"
+        },
+        {
+          "label": "Inspection certificate",
+          "cid": "QmS1KDx1xQ7n8crMhdWWBsvrFCDa2MdCLf7QhB8DswoLqz",
+          "sha256": "8be411978a93a5ca6aad6d28b4489622137016f2b35224b5028412edeaf77e94"
+        }
+      ]
+    },
+    "BEEF-TX-105": {
+      "cut": "Tenderloin",
+      "ranch": "Concho River Ranch, San Angelo, TX",
+      "story": [
+        "Hill Country Meats trimmed whole tenderloins for a single customer, Ember & Oak Steakhouse in Dallas, which served them as filets."
+      ],
+      "photo": {
+        "src": "/frontend/public/img/slides/08-steakhouse-dinner.webp",
+        "cid": "QmVbERHJA5Sj14pHuniTzgg5VKebrFBDWLw5vrACbPVdMh",
+        "alt": "Steak dinner at a restaurant"
+      },
+      "documents": [
+        {
+          "label": "Lot form",
+          "cid": "QmeHYVco53WtT125Fp51eqoTrD3KGAGFa68dKcygfmxBow",
+          "sha256": "0c8581019efdb96a56afd25457ef71922ec12058beaf918ea13d8a09f12abfb3"
+        },
+        {
+          "label": "Inspection certificate",
+          "cid": "QmdQMJM3u8z7PiCVyrJPsLErVLAczzSMLuzDYretTDC1a7",
+          "sha256": "ed07f2df4acbcc6db88ca4e7773ae4fc19af66e89098ea2f082d15c5655f107e"
+        }
+      ]
+    },
+    "BEEF-TX-106": {
+      "cut": "Chuck",
+      "ranch": "Llano Estacado Feeders, Dimmitt, TX",
+      "story": [
+        "This batch failed USDA inspection at the plant. It never shipped: Prairie Packers disposed of it, and the record shows both the failed inspection and the disposal.",
+        "A failed batch staying on the record is the point. In a private database it could quietly disappear."
+      ],
+      "photo": {
+        "src": "/frontend/public/img/slides/04-processing-inspection.webp",
+        "cid": "QmVg7Q6nzNvBzUsxvDCA7NZxJBV3Ba3h1jPiF1YQ7NqFaa",
+        "alt": "Inspection at a processing plant"
+      },
+      "documents": [
+        {
+          "label": "Lot form",
+          "cid": "QmYNmQitpwFcCQnq6AEGtibbxLitrRj2whj8GUL2uUc5m9",
+          "sha256": "7584c9fd4308d7941b3b248685ba4f1f77808b02297839bd208de672d41ca810"
+        },
+        {
+          "label": "Inspection certificate",
+          "cid": "QmbRiGPy6UcGZNHeRVJQcDeqKLxNbWSdtM7T3LQNppg6ZM",
+          "sha256": "d18c87bbc91c377646edbef19b56cabcb7f880ad7c8fd3defe25fbf9fcc6c580"
+        }
+      ]
+    },
+    "BEEF-TX-107": {
+      "cut": "Beef trim",
+      "ranch": "Several ranches, North Texas",
+      "story": [
+        "Red River Beef Co. issued a Class I recall after the batch had been split and delivered. Every lot made from it shows the recall automatically.",
+        "The Austin grocer and the barbecue restaurant disposed of their lots. The distributor is still holding the third lot until the processor says how to return it."
+      ],
+      "photo": {
+        "src": "/frontend/public/img/slides/04-processing-inspection.webp",
+        "cid": "QmVg7Q6nzNvBzUsxvDCA7NZxJBV3Ba3h1jPiF1YQ7NqFaa",
+        "alt": "Inspection at a processing plant"
+      },
+      "documents": [
+        {
+          "label": "Lot form",
+          "cid": "QmbWissjzCnbNHqtckVKVSA5PaBNxS5XZ2Ft2WbWJLvBYF",
+          "sha256": "097bf0067c3eb60659f44d51a5851df49557e870b22eab524a2322e99a351418"
+        },
+        {
+          "label": "Inspection certificate",
+          "cid": "QmQndEj9KPBwCgLQriHfhkXyAYi6wvjSVrckmfyY7wLBxV",
+          "sha256": "be487d824f339f9d9bcf80be0f3e2ed5f588fb9a9beb67478e2a43c1665a44b5"
+        },
+        {
+          "label": "Recall notice",
+          "cid": "QmY7dusmBX8FPicbahUZpLLBpaAxhCF8U18ypKnhGrnayS",
+          "sha256": "812b0e46a8605aabac60328d005a0ab62ae9049785c4524b3b7e58c69fd6bbba"
+        }
+      ]
+    },
+    "BEEF-TX-108": {
+      "cut": "Short ribs",
+      "ranch": "Pecos Trail Ranch, Fort Stockton, TX",
+      "story": [
+        "These short ribs sold at Bluebonnet Foods in Waco. Afterward Hill Country Meats found a labeling mistake and issued a Class III recall, the least serious kind.",
+        "A recall can still be recorded after beef has sold. That is when shoppers most need to hear about it."
+      ],
+      "photo": {
+        "src": "/frontend/public/img/slides/06-shop-aisle.webp",
+        "cid": "QmYyCryymzwmMc7xop2Gqevq38B9ge468MCrqHLUaXEXFc",
+        "alt": "Meat case in a grocery store"
+      },
+      "documents": [
+        {
+          "label": "Lot form",
+          "cid": "QmbRMHVkanGxkR93XdTN6vdgg6zMWLyCGBrrRj2NRfJja1",
+          "sha256": "a75c7d64f9f4f254ff1e5feaf0e03dbf7ad2c1a68e120b779aa97248e237016d"
+        },
+        {
+          "label": "Inspection certificate",
+          "cid": "QmWGPpzYguk4dXxg3zXfNAR4wGbn5xd3PN6ikQzNF8a5Rf",
+          "sha256": "e54b060791ac864fb2ce4a76d645b312438015f34a35b45e783742bf304d43bd"
+        },
+        {
+          "label": "Recall notice",
+          "cid": "QmNZpJeiuQgy1MWVaoPd1e7vN35u3j1GX4No7BmbXhfcgV",
+          "sha256": "cc59d4736dce32bb2c9798aef330acb5170dd2da4ea5970dd9ea4d18c076a49e"
+        }
+      ]
+    },
+    "BEEF-TX-109": {
+      "cut": "Whole primals",
+      "ranch": "Double J Ranch, Hereford, TX",
+      "story": [
+        "Just packed. Prairie Packers registered this batch and it is waiting for its USDA inspection before it can be trusted to ship."
+      ],
+      "photo": {
+        "src": "/frontend/public/img/slides/01-ranch-sunrise.webp",
+        "cid": "Qmb6teeEZjrRj2g6R3sqp6HpGaQP8ehwKDRuXvqSxojayp",
+        "alt": "Ranch barn at sunrise"
+      },
+      "documents": [
+        {
+          "label": "Lot form",
+          "cid": "QmWU2S9ugMtd7V8iG47tAGnVQ6G6GpYx9MhpBRVQ2QdQRu",
+          "sha256": "73f91397524b5302b00c9db71fc732053704c04a230dab0f7fe62863325ba9cf"
+        }
+      ]
+    },
+    "BEEF-TX-110": {
+      "cut": "Flank steak",
+      "ranch": "Canyon Creek Cattle Co., Canyon, TX",
+      "story": [
+        "This demo batch was given a use-by date just minutes after it was packed, so you can see how the page flags beef that is past its date and still on a store shelf."
+      ],
+      "photo": {
+        "src": "/frontend/public/img/slides/06-shop-aisle.webp",
+        "cid": "QmYyCryymzwmMc7xop2Gqevq38B9ge468MCrqHLUaXEXFc",
+        "alt": "Meat case in a grocery store"
+      },
+      "documents": [
+        {
+          "label": "Lot form",
+          "cid": "Qme4QdHQVvCWg2n8FGJgr7Bbsmbt1BsBYzJBpgkkzjn4XF",
+          "sha256": "e02ec73e2e029f6635470555ffae822713fa2e9b144a91b1f0313c76dfe77720"
+        },
+        {
+          "label": "Inspection certificate",
+          "cid": "QmP8npgtdoCPtxBkraahuN2KJGyEXcEVYC8nRTuUMdqnBZ",
+          "sha256": "cc36452e1018cb3c533f09740f79837d12260be9fca2508153c72ff44e75551d"
+        }
+      ]
+    },
+    "BEEF-TX-111": {
+      "cut": "Frozen boxed beef",
+      "ranch": "Bar M Ranch, Henrietta, TX",
+      "story": [
+        "Frozen and boxed for later, this batch is sitting at Lone Star Cold Storage in Fort Worth until a buyer calls for it."
+      ],
+      "photo": {
+        "src": "/frontend/public/img/slides/05-refrigerated-truck.webp",
+        "cid": "QmTCL5yjtUSV4n9unhgqJwji4o7jL2NLRbZiiaqk9o11mu",
+        "alt": "Refrigerated truck on a highway"
+      },
+      "documents": [
+        {
+          "label": "Lot form",
+          "cid": "QmXqzTkA7QCxG2Etmbr7BCV4SFJTgSvphd88saqNGobs66",
+          "sha256": "6788448876ffad08ca9d708df4dbd28a81d3e1b65bfbcc941a6e10d05abd6898"
+        },
+        {
+          "label": "Inspection certificate",
+          "cid": "Qmdfyr9wXe3Nio6bqTBU6bHqbWJY74bXSY1dtKWsnvPmFT",
+          "sha256": "87ecc0f883e933ff99912171516951d9ed2f53523d224034d2b549647e5178de"
+        }
+      ]
+    },
+    "BEEF-TX-112": {
+      "cut": "Ground beef",
+      "ranch": "Concho River Ranch, San Angelo, TX",
+      "story": [
+        "On the road right now. The carrier has picked it up and is driving it to a distributor in Temple, which hasn't confirmed delivery yet."
+      ],
+      "photo": {
+        "src": "/frontend/public/img/slides/05-refrigerated-truck.webp",
+        "cid": "QmTCL5yjtUSV4n9unhgqJwji4o7jL2NLRbZiiaqk9o11mu",
+        "alt": "Refrigerated truck on a highway"
+      },
+      "documents": [
+        {
+          "label": "Lot form",
+          "cid": "QmdDYJ7HBhy8PDgR5hxnDEDS6LBKtAQiTQPQYLd2sUYK71",
+          "sha256": "72eaf3be2cd28a2442604d897ad4c2c0a08a6641f84a36b16956e4df00cf7b73"
+        },
+        {
+          "label": "Inspection certificate",
+          "cid": "Qmb5zcmSY6sGzA3xSeLpkvXfW4L14RBqSyRwsHj1zyaPzH",
+          "sha256": "cb4681d68e4753aa3dc244dbeb1bedf975d300b6c99a6b6e9e59c44dfe4cc738"
+        }
+      ]
+    },
+    "BEEF-TX-113": {
+      "cut": "Dry-aged strip loin",
+      "ranch": "Llano Estacado Feeders, Dimmitt, TX",
+      "story": [
+        "Three processors handled this one. Prairie Packers harvested it, Red River Beef Co. dry-aged it, and Hill Country Meats cut it into steaks.",
+        "Each handoff was signed by both sides before it reached a Houston distributor and then Ember & Oak Steakhouse."
+      ],
+      "photo": {
+        "src": "/frontend/public/img/slides/08-steakhouse-dinner.webp",
+        "cid": "QmVbERHJA5Sj14pHuniTzgg5VKebrFBDWLw5vrACbPVdMh",
+        "alt": "Steak dinner at a restaurant"
+      },
+      "documents": [
+        {
+          "label": "Lot form",
+          "cid": "Qme8gwF7jVLcnQ9L5CRFHH6rjMoYWCymK6hoAEUENPos5C",
+          "sha256": "6a5f70e8828e58064aa92ff8f5658e5a5c242fef3087b566d4b2d5b3f6ef28a2"
+        },
+        {
+          "label": "Inspection certificate",
+          "cid": "QmXsCWMWhEScxbCZTgnik8kN5vDq3S9UTM1J3EVJRkzJh8",
+          "sha256": "46a02f77fa6847894428631336e99c3f166cb6e5a5db0d72d0073bc8b62287a3"
+        }
+      ]
+    },
+    "BEEF-TX-114": {
+      "cut": "Chuck roast",
+      "ranch": "Pecos Trail Ranch, Fort Stockton, TX",
+      "story": [
+        "The Houston distributor split this batch four ways. Three grocery stores sold their lots and a steakhouse served the fourth."
+      ],
+      "photo": {
+        "src": "/frontend/public/img/slides/06-shop-aisle.webp",
+        "cid": "QmYyCryymzwmMc7xop2Gqevq38B9ge468MCrqHLUaXEXFc",
+        "alt": "Meat case in a grocery store"
+      },
+      "documents": [
+        {
+          "label": "Lot form",
+          "cid": "QmQTenpYbTbbY3NB38vp2GdQBc3UpJKq5U4hAsGw9aTGBi",
+          "sha256": "20341ecce6e4840d2bdd176e3edbc5fd918e2c8a8412de73b332ba9fd0ec49a3"
+        },
+        {
+          "label": "Inspection certificate",
+          "cid": "QmevTyoxpj9DEnLcpuzxrfeyYAAcNF7xidy2uVu3uPGfmy",
+          "sha256": "b072745a59ba2e1b598103fc0e9da27c80bdbefbd01ed1028e2d0d6b7b113435"
+        }
+      ]
+    },
+    "BEEF-TX-115": {
+      "cut": "Stew meat",
+      "ranch": "Wichita Valley Ranch, Electra, TX",
+      "story": [
+        "A freezer failed at the storage warehouse. The room's sensor recorded the temperature climbing for hours, and Lone Star Cold Storage disposed of the batch rather than risk it."
+      ],
+      "photo": {
+        "src": "/frontend/public/img/slides/05-refrigerated-truck.webp",
+        "cid": "QmTCL5yjtUSV4n9unhgqJwji4o7jL2NLRbZiiaqk9o11mu",
+        "alt": "Refrigerated truck on a highway"
+      },
+      "documents": [
+        {
+          "label": "Lot form",
+          "cid": "QmamYL8hcqWfqwmeHk3SabF1Fae2svZmR7apq3Zpsjw1GK",
+          "sha256": "4aa145fba8df18b6c9ece85dd88cb04d9fb3375b722a7364677beab7fd413161"
+        },
+        {
+          "label": "Inspection certificate",
+          "cid": "QmdZyFWSQF4DGn1ALrhrw7pd8Rmwu3vkF3DoEpkM85DjLq",
+          "sha256": "58435ad6c8f03b4abae70d4f049ebebb83a9481beecb0402c22200856f272ed1"
+        }
+      ]
+    }
+  }
+}

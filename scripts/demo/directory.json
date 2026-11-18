@@ -1,0 +1,190 @@
+{
+  "note": "Demo businesses for the Portal users import (or npm run seed:directory). Fictional.",
+  "users": [
+    {
+      "address": "0xebc4073bd504638e2d60c75f2e90cb9aa6fed291",
+      "label": "Demo · Processor",
+      "organization": "processor",
+      "roles": [
+        "PROCESSOR",
+        "CUSTODIAN"
+      ],
+      "profile": {
+        "name": "Prairie Packers",
+        "city": "Amarillo, TX",
+        "lat": 35.222,
+        "lng": -101.8313
+      }
+    },
+    {
+      "address": "0xbb9f220ddc745eb57891575ec774912616f57f85",
+      "label": "Demo · Processor",
+      "organization": "processor",
+      "roles": [
+        "PROCESSOR",
+        "CUSTODIAN"
+      ],
+      "profile": {
+        "name": "Red River Beef Co.",
+        "city": "Wichita Falls, TX",
+        "lat": 33.9137,
+        "lng": -98.4934
+      }
+    },
+    {
+      "address": "0x66a76f707abeda0b34609adbee7a517b798f91f3",
+      "label": "Demo · Processor",
+      "organization": "processor",
+      "roles": [
+        "PROCESSOR",
+        "CUSTODIAN"
+      ],
+      "profile": {
+        "name": "Hill Country Meats",
+        "city": "San Angelo, TX",
+        "lat": 31.4638,
+        "lng": -100.437
+      }
+    },
+    {
+      "address": "0x07abf0050c8d37e0973db22cb12ee96285190708",
+      "label": "Demo · Inspector",
+      "organization": "fsis",
+      "roles": [
+        "INSPECTOR"
+      ],
+      "profile": {
+        "name": "USDA inspector (demo)",
+        "city": "Dallas, TX",
+        "lat": 32.7767,
+        "lng": -96.797
+      }
+    },
+    {
+      "address": "0x3a3e60b4e211cac8aa04b873f8917c77723a0818",
+      "label": "Demo · Cold storage",
+      "organization": "storage",
+      "roles": [
+        "CUSTODIAN"
+      ],
+      "profile": {
+        "name": "Lone Star Cold Storage",
+        "city": "Fort Worth, TX",
+        "lat": 32.7555,
+        "lng": -97.3308
+      }
+    },
+    {
+      "address": "0x52fe6003cae370f0404376088f5fff6ca0edd9ed",
+      "label": "Demo · Carrier",
+      "organization": "carrier",
+      "roles": [
+        "CUSTODIAN"
+      ],
+      "profile": {
+        "name": "Panhandle Reefer Lines",
+        "city": "Lubbock, TX",
+        "lat": 33.5779,
+        "lng": -101.8552
+      }
+    },
+    {
+      "address": "0x51d3348eb3a6865e29bc3b6a58410a1126322ccc",
+      "label": "Demo · Distributor",
+      "organization": "distributor",
+      "roles": [
+        "CUSTODIAN"
+      ],
+      "profile": {
+        "name": "Gulf Coast Food Distributors",
+        "city": "Houston, TX",
+        "lat": 29.7604,
+        "lng": -95.3698
+      }
+    },
+    {
+      "address": "0xa3b09c0d8792a498da6e7f61f1abd8f7567a9e52",
+      "label": "Demo · Distributor",
+      "organization": "distributor",
+      "roles": [
+        "CUSTODIAN"
+      ],
+      "profile": {
+        "name": "Central Texas Provisions",
+        "city": "Temple, TX",
+        "lat": 31.0982,
+        "lng": -97.3428
+      }
+    },
+    {
+      "address": "0x7729bf1bc2f28a1840e907b010fd616d10a63190",
+      "label": "Demo · Grocery store",
+      "organization": "retailer",
+      "roles": [
+        "CUSTODIAN"
+      ],
+      "profile": {
+        "name": "Corner Market Grocery",
+        "city": "San Antonio, TX",
+        "lat": 29.4241,
+        "lng": -98.4936
+      }
+    },
+    {
+      "address": "0x267579e9650d27815c41ff87ee02d09ddb774d99",
+      "label": "Demo · Grocery store",
+      "organization": "retailer",
+      "roles": [
+        "CUSTODIAN"
+      ],
+      "profile": {
+        "name": "Bluebonnet Foods",
+        "city": "Waco, TX",
+        "lat": 31.5493,
+        "lng": -97.1467
+      }
+    },
+    {
+      "address": "0x57659446876e0e1d61372aecc29db0330497472c",
+      "label": "Demo · Grocery store",
+      "organization": "retailer",
+      "roles": [
+        "CUSTODIAN"
+      ],
+      "profile": {
+        "name": "Pecan Street Market",
+        "city": "Austin, TX",
+        "lat": 30.2849,
+        "lng": -97.7341
+      }
+    },
+    {
+      "address": "0x449082c773fa2a81b01d0c02d6df2885424ecac9",
+      "label": "Demo · Restaurant",
+      "organization": "restaurant",
+      "roles": [
+        "CUSTODIAN"
+      ],
+      "profile": {
+        "name": "Ember & Oak Steakhouse",
+        "city": "Dallas, TX",
+        "lat": 32.7831,
+        "lng": -96.8067
+      }
+    },
+    {
+      "address": "0xbffdd3635e889e8447bd9a2c42f73fab9a5c1ec0",
+      "label": "Demo · Restaurant",
+      "organization": "restaurant",
+      "roles": [
+        "CUSTODIAN"
+      ],
+      "profile": {
+        "name": "Smoke Ring BBQ",
+        "city": "Lockhart, TX",
+        "lat": 29.8849,
+        "lng": -97.67
+      }
+    }
+  ]
+}
