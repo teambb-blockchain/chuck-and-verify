@@ -2,6 +2,7 @@
 
 // Role dashboards, document records and access requests.
 //
+//   GET    /api/directory           public: business names and places by wallet
 //   GET    /api/dashboard           what this wallet can do, plus its role views
 //   POST   /api/documents           remember a form this wallet published
 //   POST   /api/access-request      a wallet with no role asks for one
@@ -13,7 +14,7 @@
 // form (CID, IV, the timestamp in the message they signed). It never holds
 // the key: that is derived from a fresh wallet signature in the browser.
 
-const { ROLES, ORGANIZATIONS, checkOrganization, normalizeAddress } = require("./db");
+const { ROLES, ORGANIZATIONS, checkOrganization, normalizeAddress, listDirectory } = require("./db");
 const { batchesFrom } = require("./chainIndex");
 
 const SCHEMA = `
@@ -258,6 +259,18 @@ async function createPortal(db, auth, chainIndex) {
   }
 
   async function handle(req, res, urlPath) {
+    // The one route that needs no session: the batch page reads it so
+    // shoppers see business names instead of wallet addresses.
+    if (urlPath === "/api/directory") {
+      if (req.method !== "GET") return sendJson(res, 405, { error: "Method not allowed." }), true;
+      try {
+        sendJson(res, 200, { businesses: await listDirectory(db) }, { "Cache-Control": "public, max-age=60" });
+      } catch (error) {
+        console.error(error);
+        sendJson(res, 500, { error: "Server error." });
+      }
+      return true;
+    }
     const routes = ["/api/dashboard", "/api/documents", "/api/access-request"];
     const adminRoute = urlPath === "/api/admin/requests" || urlPath.startsWith("/api/admin/requests/");
     if (!routes.includes(urlPath) && !adminRoute) return false;

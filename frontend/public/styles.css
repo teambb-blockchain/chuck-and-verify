@@ -344,13 +344,17 @@ a:hover { color: var(--accent-hover); }
 .admin-user .role-chips { display: flex; margin-top: 6px; }
 .admin-actions { display: flex; gap: 4px; flex-shrink: 0; }
 .btn-small { padding: 4px 10px; font-size: 0.85rem; }
-.role-options {
+.role-options,
+.profile-options {
   border: 0;
   padding: 0;
   margin: 0 0 var(--space-3);
   min-width: 0;
 }
-.role-options legend {
+.profile-options { margin-top: var(--space-3); }
+.profile-options > .muted { margin: 0 0 var(--space-2); }
+.role-options legend,
+.profile-options legend {
   padding: 0;
   margin-bottom: var(--space-1);
   font-size: 0.875rem;

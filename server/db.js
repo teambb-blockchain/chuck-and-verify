@@ -78,6 +78,21 @@ function checkOrganization(organization, roles) {
   return org;
 }
 
+// A business's public profile: { name, city, lat, lng }. Name and city are
+// plain text up to 80 characters. Coordinates are both set or both empty.
+function checkProfile(profile) {
+  const bad = (message) => Object.assign(new Error(message), { status: 400 });
+  const p = profile && typeof profile === "object" ? profile : {};
+  const text = (value) => String(value ?? "").replace(/\s+/g, " ").trim().slice(0, 80);
+  const coord = (value) => (value === undefined || value === null || value === "" ? null : Number(value));
+  const lat = coord(p.lat);
+  const lng = coord(p.lng);
+  if ((lat === null) !== (lng === null)) throw bad("Enter both latitude and longitude, or neither.");
+  if (lat !== null && !(Number.isFinite(lat) && lat >= -90 && lat <= 90)) throw bad("Latitude must be between -90 and 90.");
+  if (lng !== null && !(Number.isFinite(lng) && lng >= -180 && lng <= 180)) throw bad("Longitude must be between -180 and 180.");
+  return { name: text(p.name), city: text(p.city), lat, lng };
+}
+
 function normalizeAddress(value) {
   const address = String(value || "").trim().toLowerCase();
   if (!ADDRESS_RE.test(address)) {
@@ -111,7 +126,11 @@ CREATE TABLE IF NOT EXISTS users (
   address    TEXT PRIMARY KEY CHECK (length(address) = 42 AND address GLOB '0x*'),
   label      TEXT NOT NULL DEFAULT '',
   created_at INTEGER NOT NULL,
-  organization TEXT NOT NULL DEFAULT ''
+  organization TEXT NOT NULL DEFAULT '',
+  public_name TEXT NOT NULL DEFAULT '',
+  city       TEXT NOT NULL DEFAULT '',
+  lat        REAL,
+  lng        REAL
 );
 CREATE TABLE IF NOT EXISTS user_roles (
   address    TEXT NOT NULL REFERENCES users(address) ON DELETE CASCADE,
@@ -155,6 +174,18 @@ async function connectDatabase(dbPath, options) {
   const columns = await sqlite.all("PRAGMA table_info(users)");
   if (!columns.some((c) => c.name === "organization")) {
     await sqlite.exec("ALTER TABLE users ADD COLUMN organization TEXT NOT NULL DEFAULT ''");
+  }
+  // ...and before the public business profile.
+  const profileColumns = {
+    public_name: "TEXT NOT NULL DEFAULT ''",
+    city: "TEXT NOT NULL DEFAULT ''",
+    lat: "REAL",
+    lng: "REAL",
+  };
+  for (const [name, type] of Object.entries(profileColumns)) {
+    if (!columns.some((c) => c.name === name)) {
+      await sqlite.exec(`ALTER TABLE users ADD COLUMN ${name} ${type}`);
+    }
   }
   await syncCatalog(sqlite);
   return sqlite;
@@ -326,6 +357,7 @@ async function openDatabase(dataDir = resolveDataDir(), options = {}) {
 // Apply seed.json once into this database file. A later run, and every boot,
 // leave the rows alone, so removing a role in the portal stays removed.
 //   { "users": [ { "address": "0x...", "label": "Contract deployer", "roles": ["ADMIN"] } ] }
+// A user may also carry "profile": { "name", "city", "lat", "lng" } (see checkProfile).
 async function seedOnce(db, seedPath) {
   const existing = await db.sqlite.get("SELECT value FROM app_state WHERE key = 'seeded'");
   if (existing) return { applied: false };
@@ -348,6 +380,7 @@ async function seedOnce(db, seedPath) {
       label: user.label,
       roles: user.roles || [],
       organization: user.organization,
+      profile: user.profile,
       grantedBy: "seed",
       replaceRoles: false,
       createdAt: user.createdAt,
@@ -362,7 +395,8 @@ async function seedOnce(db, seedPath) {
 
 // organization: a key of ORGANIZATIONS, '' to clear, or undefined to keep
 // the current one while the wallet still holds its role.
-async function upsertUser(db, { address, label, roles, organization, grantedBy, replaceRoles, createdAt }) {
+// profile: checkProfile's input, or undefined to keep the current profile.
+async function upsertUser(db, { address, label, roles, organization, profile, grantedBy, replaceRoles, createdAt }) {
   const addr = normalizeAddress(address);
   const unknown = roles.filter((role) => !(role in ROLES));
   if (unknown.length) throw new Error("Unknown role(s): " + unknown.join(", "));
@@ -377,6 +411,7 @@ async function upsertUser(db, { address, label, roles, organization, grantedBy, 
   } else {
     org = checkOrganization(organization, held);
   }
+  const card = profile === undefined ? null : checkProfile(profile);
 
   await db.sqlite.transaction(async (tx) => {
     await tx.run(
@@ -388,6 +423,16 @@ async function upsertUser(db, { address, label, roles, organization, grantedBy, 
       Number(createdAt) || now,
       org
     );
+    if (card) {
+      await tx.run(
+        "UPDATE users SET public_name = ?, city = ?, lat = ?, lng = ? WHERE address = ?",
+        card.name,
+        card.city,
+        card.lat,
+        card.lng,
+        addr
+      );
+    }
     if (replaceRoles) {
       await tx.run("DELETE FROM user_roles WHERE address = ?", addr);
     }
@@ -424,7 +469,7 @@ async function accessFor(db, address) {
 
 async function listUsers(db) {
   const users = await db.sqlite.all(
-    "SELECT address, label, created_at, organization FROM users ORDER BY created_at"
+    "SELECT address, label, created_at, organization, public_name, city, lat, lng FROM users ORDER BY created_at"
   );
   const rolesByAddress = new Map(users.map((user) => [user.address, []]));
   for (const grant of await db.sqlite.all("SELECT address, role FROM user_roles ORDER BY role")) {
@@ -435,7 +480,27 @@ async function listUsers(db) {
     label: user.label,
     createdAt: user.created_at,
     organization: user.organization || null,
+    profile: profileShape(user),
     roles: rolesByAddress.get(user.address),
+  }));
+}
+
+function profileShape(row) {
+  return { name: row.public_name, city: row.city, lat: row.lat, lng: row.lng };
+}
+
+// The public business directory: what the batch page shows shoppers in place
+// of wallet addresses. Only wallets that hold a role and have a business name
+// are listed. The label and the access-request note stay private.
+async function listDirectory(db) {
+  const rows = await db.sqlite.all(
+    "SELECT address, organization, public_name, city, lat, lng FROM users " +
+      "WHERE public_name <> '' AND address IN (SELECT address FROM user_roles) ORDER BY address"
+  );
+  return rows.map((row) => ({
+    address: row.address,
+    ...profileShape(row),
+    type: ORGANIZATIONS[row.organization]?.name || null,
   }));
 }
 
@@ -451,4 +516,6 @@ module.exports = {
   deleteUser,
   accessFor,
   listUsers,
+  listDirectory,
+  checkProfile,
 };

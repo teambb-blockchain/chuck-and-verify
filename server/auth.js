@@ -276,6 +276,7 @@ function createAuth(db) {
             label: body.label,
             roles,
             organization: body.organization === undefined ? undefined : String(body.organization || ""),
+            profile: body.profile,
             grantedBy: user.address,
             replaceRoles: true,
           });

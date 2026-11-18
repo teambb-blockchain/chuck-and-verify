@@ -119,6 +119,8 @@ The dashboard counts come from `server/chainIndex.js`. It copies `BeefSupplyChai
 
 **Opening filed forms.** After a lot form, inspection report or recall notice is confirmed, the page sends the server that upload's receipt (CID, IV and the timestamp of the encryption message) through `/api/documents`. The key is never sent. The table's form links fetch the ciphertext from the gateway and ask the uploader's wallet to sign the same message again, which rebuilds the key, then decrypt it in the browser. Only the wallet that uploaded a form can open it. An inspection report or recall notice is listed only if its fingerprint matches the one on chain.
 
+**Business directory.** In the Portal users card, an admin can give a wallet a public profile: business name, city, and optional latitude and longitude. `GET /api/directory` is public and lists the profile of every wallet that has a name and at least one role. Labels and access-request notes are not included. The batch page uses it to say "From Prairie Packers, Amarillo, TX to Lone Star Cold Storage" instead of showing wallet addresses. A wallet with no profile is just left unnamed. The names come from the portal, not the chain, and the page's Technical details say so. A seed file can set a profile per user: `"profile": { "name": "...", "city": "...", "lat": 35.22, "lng": -101.83 }`.
+
 This layer controls the portal only. It does not replace `CredentialRegistry` ([ADR 0003](./docs/decisions/0003-simulated-administrative-chain.md)): the contracts still check on-chain credentials on every write.
 
 ### The roles database

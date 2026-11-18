@@ -123,6 +123,11 @@ function renderUsers(users) {
         form.address.value = user.address;
         form.label.value = user.label;
         form.organization.value = user.organization || "";
+        const profile = user.profile || {};
+        form.publicName.value = profile.name || "";
+        form.city.value = profile.city || "";
+        form.lat.value = profile.lat ?? "";
+        form.lng.value = profile.lng ?? "";
         for (const box of form.querySelectorAll("input[name=roles]")) {
           box.checked = user.roles.includes(box.value);
         }
@@ -153,6 +158,9 @@ function renderUsers(users) {
           el("code", {}, user.address),
           user.label ? el("span", { className: "muted" }, " — " + user.label) : "",
           user.organization ? el("span", { className: "muted" }, " · " + orgName(user.organization)) : "",
+          user.profile && user.profile.name
+            ? el("div", { className: "muted" }, "Shown as " + user.profile.name + (user.profile.city ? ", " + user.profile.city : ""))
+            : "",
           el("div", { className: "role-chips" },
             ...(user.roles.length
               ? user.roles.map((r) => {
@@ -339,7 +347,17 @@ form.onsubmit = async (event) => {
   try {
     const { users } = await api("/api/admin/users/" + encodeURIComponent(address), {
       method: "PUT",
-      body: JSON.stringify({ label: form.label.value.trim(), roles, organization: form.organization.value })
+      body: JSON.stringify({
+        label: form.label.value.trim(),
+        roles,
+        organization: form.organization.value,
+        profile: {
+          name: form.publicName.value.trim(),
+          city: form.city.value.trim(),
+          lat: form.lat.value,
+          lng: form.lng.value
+        }
+      })
     });
     renderUsers(users);
     loadRequests();
@@ -497,6 +515,9 @@ async function loadRequests() {
       fill.onclick = () => {
         form.address.value = request.address;
         form.organization.value = request.organization || "";
+        // A new wallet starts unlisted, not with the last user edited.
+        form.label.value = "";
+        for (const name of ["publicName", "city", "lat", "lng"]) form[name].value = "";
         for (const box of form.querySelectorAll("input[name=roles]")) {
           box.checked = request.roles.includes(box.value);
         }

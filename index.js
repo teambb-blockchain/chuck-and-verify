@@ -161,7 +161,7 @@ function proxyIpfsAdd(req, res) {
 // strips the prefix: /api/me arrives here as /me. Put it back for the API
 // routes only. None of these collide with a file in frontend/public.
 const STRIPPED_API_ROUTE =
-  /^\/(me|auth\/[a-z]+|admin\/(users|requests)(\/.*)?|ipfs\/add|dashboard|documents|access-request)$/;
+  /^\/(me|auth\/[a-z]+|admin\/(users|requests)(\/.*)?|ipfs\/add|dashboard|documents|access-request|directory)$/;
 
 function withApiPrefix(urlPath) {
   return STRIPPED_API_ROUTE.test(urlPath) ? "/api" + urlPath : urlPath;

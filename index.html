@@ -10,14 +10,14 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600&family=JetBrains+Mono:wght@400;500&family=Big+Shoulders+Display:wght@700;800&display=swap">
-  <link rel="stylesheet" href="/frontend/public/styles.css?v=52bc4775cf">
+  <link rel="stylesheet" href="/frontend/public/styles.css?v=0a9b0ce0cf">
   <!-- asset-versions:start -->
   <script type="importmap">
   {
     "imports": {
       "/frontend/public/abi.js": "/frontend/public/abi.js?v=bc2ecab287",
       "/frontend/public/actions.js": "/frontend/public/actions.js?v=f08c013896",
-      "/frontend/public/admin.js": "/frontend/public/admin.js?v=70e96b0963",
+      "/frontend/public/admin.js": "/frontend/public/admin.js?v=82eefd3960",
       "/frontend/public/app.js": "/frontend/public/app.js?v=788ca8aea5",
       "/frontend/public/chain.js": "/frontend/public/chain.js?v=b600a0a28b",
       "/frontend/public/consumer.js": "/frontend/public/consumer.js?v=0ce9a283aa",
@@ -389,6 +389,30 @@
                 </select>
                 <p class="muted">Tailors the dashboard to the work this business does, such as a carrier's pickups or a retailer's deliveries. It needs the matching role.</p>
               </div>
+              <fieldset class="profile-options">
+                <legend>Public profile</legend>
+                <p class="muted">Shoppers see this name and place on the batch page instead of the wallet address. Leave the name empty to keep the business unlisted.</p>
+                <div class="field-row">
+                  <div class="field">
+                    <label for="adminPublicName">Business name</label>
+                    <input id="adminPublicName" name="publicName" maxlength="80" autocomplete="off" placeholder="Prairie Cold Storage">
+                  </div>
+                  <div class="field">
+                    <label for="adminCity">City</label>
+                    <input id="adminCity" name="city" maxlength="80" autocomplete="off" placeholder="Amarillo, TX">
+                  </div>
+                </div>
+                <div class="field-row">
+                  <div class="field">
+                    <label for="adminLat">Latitude <span class="optional">(for the map)</span></label>
+                    <input id="adminLat" name="lat" type="number" min="-90" max="90" step="any" inputmode="decimal" placeholder="35.2220">
+                  </div>
+                  <div class="field">
+                    <label for="adminLng">Longitude</label>
+                    <input id="adminLng" name="lng" type="number" min="-180" max="180" step="any" inputmode="decimal" placeholder="-101.8313">
+                  </div>
+                </div>
+              </fieldset>
               <fieldset class="role-options">
                 <legend>Roles</legend>
                 <div id="adminRoleBoxes" class="role-grid"></div>

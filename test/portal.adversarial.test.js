@@ -299,6 +299,54 @@ describe("Portal server — adversarial", function () {
     });
   });
 
+  describe("business directory", function () {
+    const put = (cookie, address, body) =>
+      fetch(base + "/api/admin/users/" + address, {
+        method: "PUT",
+        headers: { cookie, "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
+    it("is public and lists only named wallets that hold a role, without private labels", async function () {
+      const { cookie } = await signIn(adminWallet);
+      const carrier = custodianWallet.address.toLowerCase();
+      const ok = await put(cookie, carrier, {
+        label: "Dana's test wallet",
+        roles: ["CUSTODIAN"],
+        organization: "carrier",
+        profile: { name: "  Lone Star   Freight ", city: "Dallas, TX", lat: "32.7767", lng: -96.797 },
+      });
+      expect(ok.status).to.equal(200);
+      // Named but no role: stays out of the directory.
+      expect((await put(cookie, newcomerWallet.address, { roles: [], profile: { name: "Ghost Co" } })).status).to.equal(200);
+
+      const r = await fetch(base + "/api/directory");
+      expect(r.status).to.equal(200);
+      expect(r.headers.get("cache-control")).to.include("max-age");
+      const { businesses } = await r.json();
+      expect(businesses).to.deep.equal([
+        { address: carrier, name: "Lone Star Freight", city: "Dallas, TX", lat: 32.7767, lng: -96.797, type: "Carrier" },
+      ]);
+      expect(JSON.stringify(businesses)).to.not.include("Dana");
+
+      // Saving without a profile keeps it; an empty name unlists the business.
+      await put(cookie, carrier, { roles: ["CUSTODIAN"], organization: "carrier" });
+      expect((await (await fetch(base + "/api/directory")).json()).businesses).to.have.length(1);
+      await put(cookie, carrier, { roles: ["CUSTODIAN"], profile: { name: "" } });
+      expect((await (await fetch(base + "/api/directory")).json()).businesses).to.deep.equal([]);
+    });
+
+    it("rejects half-set or out-of-range coordinates, and writes to it", async function () {
+      const { cookie } = await signIn(adminWallet);
+      const carrier = custodianWallet.address;
+      const half = await put(cookie, carrier, { roles: ["CUSTODIAN"], profile: { name: "X", lat: 10 } });
+      expect(half.status).to.equal(400);
+      const far = await put(cookie, carrier, { roles: ["CUSTODIAN"], profile: { name: "X", lat: 91, lng: 0 } });
+      expect(far.status).to.equal(400);
+      expect((await post("/api/directory", {})).status).to.equal(405);
+    });
+  });
+
   describe("dashboards", function () {
     const bundle = (wallet, sha = "ef".repeat(32)) => ({
       address: wallet.address,
