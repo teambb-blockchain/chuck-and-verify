@@ -494,7 +494,55 @@
           <p>Beef passes through several stages and organizations before it reaches you. Distributors, retailers, restaurants and shoppers all depend on inspection records to know the meat was inspected and is safe to eat. But those records can be altered, forged or falsely claimed, and it's hard to tell whether they're genuine.</p>
           <p>In September 2026, the USDA's Food Safety and Inspection Service issued a Class I recall because more than 167,000 pounds of meat carried a false mark of USDA inspection. Retailers and restaurants bought it without knowing the inspection claim was unreliable (<a href="https://www.fsis.usda.gov/recalls-alerts/star-meat-delivery-inc--recalls-raw-pork-beef-and-goat-products-produced-without">FSIS recall notice</a>).</p>
           <p>Temperature matters too. Federal rules set safe temperatures for storing and moving beef, but no one outside a handoff can check that they were followed. Whoever holds the beef is both responsible for it and reporting on it, which gives them a reason to shade the truth. The result is health risks, financial losses, disruptive recalls and lost trust.</p>
-        </section>
+
+<section class="info-section" aria-labelledby="ourStory">
+  <h2 id="ourStory">Our Story</h2>
+
+  <h3>The Beef Supply Chain and Its Challenges</h3>
+  <p>
+    Beef travels through a network of processors, inspectors,
+    transportation companies, distributors, and retailers before
+    reaching consumers. Each organization is responsible for recording
+    different parts of that journey, from inspections to storage and
+    delivery. When those records are scattered across separate systems,
+    tracing a product becomes difficult, especially during a recall.
+    The challenge is not simply collecting information, but making
+    sure businesses and consumers can verify its history without
+    depending entirely on the organization that provided it.
+  </p>
+
+  <h3>Existing Blockchain Solutions</h3>
+  <p>
+    Blockchain-based food traceability is already being explored
+    through platforms such as IBM Food Trust, which has been used
+    to share supply chain information among participating businesses.
+    These approaches demonstrate how a shared record can improve
+    traceability and help organizations investigate problems more
+    efficiently. However, adopting such systems can involve costs,
+    technical expertise, and integration with existing business
+    processes. Smaller businesses may find these requirements
+    especially challenging. This creates an opportunity for solutions
+    that make trustworthy product verification easier to understand
+    and use.
+  </p>
+
+  <h3>Our Solution: Chuck &amp; Verify</h3>
+  <p>
+    Chuck &amp; Verify brings this idea to the beef supply chain
+    through a straightforward application built around accountability
+    and transparency. Authorized participants can register beef
+    batches, record inspections, document custody handoffs, split
+    batches into smaller lots, and report recalls. These activities
+    create a shared, tamper-evident history that helps identify who
+    recorded each step and when it happened. Our demonstration also
+    includes temperature summaries generated using simulated sensor
+    data, showing how cold-chain monitoring can support traceability.
+    Consumers can enter a batch ID to review its available history
+    without creating an account or connecting a cryptocurrency wallet.
+    Our goal is to make supply chain information easier to verify,
+    recalls easier to trace, and product histories more trustworthy.
+  </p>
+</section>
 
         <section class="info-section" aria-labelledby="aboutWhy">
           <h2 id="aboutWhy">Why it has to be on a blockchain</h2>
@@ -528,7 +576,69 @@
           <p>Prices, sales, employee details, shipping details and full inspection documents stay off the blockchain. Only the batch facts are public. Documents are kept private, and only a fingerprint of each is saved on the blockchain, so anyone can later tell whether one was changed.</p>
         </section>
 
-        <p class="info-cta"><a class="btn-primary" href="/" data-home>Check a batch</a></p>
+<section class="info-section" aria-labelledby="aboutFaq">
+  <h2 id="aboutFaq">Frequently Asked Questions</h2>
+
+  <details>
+    <summary>What is a consensus mechanism?</summary>
+    <p>
+      A consensus mechanism is how blockchain participants
+      agree on valid transactions and their order. It helps
+      maintain a consistent shared history without relying
+      on one organization to approve every record.
+    </p>
+  </details>
+
+  <details>
+    <summary>What is Byzantine fault tolerance?</summary>
+    <p>
+      Byzantine fault tolerance describes a distributed
+      system's ability to reach agreement even when some
+      participants fail, send conflicting messages, or
+      behave dishonestly. The number of failures a network
+      can tolerate depends on its consensus design.
+    </p>
+  </details>
+
+  <details>
+    <summary>Who maintains the Chuck &amp; Verify blockchain?</summary>
+    <p>
+      Chuck &amp; Verify records transactions on the DIDLab
+      blockchain network. Supply chain businesses submit
+      transactions using their assigned permissions, while
+      the blockchain network is responsible for confirming
+      and maintaining the shared transaction history.
+    </p>
+  </details>
+
+  <details>
+    <summary>How do businesses gain TRUST?</summary>
+      <p>
+  TRUST is the native token used to pay transaction fees
+  on the DIDLab blockchain. Businesses need TRUST in their
+  wallets to record transactions. TRUST must be obtained
+  or transferred to their wallets during onboarding.
+  An authorized issuer separately grants role-based
+  credentials, which determine what actions each
+  business is allowed to perform.
+</p>
+  </details>
+
+  <details>
+    <summary>Can blockchain guarantee food safety?</summary>
+    <p>
+      No. Blockchain makes recorded information easier
+      to verify and changes harder to hide, but it
+      cannot guarantee that the original information
+      was accurate. Physical inspections and proper
+      food handling remain essential.
+    </p>
+  </details>
+</section>
+
+        <p class="info-cta" style="margin-top: 32px;">
+  <a class="btn-primary" href="/" data-home>Check a batch</a>
+</p>
       </article>
 
       <article id="teamView" class="info-page" aria-labelledby="teamHeading" hidden>
