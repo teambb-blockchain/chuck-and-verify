@@ -19,10 +19,15 @@ async function main() {
 
   const batchId = hre.ethers.encodeBytes32String("BEEF-001");
   const weightLbs = 500;
+  // Use-by date: USE_BY_DAYS from now (default 14). Fresh beef is usually
+  // days to a few weeks; the contract caps it at two years.
+  const useByDays = Number(process.env.USE_BY_DAYS || 14);
+  const useBy = Math.floor(Date.now() / 1000) + Math.round(useByDays * 86400);
 
   console.log("Registering batch: BEEF-001");
   console.log("Processor:", wallet.address);
   console.log("Weight:", weightLbs, "lbs");
+  console.log("Use by:", new Date(useBy * 1000).toISOString().slice(0, 10));
 
   // Check whether the batch already exists.
   try {
@@ -47,7 +52,7 @@ async function main() {
   }
 
   // Submit the transaction.
-  const tx = await supplyChain.registerBatch(batchId, weightLbs);
+  const tx = await supplyChain["registerBatch(bytes32,uint256,uint64)"](batchId, weightLbs, useBy);
   console.log("Registration TX:", tx.hash);
 
   const receipt = await tx.wait();

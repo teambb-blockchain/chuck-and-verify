@@ -189,6 +189,9 @@ async function createPortal(db, auth, chainIndex) {
       lastMovedAt: batch.receivedAt || batch.shippedAt || batch.registeredAt,
       parentId: batch.parentId,
       lotCount: batch.lotIds.length,
+      useBy: batch.useBy,
+      disposition: batch.disposition,
+      disposedAt: batch.disposedAt,
       documents: documentsFor(batch, docs, me),
     };
   }
@@ -209,8 +212,9 @@ async function createPortal(db, auth, chainIndex) {
     };
     const newestFirst = (a, b) => (b.lastMovedAt || 0) - (a.lastMovedAt || 0);
     // A split batch lives on as its lots. Counts of product in hand skip it,
-    // so a split never counts the same beef twice.
-    const notSplit = (b) => b.lotIds.length === 0;
+    // so a split never counts the same beef twice. Nor do they count beef
+    // that has been sold, served or disposed of.
+    const notSplit = (b) => b.lotIds.length === 0 && !b.disposition;
 
     if (has("INSPECTOR")) {
       // Lots are inspected through their parent batch, so they are never

@@ -307,8 +307,30 @@ const REGISTER_REVERTS = {
   Unauthorized: "This wallet isn't authorized to register batches.",
   ReservedLotName: "IDs ending in -L and a number are kept for lots. Choose another batch ID.",
   ZeroWeight: "Weight must be a positive whole number.",
-  EmptyBatchId: "Enter a batch ID."
+  EmptyBatchId: "Enter a batch ID.",
+  InvalidUseBy: "Choose a use-by date after today and within two years."
 };
+
+// The use-by input's earliest choice is tomorrow, in the viewer's time zone.
+{
+  const input = document.getElementById("newBatchUseBy");
+  const day = (offset) => {
+    const d = new Date();
+    d.setDate(d.getDate() + offset);
+    return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  };
+  input.min = day(1);
+  input.max = day(729);
+}
+
+// "2026-12-02" -> unix seconds at the end of that day, local time: beef with
+// a use-by date is good through that day.
+function useBySeconds(value) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value || "");
+  if (!match) return null;
+  const end = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 23, 59, 59);
+  return Math.floor(end.getTime() / 1000);
+}
 
 function explorerLink(hash) {
   return Object.assign(document.createElement("a"), {
@@ -467,6 +489,11 @@ registerButton.onclick = async () => {
     if (!/^[1-9]\d*$/.test(weightText)) {
       throw new Error("Weight must be a positive whole number.");
     }
+    const useBy = useBySeconds(document.getElementById("newBatchUseBy").value);
+    const nowSeconds = Date.now() / 1000;
+    if (!useBy || useBy <= nowSeconds || useBy > nowSeconds + 730 * 86400) {
+      throw new Error(REGISTER_REVERTS.InvalidUseBy);
+    }
 
     const weight = BigInt(weightText);
     const batchId = stringToHex(batchName, { size: 32 });
@@ -488,7 +515,7 @@ registerButton.onclick = async () => {
       address: beefSupplyChainAddress,
       abi,
       functionName: "registerBatch",
-      args: [batchId, weight],
+      args: [batchId, weight, BigInt(useBy)],
       account: accounts[0]
     });
 

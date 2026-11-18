@@ -692,6 +692,7 @@ th[aria-sort="descending"] .sort-mark { opacity: 1; }
 .lot-id { display: block; font-weight: 600; font-variant-numeric: tabular-nums; }
 .lot-meta { display: block; color: var(--muted); font-size: 0.8125rem; }
 .lot-flag { display: block; color: var(--recall); font-weight: 600; font-size: 0.8125rem; }
+.lot-flag.is-expired { color: var(--amber-ink); }
 .lots tr.is-recalled { background: var(--recall-wash); box-shadow: inset 4px 0 0 var(--recall); }
 .lots tr.is-recalled th { padding-left: 12px; }
 .lots .lot-action { padding-right: 0; text-align: right; white-space: nowrap; }
@@ -788,6 +789,13 @@ textarea {
 .custody-step h3 { margin-top: var(--space-1); }
 .custody-step .field { margin-bottom: var(--space-2); }
 .custody-step .muted { margin-bottom: var(--space-2); }
+/* Closing a batch out ends its custody, so it sits apart from the handoff steps. */
+.custody-step:nth-child(3) {
+  grid-column: 1 / -1;
+  border-top: 1px solid var(--border-row);
+  padding-top: var(--space-2);
+}
+.custody-step:nth-child(3) .field { max-width: 320px; }
 #custodyStatus,
 #recallStatus { margin: var(--space-2) 0 0; overflow-wrap: anywhere; }
 #custodyStatus:empty,

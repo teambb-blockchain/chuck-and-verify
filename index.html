@@ -10,18 +10,18 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600&family=JetBrains+Mono:wght@400;500&family=Big+Shoulders+Display:wght@700;800&display=swap">
-  <link rel="stylesheet" href="/frontend/public/styles.css?v=0a9b0ce0cf">
+  <link rel="stylesheet" href="/frontend/public/styles.css?v=97027ef550">
   <!-- asset-versions:start -->
   <script type="importmap">
   {
     "imports": {
-      "/frontend/public/abi.js": "/frontend/public/abi.js?v=bc2ecab287",
-      "/frontend/public/actions.js": "/frontend/public/actions.js?v=f08c013896",
+      "/frontend/public/abi.js": "/frontend/public/abi.js?v=aecf0ab437",
+      "/frontend/public/actions.js": "/frontend/public/actions.js?v=f6bb2a2b22",
       "/frontend/public/admin.js": "/frontend/public/admin.js?v=82eefd3960",
-      "/frontend/public/app.js": "/frontend/public/app.js?v=788ca8aea5",
+      "/frontend/public/app.js": "/frontend/public/app.js?v=6e1df11cb6",
       "/frontend/public/chain.js": "/frontend/public/chain.js?v=b600a0a28b",
       "/frontend/public/consumer.js": "/frontend/public/consumer.js?v=0ce9a283aa",
-      "/frontend/public/dashboard.js": "/frontend/public/dashboard.js?v=b0115f90ca",
+      "/frontend/public/dashboard.js": "/frontend/public/dashboard.js?v=5f030c5912",
       "/frontend/public/ipfs.js": "/frontend/public/ipfs.js?v=93f5458b4e",
       "/frontend/public/qr.js": "/frontend/public/qr.js?v=c06e70fe6d",
       "/frontend/public/registryAbi.js": "/frontend/public/registryAbi.js?v=3f9db4a2f2",
@@ -241,12 +241,17 @@
                 <label for="newBatchWeight">Weight (lbs)</label>
                 <input id="newBatchWeight" type="number" min="1" placeholder="500">
               </div>
+              <div class="field">
+                <label for="newBatchUseBy">Use by</label>
+                <input id="newBatchUseBy" type="date" aria-describedby="newBatchUseByHint">
+                <p id="newBatchUseByHint" class="muted">Shoppers see this date. Lots split from the batch keep it.</p>
+              </div>
             </div>
             <div class="field">
               <label for="batchFormFile">Lot form</label>
               <input id="batchFormFile" class="form-file" type="file" accept="application/pdf,.pdf">
             </div>
-            <p class="muted">The form is encrypted in this browser before it is published. IPFS stores the ciphertext. The filename and the recovery file stay off the chain. Register then records the batch id and weight.</p>
+            <p class="muted">The form is encrypted in this browser before it is published. IPFS stores the ciphertext. The filename and the recovery file stay off the chain. Register then records the batch ID, weight and use-by date.</p>
             <button id="registerBatch" class="btn btn-accent" type="button">Register Batch</button>
             <p id="transactionStatus" role="status" aria-live="polite"></p>
             <div id="formReceipt" class="batch-record" hidden>
@@ -305,6 +310,19 @@
                 <h3>Receive it</h3>
                 <p class="muted">When a batch shipped to you arrives, confirm it to take custody.</p>
                 <button id="confirmReceipt" class="btn btn-accent" type="button">Confirm receipt</button>
+              </div>
+              <div class="custody-step">
+                <h3>Close it out</h3>
+                <div class="field">
+                  <label for="dispositionKind">Final status</label>
+                  <select id="dispositionKind">
+                    <option value="1">Sold to shoppers</option>
+                    <option value="2">Served or eaten</option>
+                    <option value="3">Disposed of</option>
+                  </select>
+                </div>
+                <p class="muted">Records that it left the supply chain. It can't be shipped or split afterward. No sale details are saved.</p>
+                <button id="recordDisposition" class="btn btn-accent" type="button">Record final status</button>
               </div>
             </div>
             <p id="custodyStatus" role="status" aria-live="polite"></p>
@@ -547,6 +565,6 @@
     </footer>
   </div>
 
-  <script type="module" src="/frontend/public/app.js?v=788ca8aea5"></script>
+  <script type="module" src="/frontend/public/app.js?v=6e1df11cb6"></script>
 </body>
 </html>

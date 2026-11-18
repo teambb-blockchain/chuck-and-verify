@@ -1,5 +1,5 @@
 const { expect } = require("chai");
-const { batchesFrom } = require("../server/chainIndex");
+const { batchesFrom, decodeLog, EVENTS } = require("../server/chainIndex");
 
 // batchesFrom folds decoded events into one record per batch, the way
 // getBatch reads on chain. These cover lots split from lots.
@@ -37,5 +37,32 @@ describe("chainIndex batchesFrom", function () {
     }
     expect(byId["B-L1-L1"]).to.include({ recalled: true, recallClass: 3 });
     expect(byId["B-L1-L2-L1"]).to.include({ recalled: true, recallClass: 2, recallHash: "0xclass2" });
+  });
+
+  it("carries the use-by date down to every lot and records a disposition", function () {
+    const list = [
+      ev("BatchRegistered", "U", { actor: PROC, num: 100 }),
+      ev("UseBySet", "U", { actor: "", num: 1_800_000_000 }),
+      lot("U", "U-L1", DIST, 60),
+      lot("U", "U-L2", DIST, 40),
+      lot("U-L1", "U-L1-L1", STORE, 30),
+      ev("DispositionRecorded", "U-L2", { actor: DIST, num: 1 }),
+    ];
+    const byId = Object.fromEntries(batchesFrom(list).map((b) => [b.batchId, b]));
+    for (const id of ["U", "U-L1", "U-L2", "U-L1-L1"]) expect(byId[id].useBy).to.equal(1_800_000_000_000);
+    expect(byId["U-L2"]).to.include({ disposition: 1 });
+    expect(byId["U-L1"].disposition).to.equal(null);
+    expect(byId["B"] === undefined).to.equal(true);
+  });
+
+  it("decodes UseBySet, which has no address topic, and DispositionRecorded", function () {
+    const sig = (name) => Object.keys(EVENTS).find((t) => EVENTS[t] === name);
+    const id = "0x" + Buffer.from("U-1").toString("hex").padEnd(64, "0");
+    const holder = "0x" + "00".repeat(12) + "ab".repeat(20);
+    const base = { blockNumber: "0x10", logIndex: "0x1", transactionHash: "0xt" };
+    const useBy = decodeLog({ ...base, topics: [sig("UseBySet"), id], data: "0x" + (1_800_000_000).toString(16).padStart(64, "0") });
+    expect(useBy).to.include({ name: "UseBySet", batchId: "U-1", actor: "", num: 1_800_000_000 });
+    const sold = decodeLog({ ...base, topics: [sig("DispositionRecorded"), id, holder], data: "0x" + "3".padStart(64, "0") });
+    expect(sold).to.include({ name: "DispositionRecorded", actor: "0x" + "ab".repeat(20), num: 3 });
   });
 });

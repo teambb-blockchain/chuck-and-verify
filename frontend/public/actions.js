@@ -44,8 +44,12 @@ const REVERT_MESSAGES = {
   ShipmentPending: "This batch has a shipment waiting. It can be split once the receiver confirms it.",
   BadLotCount: LOT_COUNT_HINT,
   LotWeightMismatch: "The lot weights must add up to the batch weight.",
-  LotNameTooLong: "Use a shorter batch ID so the lot numbers fit."
+  LotNameTooLong: "Use a shorter batch ID so the lot numbers fit.",
+  BatchDisposed: "This batch already has a final status, so it can't be moved or changed.",
+  InvalidDisposition: "Choose a final status."
 };
+
+export const DISPOSITION_TEXT = { 1: "Sold to shoppers", 2: "Served or eaten", 3: "Disposed of" };
 
 const $ = (id) => document.getElementById(id);
 
@@ -153,6 +157,23 @@ $("confirmReceipt").onclick = () =>
       status: custodyStatus,
       batchName: batch.name,
       done: "Received: " + batch.name + " is now in your custody."
+    });
+  });
+
+$("recordDisposition").onclick = () =>
+  custody($("recordDisposition"), async () => {
+    const batch = batchIdFrom("custodyBatchId");
+    const kind = Number($("dispositionKind").value);
+    if (!DISPOSITION_TEXT[kind]) throw new Error("Choose a final status.");
+    if (!confirm("Record " + batch.name + " as \"" + DISPOSITION_TEXT[kind] + "\"? This can't be undone, and the batch can't be shipped or split afterward.")) return;
+    const wallet = await walletOnDidLab();
+    await send({
+      ...wallet,
+      functionName: "recordDisposition",
+      args: [batch.id, kind],
+      status: custodyStatus,
+      batchName: batch.name,
+      done: "Final status recorded: " + batch.name + " · " + DISPOSITION_TEXT[kind] + "."
     });
   });
 

@@ -46,13 +46,15 @@ const ORGS = {
 const ORG_ORDER = Object.keys(ORGS);
 
 // How the custodian panel reads for each kind of custodian. `actions` is the
-// "What you can do" list; `ship` and `split` say whether a row offers them.
+// "What you can do" list; `ship`, `split` and `close` say whether a row
+// offers them. A carrier hands every load on, so it never closes one out.
 const HOLD_UNTIL = " until the processor tells you how to return or dispose of ";
 const CUSTODY_PROFILE = {
   default: {
-    actions: ["ship", "split", "receive"],
+    actions: ["ship", "split", "receive", "close"],
     ship: true,
     split: true,
+    close: true,
     here: "With you",
     inCustody: "in your custody",
     incoming: "on the way to you",
@@ -62,14 +64,14 @@ const CUSTODY_PROFILE = {
     empty: "Nothing is in your custody. A batch shows up here once it's shipped to your wallet."
   },
   storage: {
-    actions: ["receive", "ship"],
+    actions: ["receive", "ship", "close"],
     here: "In storage",
     inCustody: "in storage",
     hold: ["It's in your storage. Don't ship it. Hold it", "They're in your storage. Don't ship them. Hold them"],
     empty: "Nothing is in storage. A batch shows up here once it's shipped to your facility."
   },
   distributor: {
-    actions: ["receive", "split", "ship"],
+    actions: ["receive", "split", "ship", "close"],
     here: "In your warehouse",
     inCustody: "in your warehouse",
     hold: ["It's in your warehouse. Don't split or ship it. Hold it", "They're in your warehouse. Don't split or ship them. Hold them"],
@@ -78,6 +80,7 @@ const CUSTODY_PROFILE = {
   carrier: {
     actions: ["receive", "ship"],
     split: false,
+    close: false,
     here: "On your truck",
     inCustody: "on your trucks",
     incoming: "waiting for pickup",
@@ -93,7 +96,7 @@ const CUSTODY_PROFILE = {
   // A grocery store splits what it receives into smaller lots for its
   // shelves. A restaurant uses what it receives, so it doesn't split.
   retailer: {
-    actions: ["receive", "split", "ship"],
+    actions: ["receive", "split", "close", "ship"],
     ship: false,
     here: "In your store",
     inCustody: "in your store",
@@ -103,7 +106,7 @@ const CUSTODY_PROFILE = {
     empty: "Nothing has been delivered to your store yet. A batch shows up here once a supplier ships it to you."
   },
   restaurant: {
-    actions: ["receive", "ship"],
+    actions: ["receive", "close", "ship"],
     ship: false,
     split: false,
     here: "In your kitchen",
@@ -224,6 +227,11 @@ const ACTIONS = {
     hint: "Divide a batch in your custody into lots you can ship separately.",
     run: (id) => goTo("splitSection", id ? { splitBatchId: id } : {}, id ? "splitCount" : "splitBatchId")
   },
+  close: {
+    label: "Close out a batch",
+    hint: "Record that a batch was sold, served or disposed of.",
+    run: (id) => goTo("custodySection", id ? { custodyBatchId: id } : {}, id ? "dispositionKind" : "custodyBatchId")
+  },
   receive: {
     label: "Confirm a delivery",
     hint: "Take custody of a batch shipped to you.",
@@ -329,12 +337,15 @@ function inspectionCell(r) {
 
 // In your hands and free to act on: not in transit, and not split (a split
 // batch lives on as its lots).
-const withYou = (r) => r.holderIsYou && !r.inTransit && !r.lotCount;
+const withYou = (r) => r.holderIsYou && !r.inTransit && !r.lotCount && !r.disposition;
+const FINAL_STATUS = { 1: "Sold to shoppers", 2: "Served or eaten", 3: "Disposed of" };
+const pastUseBy = (r) => Boolean(r.useBy) && !r.disposition && r.useBy < Date.now();
 
 function custodyCell(r, role) {
   const words = custodyProfile(role);
   // A split batch lives on as its lots; it has no custody of its own.
   if (r.lotCount) return stateTag(null, "Split into " + r.lotCount + " lots");
+  if (r.disposition) return stateTag(null, FINAL_STATUS[r.disposition] || "Closed out");
   if (r.incomingToYou) return stateTag("wait", words.incomingTag);
   if (r.holderIsYou && r.inTransit) return stateTag(null, "Shipped, not yet received");
   if (r.holderIsYou) return stateTag("yours", words.here);
@@ -373,12 +384,13 @@ function rowAction(r, role) {
   if ((role === "CUSTODIAN" || role === "PROCESSOR") && withYou(r)) {
     keys = [
       ...(r.recalled || !profile.ship ? [] : ["ship"]),
-      ...(profile.split ? ["split"] : [])
+      ...(profile.split ? ["split"] : []),
+      ...(profile.close ? ["close"] : [])
     ];
   }
   keys = keys.filter((key) => perms.has(key === "inspect" ? "batch.inspect" : "custody.transfer"));
   if (!keys.length) return null;
-  const labels = { inspect: "Inspect", receive: "Confirm receipt", ship: "Ship", split: "Split" };
+  const labels = { inspect: "Inspect", receive: "Confirm receipt", ship: "Ship", split: "Split", close: "Close out" };
   for (const [key, words] of Object.entries(profile.labels)) labels[key] = words[2];
   const buttons = keys.map((key) => {
     const b = el("button", { type: "button", className: "btn btn-ghost btn-small" }, labels[key]);
@@ -589,6 +601,7 @@ function lotTable(rows, role, empty) {
       el("th", { scope: "row" },
         el("span", { className: "lot-id" }, r.batchId),
         r.recalled ? el("span", { className: "lot-flag" }, "Recalled, " + (CLASS_NAME[r.recallClass] || "")) : null,
+        pastUseBy(r) ? el("span", { className: "lot-flag is-expired" }, "Past use-by date") : null,
         el("span", { className: "lot-meta" }, meta),
         toggle
       ),
@@ -741,7 +754,7 @@ const PANELS = {
     return [
       orgIntro("CUSTODIAN"),
       recallAlert(
-        v.rows.filter((r) => r.holderIsYou && !r.lotCount),
+        v.rows.filter((r) => r.holderIsYou && !r.lotCount && !r.disposition),
         (n) => words.hold[n === 1 ? 0 : 1] + HOLD_UNTIL + (n === 1 ? "it." : "them.")
       ),
       tally([

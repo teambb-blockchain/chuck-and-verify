@@ -646,4 +646,126 @@ describe("BeefSupplyChain", function () {
       }
     });
   });
+
+  describe("use-by date and disposition (v5)", function () {
+    const DAY = 24 * 60 * 60;
+    const SOLD = 1, CONSUMED = 2, DISPOSED = 3;
+    const reg3 = (signer, id, weight, useBy) =>
+      supplyChain.connect(signer)["registerBatch(bytes32,uint256,uint64)"](id, weight, useBy);
+
+    // Registered by the processor, shipped to and received by custodianA.
+    async function heldByA(useBy) {
+      const id = useBy ? await reg3(processor, batchId, 1000, useBy) : await supplyChain.connect(processor).registerBatch(batchId, 1000);
+      await supplyChain.connect(processor).recordShipment(batchId, custodianA.address);
+      await supplyChain.connect(custodianA).confirmReceipt(batchId);
+      return id;
+    }
+
+    it("registers with a use-by date, emits both events, and reports it", async function () {
+      const useBy = (await time.latest()) + 30 * DAY;
+      await expect(reg3(processor, batchId, 1000, useBy))
+        .to.emit(supplyChain, "BatchRegistered").withArgs(batchId, processor.address, 1000)
+        .and.to.emit(supplyChain, "UseBySet").withArgs(batchId, useBy);
+      const [date, disposition] = await supplyChain.getStatus(batchId);
+      expect(date).to.equal(useBy);
+      expect(disposition).to.equal(0);
+    });
+
+    it("keeps the two-argument registerBatch, with no use-by date", async function () {
+      await expect(supplyChain.connect(processor).registerBatch(batchId, 1000)).to.not.emit(supplyChain, "UseBySet");
+      expect((await supplyChain.getStatus(batchId))[0]).to.equal(0);
+    });
+
+    it("rejects a use-by date in the past, now, or past the shelf-life limit", async function () {
+      const now = await time.latest();
+      const max = await supplyChain.MAX_SHELF_LIFE();
+      await expect(reg3(processor, batchId, 1000, now - DAY)).to.be.revertedWithCustomError(supplyChain, "InvalidUseBy");
+      await expect(reg3(processor, batchId, 1000, 0)).to.be.revertedWithCustomError(supplyChain, "InvalidUseBy");
+      // Milliseconds instead of seconds.
+      await expect(reg3(processor, batchId, 1000, (now + DAY) * 1000)).to.be.revertedWithCustomError(supplyChain, "InvalidUseBy");
+      await expect(reg3(processor, batchId, 1000, BigInt(now) + max + 60n)).to.be.revertedWithCustomError(supplyChain, "InvalidUseBy");
+    });
+
+    it("still checks the PROCESSOR credential on the three-argument form", async function () {
+      const useBy = (await time.latest()) + DAY;
+      await expect(reg3(unauthorized, batchId, 1000, useBy)).to.be.revertedWithCustomError(supplyChain, "Unauthorized");
+    });
+
+    it("gives every lot, and lots of lots, the batch's use-by date", async function () {
+      const name = (s) => ethers.encodeBytes32String(s);
+      const useBy = (await time.latest()) + 10 * DAY;
+      await reg3(processor, name("BEEF-UB"), 300, useBy);
+      await supplyChain.connect(processor).splitBatch(name("BEEF-UB"), [100, 200]);
+      await supplyChain.connect(processor).splitBatch(name("BEEF-UB-L2"), [50, 150]);
+      for (const lot of ["BEEF-UB-L1", "BEEF-UB-L2", "BEEF-UB-L2-L1", "BEEF-UB-L2-L2"]) {
+        expect((await supplyChain.getStatus(name(lot)))[0]).to.equal(useBy);
+      }
+    });
+
+    it("lets the holder record each disposition once, and then the batch can't move", async function () {
+      await heldByA();
+      await expect(supplyChain.connect(custodianA).recordDisposition(batchId, SOLD))
+        .to.emit(supplyChain, "DispositionRecorded").withArgs(batchId, custodianA.address, SOLD);
+      expect((await supplyChain.getStatus(batchId))[1]).to.equal(SOLD);
+      await expect(supplyChain.connect(custodianA).recordDisposition(batchId, DISPOSED))
+        .to.be.revertedWithCustomError(supplyChain, "BatchDisposed");
+      await expect(supplyChain.connect(custodianA).recordShipment(batchId, custodianB.address))
+        .to.be.revertedWithCustomError(supplyChain, "BatchDisposed");
+      await expect(supplyChain.connect(custodianA).splitBatch(batchId, [500, 500]))
+        .to.be.revertedWithCustomError(supplyChain, "BatchDisposed");
+    });
+
+    it("accepts consumed and disposed, and rejects any other code", async function () {
+      const name = (s) => ethers.encodeBytes32String(s);
+      await supplyChain.connect(processor).registerBatch(name("C"), 10);
+      await supplyChain.connect(processor).registerBatch(name("D"), 10);
+      await supplyChain.connect(processor).recordDisposition(name("C"), CONSUMED);
+      await supplyChain.connect(processor).recordDisposition(name("D"), DISPOSED);
+      expect((await supplyChain.getStatus(name("C")))[1]).to.equal(CONSUMED);
+      expect((await supplyChain.getStatus(name("D")))[1]).to.equal(DISPOSED);
+      await supplyChain.connect(processor).registerBatch(batchId, 10);
+      for (const bad of [0, 4, 255]) {
+        await expect(supplyChain.connect(processor).recordDisposition(batchId, bad))
+          .to.be.revertedWithCustomError(supplyChain, "InvalidDisposition");
+      }
+    });
+
+    it("refuses a disposition from anyone but the credentialed current holder", async function () {
+      await heldByA();
+      await expect(supplyChain.connect(custodianB).recordDisposition(batchId, SOLD))
+        .to.be.revertedWithCustomError(supplyChain, "NotCurrentHolder");
+      await expect(supplyChain.connect(processor).recordDisposition(batchId, SOLD))
+        .to.be.revertedWithCustomError(supplyChain, "NotCurrentHolder");
+      await registry.revoke(custodianA.address, CRED_CUSTODIAN);
+      await expect(supplyChain.connect(custodianA).recordDisposition(batchId, SOLD))
+        .to.be.revertedWithCustomError(supplyChain, "Unauthorized");
+    });
+
+    it("refuses a disposition while a shipment is pending or after a split", async function () {
+      const name = (s) => ethers.encodeBytes32String(s);
+      await supplyChain.connect(processor).registerBatch(batchId, 1000);
+      await supplyChain.connect(processor).recordShipment(batchId, custodianA.address);
+      await expect(supplyChain.connect(processor).recordDisposition(batchId, SOLD))
+        .to.be.revertedWithCustomError(supplyChain, "ShipmentPending");
+      await supplyChain.connect(processor).registerBatch(name("S"), 20);
+      await supplyChain.connect(processor).splitBatch(name("S"), [10, 10]);
+      await expect(supplyChain.connect(processor).recordDisposition(name("S"), DISPOSED))
+        .to.be.revertedWithCustomError(supplyChain, "AlreadySplit");
+      // Each lot is closed on its own.
+      await supplyChain.connect(processor).recordDisposition(name("S-L1"), SOLD);
+      await supplyChain.connect(processor).recordDisposition(name("S-L2"), DISPOSED);
+    });
+
+    it("still lets the processor recall a batch that was already sold", async function () {
+      await heldByA();
+      await supplyChain.connect(custodianA).recordDisposition(batchId, SOLD);
+      await expect(supplyChain.connect(processor).recordRecall(batchId, noticeHash, 1))
+        .to.emit(supplyChain, "RecallRecorded");
+      expect((await supplyChain.getBatch(batchId)).recalled).to.equal(true);
+    });
+
+    it("reverts getStatus for an unknown batch", async function () {
+      await expect(supplyChain.getStatus(batchId)).to.be.revertedWithCustomError(supplyChain, "BatchNotFound");
+    });
+  });
 });

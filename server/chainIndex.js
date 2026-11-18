@@ -30,6 +30,8 @@ const EVENTS = {
   [topic("ReceiptConfirmed(bytes32,address)")]: "ReceiptConfirmed",
   [topic("RecallRecorded(bytes32,address,bytes32,uint8)")]: "RecallRecorded",
   [topic("LotCreated(bytes32,bytes32,address,uint256)")]: "LotCreated",
+  [topic("UseBySet(bytes32,uint64)")]: "UseBySet",
+  [topic("DispositionRecorded(bytes32,address,uint8)")]: "DispositionRecorded",
 };
 
 const SCHEMA = `
@@ -72,7 +74,9 @@ function decodeLog(log) {
     tx: log.transactionHash,
     name,
     batchId: batchName(log.topics[1]),
-    actor: topicAddress(log.topics[2]),
+    // UseBySet has no address topic; its actor is the registering processor,
+    // already on the BatchRegistered row just before it.
+    actor: log.topics[2] ? topicAddress(log.topics[2]) : "",
     other: null,
     hash: null,
     num: null,
@@ -87,6 +91,10 @@ function decodeLog(log) {
   } else if (name === "RecallRecorded") {
     row.hash = word(data, 0);
     row.num = Number(BigInt("0x" + word(data, 1)));
+  } else if (name === "UseBySet") {
+    row.num = Number(BigInt("0x" + word(data, 0))); // unix seconds
+  } else if (name === "DispositionRecorded") {
+    row.num = Number(BigInt("0x" + word(data, 0)));
   } else if (name === "LotCreated") {
     // LotCreated(parentId, lotId, holder, weightLbs): the row is about the
     // new lot, and `other` names the batch it was split from.
@@ -270,6 +278,9 @@ function batchesFrom(events) {
     lineage: [e.batch_id, ...lineage],
     lotIds: [],
     handlers: new Set([holder]),
+    useBy: null, // unix ms, or null when none was set
+    disposition: null, // 1 sold, 2 consumed, 3 disposed (BeefSupplyChain DISPOSITION_*)
+    disposedAt: null,
   });
   for (const e of events) {
     if (e.name === "BatchRegistered") {
@@ -287,6 +298,8 @@ function batchesFrom(events) {
         parentId: e.other,
         lineage: parent.lineage,
       }));
+      // A lot gets its parent's use-by date when it is split, as on chain.
+      batches.get(e.batch_id).useBy = parent.useBy;
       continue;
     }
     const b = batches.get(e.batch_id);
@@ -306,6 +319,10 @@ function batchesFrom(events) {
       b.handlers.add(e.actor);
     } else if (e.name === "RecallRecorded") {
       Object.assign(b, { recalled: true, recallClass: e.num, recallHash: e.hash, recalledAt: e.ts });
+    } else if (e.name === "UseBySet") {
+      b.useBy = e.num * 1000;
+    } else if (e.name === "DispositionRecorded") {
+      Object.assign(b, { disposition: e.num, disposedAt: e.ts });
     }
   }
   // A lot reads through to its parent, as getBatch does on chain: the

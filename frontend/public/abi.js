@@ -32,6 +32,11 @@ export const abi = [
   },
   {
     "inputs": [],
+    "name": "BatchDisposed",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "BatchNotFound",
     "type": "error"
   },
@@ -63,6 +68,16 @@ export const abi = [
   {
     "inputs": [],
     "name": "InvalidClassification",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InvalidDisposition",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InvalidUseBy",
     "type": "error"
   },
   {
@@ -153,6 +168,31 @@ export const abi = [
       }
     ],
     "name": "BatchRegistered",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "batchId",
+        "type": "bytes32"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "holder",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "disposition",
+        "type": "uint8"
+      }
+    ],
+    "name": "DispositionRecorded",
     "type": "event"
   },
   {
@@ -293,6 +333,25 @@ export const abi = [
     "type": "event"
   },
   {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "batchId",
+        "type": "bytes32"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint64",
+        "name": "useBy",
+        "type": "uint64"
+      }
+    ],
+    "name": "UseBySet",
+    "type": "event"
+  },
+  {
     "inputs": [],
     "name": "CRED_CUSTODIAN",
     "outputs": [
@@ -333,7 +392,59 @@ export const abi = [
   },
   {
     "inputs": [],
+    "name": "DISPOSITION_CONSUMED",
+    "outputs": [
+      {
+        "internalType": "uint8",
+        "name": "",
+        "type": "uint8"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "DISPOSITION_DISPOSED",
+    "outputs": [
+      {
+        "internalType": "uint8",
+        "name": "",
+        "type": "uint8"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "DISPOSITION_SOLD",
+    "outputs": [
+      {
+        "internalType": "uint8",
+        "name": "",
+        "type": "uint8"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
     "name": "MAX_LOTS",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "MAX_SHELF_LIFE",
     "outputs": [
       {
         "internalType": "uint256",
@@ -470,6 +581,48 @@ export const abi = [
         "internalType": "bytes32",
         "name": "batchId",
         "type": "bytes32"
+      }
+    ],
+    "name": "getStatus",
+    "outputs": [
+      {
+        "internalType": "uint64",
+        "name": "useBy",
+        "type": "uint64"
+      },
+      {
+        "internalType": "uint8",
+        "name": "disposition",
+        "type": "uint8"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "batchId",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "uint8",
+        "name": "disposition",
+        "type": "uint8"
+      }
+    ],
+    "name": "recordDisposition",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "batchId",
+        "type": "bytes32"
       },
       {
         "internalType": "bytes32",
@@ -539,6 +692,29 @@ export const abi = [
         "internalType": "uint256",
         "name": "weightLbs",
         "type": "uint256"
+      }
+    ],
+    "name": "registerBatch",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "batchId",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "uint256",
+        "name": "weightLbs",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint64",
+        "name": "useBy",
+        "type": "uint64"
       }
     ],
     "name": "registerBatch",

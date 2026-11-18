@@ -19,6 +19,15 @@ import "./ICredentialRegistry.sol";
 ///
 /// Custody legs: custodyLeg counts confirmed receipts, so another contract
 /// can tie a record (such as a temperature summary) to one holder's leg.
+///
+/// v5 adds a use-by date and a final disposition. A processor can register a
+/// batch with a use-by date (the original two-argument registerBatch still
+/// works and sets none); lots copy their parent's date when split. The holder
+/// of a batch or lot that has not been split can record how it left the
+/// supply chain: sold to consumers, consumed (served), or disposed of. That
+/// ends its custody: it can no longer be shipped or split. A recall still
+/// applies, since a recall matters most for product that was already sold.
+/// No sale details are recorded (ADR 0001): only that the product left.
 contract BeefSupplyChain {
     ICredentialRegistry public immutable registry;
 
@@ -42,6 +51,14 @@ contract BeefSupplyChain {
     }
 
     uint256 public constant MAX_LOTS = 20;
+    /// Furthest a use-by date may be set past registration. Catches a date
+    /// sent in milliseconds or a typo in the year.
+    uint256 public constant MAX_SHELF_LIFE = 730 days;
+
+    /// Final dispositions (recordDisposition). 0 means still in the chain.
+    uint8 public constant DISPOSITION_SOLD = 1;
+    uint8 public constant DISPOSITION_CONSUMED = 2;
+    uint8 public constant DISPOSITION_DISPOSED = 3;
 
     mapping(bytes32 => Batch) private batches;
     /// Lot ID → the batch it was split from. Zero for a batch that is not a lot.
@@ -50,6 +67,10 @@ contract BeefSupplyChain {
     mapping(bytes32 => uint8) private lotCount;
     /// Batch ID → number of confirmed receipts so far (see custodyLeg).
     mapping(bytes32 => uint256) private legOf;
+    /// Batch ID → use-by date (unix seconds). Zero means none was set.
+    mapping(bytes32 => uint64) private useByOf;
+    /// Batch ID → final disposition (DISPOSITION_*). Zero means none yet.
+    mapping(bytes32 => uint8) private dispositionOf;
 
     event BatchRegistered(
         bytes32 indexed batchId,
@@ -83,6 +104,13 @@ contract BeefSupplyChain {
         address indexed holder,
         uint256 weightLbs
     );
+    /// Emitted right after BatchRegistered when a use-by date is given.
+    event UseBySet(bytes32 indexed batchId, uint64 useBy);
+    event DispositionRecorded(
+        bytes32 indexed batchId,
+        address indexed holder,
+        uint8 disposition
+    );
 
     error Unauthorized();
     error BatchNotFound();
@@ -108,16 +136,30 @@ contract BeefSupplyChain {
     error LotNameTooLong();
     error InspectParentBatch();
     error ReservedLotName();
+    error InvalidUseBy();
+    error InvalidDisposition();
+    error BatchDisposed();
 
     constructor(address registryAddress) {
         if (registryAddress == address(0)) revert ZeroAddress();
         registry = ICredentialRegistry(registryAddress);
     }
 
-    function registerBatch(
-        bytes32 batchId,
-        uint256 weightLbs
-    ) external {
+    function registerBatch(bytes32 batchId, uint256 weightLbs) external {
+        _register(batchId, weightLbs);
+    }
+
+    /// @notice Register a batch with a use-by date (unix seconds). The date
+    /// must be in the future and within MAX_SHELF_LIFE. Lots split from the
+    /// batch carry the same date.
+    function registerBatch(bytes32 batchId, uint256 weightLbs, uint64 useBy) external {
+        if (useBy <= block.timestamp || useBy > block.timestamp + MAX_SHELF_LIFE) revert InvalidUseBy();
+        _register(batchId, weightLbs);
+        useByOf[batchId] = useBy;
+        emit UseBySet(batchId, useBy);
+    }
+
+    function _register(bytes32 batchId, uint256 weightLbs) private {
         if (!registry.isValid(msg.sender, CRED_PROCESSOR)) revert Unauthorized();
         if (batchId == bytes32(0)) revert EmptyBatchId();
         if (weightLbs == 0) revert ZeroWeight(); // BSC-6
@@ -140,8 +182,10 @@ contract BeefSupplyChain {
         Batch storage parent = _requireBatch(batchId);
         if (parent.currentHolder != msg.sender) revert NotCurrentHolder();
         if (lotCount[batchId] != 0) revert AlreadySplit();
+        if (dispositionOf[batchId] != 0) revert BatchDisposed();
         if (parent.pendingReceiver != address(0)) revert ShipmentPending();
         uint256 n = weights.length;
+        uint64 useBy = useByOf[batchId];
         if (n < 2 || n > MAX_LOTS) revert BadLotCount();
 
         uint256 total;
@@ -154,6 +198,7 @@ contract BeefSupplyChain {
             bytes32 lotId = _lotId(batchId, i + 1);
             _store(lotId, parent.processor, weight, msg.sender);
             parentOf[lotId] = batchId;
+            if (useBy != 0) useByOf[lotId] = useBy;
             emit LotCreated(batchId, lotId, msg.sender, weight);
         }
         if (total != parent.weightLbs) revert LotWeightMismatch();
@@ -193,6 +238,7 @@ contract BeefSupplyChain {
         // same product twice. (A split batch never has a pending shipment, so
         // confirmReceipt needs no matching check.)
         if (lotCount[batchId] != 0) revert AlreadySplit();
+        if (dispositionOf[batchId] != 0) revert BatchDisposed();
 
         batch.pendingReceiver = to;
         emit ShipmentRecorded(batchId, msg.sender, to);
@@ -237,6 +283,31 @@ contract BeefSupplyChain {
         batch.recallClassification = classification;
 
         emit RecallRecorded(batchId, msg.sender, noticeHash, classification);
+    }
+
+    /// @notice Record how a batch or lot left the supply chain: sold to
+    /// consumers, consumed (served), or disposed of. Only its current holder
+    /// can, with a valid CUSTODIAN credential, once, with no shipment pending.
+    /// A split batch lives on as its lots, so each lot is closed on its own.
+    function recordDisposition(bytes32 batchId, uint8 disposition) external {
+        if (!registry.isValid(msg.sender, CRED_CUSTODIAN)) revert Unauthorized();
+        if (disposition < DISPOSITION_SOLD || disposition > DISPOSITION_DISPOSED) revert InvalidDisposition();
+        Batch storage batch = _requireBatch(batchId);
+        if (batch.currentHolder != msg.sender) revert NotCurrentHolder();
+        if (lotCount[batchId] != 0) revert AlreadySplit();
+        if (batch.pendingReceiver != address(0)) revert ShipmentPending();
+        if (dispositionOf[batchId] != 0) revert BatchDisposed();
+
+        dispositionOf[batchId] = disposition;
+        emit DispositionRecorded(batchId, msg.sender, disposition);
+    }
+
+    /// @notice A batch's use-by date (unix seconds, 0 if none) and final
+    /// disposition (DISPOSITION_*, 0 if it is still in the chain). Kept
+    /// apart from getBatch so readers of the v4 getBatch layout keep working.
+    function getStatus(bytes32 batchId) external view returns (uint64 useBy, uint8 disposition) {
+        _requireBatch(batchId);
+        return (useByOf[batchId], dispositionOf[batchId]);
     }
 
     function getBatch(
