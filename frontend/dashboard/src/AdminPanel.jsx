@@ -5,6 +5,9 @@ import { ShieldCheck, RefreshCw, AlertTriangle, CheckCircle2 } from "lucide-reac
 
 const CHAIN_ID = 252501;
 const CHAIN_ROLES = ["PROCESSOR", "INSPECTOR", "CUSTODIAN"];
+// SENSOR is held by sensor keys (ADR 0005), not portal users: its issuer is
+// set here, but it is never offered as a user role.
+const ISSUER_ROLES = [...CHAIN_ROLES, "SENSOR"];
 const REGISTRY_ABI = [
   "function isValid(address account, bytes32 credentialType) view returns (bool)",
   "function issuerOf(bytes32 credentialType) view returns (address)",
@@ -146,7 +149,7 @@ async function updateIssuer() {
     if (!registry || !isAdmin) return;
     (async () => {
       try {
-        const entries = await Promise.all(CHAIN_ROLES.map(async role => [role, await registry.issuerOf(id(role))]));
+        const entries = await Promise.all(ISSUER_ROLES.map(async role => [role, await registry.issuerOf(id(role))]));
         if (active) setIssuerStatus(Object.fromEntries(entries));
       } catch (e) { if (active) setError(`Could not read credential issuers: ${e.shortMessage || e.message}`); }
     })();
@@ -286,7 +289,7 @@ async function updateIssuer() {
     </p>
 
     <div className="mt-4 space-y-2">
-      {CHAIN_ROLES.map(role => (
+      {ISSUER_ROLES.map(role => (
         <p key={role} className="break-all text-xs">
           <strong>{role}:</strong>{" "}
           {issuerStatus[role] || "Checking..."}
@@ -303,7 +306,7 @@ async function updateIssuer() {
         onChange={e => setSelectedIssuerRole(e.target.value)}
         disabled={issuerBusy}
       >
-        {CHAIN_ROLES.map(role => (
+        {ISSUER_ROLES.map(role => (
           <option key={role} value={role}>{role}</option>
         ))}
       </select>

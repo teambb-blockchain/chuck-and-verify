@@ -5,7 +5,9 @@
 //   1. PUT /api/admin/users/:address  -> portal roles (what the UI shows).
 //   2. CredentialRegistry.grant/revoke -> on-chain credentials (what
 //      BeefSupplyChain actually checks), signed by the admin's own wallet.
-// Only PROCESSOR, INSPECTOR and CUSTODIAN exist on chain; ADMIN is portal-only.
+// PROCESSOR, INSPECTOR and CUSTODIAN are the on-chain roles people hold;
+// ADMIN is portal-only. SENSOR is held by sensor keys, not people, so it only
+// appears under Credential issuers.
 // grant/revoke are restricted to issuerOf[type], so the connected wallet must
 // be the registered issuer for each credential it changes.
 
@@ -445,12 +447,19 @@ const issuerStatus = document.getElementById("issuerStatus");
 const registryAdminEl = document.getElementById("registryAdmin");
 const issuerButton = issuerForm.querySelector("button[type=submit]");
 
+// SENSOR is held by sensor keys (ADR 0005), not portal users, so it is set
+// here but never offered as a user role.
+const ISSUER_ROLES = [...CHAIN_ROLES, "SENSOR"];
+const UNSET_TEXT = {
+  SENSOR: "No issuer set. Sensors can't be registered, so no temperature readings can be recorded."
+};
+
 let registryAdmin = null;
 
 async function loadIssuers() {
   const [admin, ...issuers] = await Promise.all([
     registryRead("admin", []),
-    ...CHAIN_ROLES.map((role) => registryRead("issuerOf", [credentialType(role)]))
+    ...ISSUER_ROLES.map((role) => registryRead("issuerOf", [credentialType(role)]))
   ]);
   registryAdmin = admin;
   registryAdminEl.textContent = admin;
@@ -458,17 +467,17 @@ async function loadIssuers() {
     // First load: prefill the usual setup (admin issues every type, as in
     // scripts/setupCredentials.js) and point at the first role still unset.
     issuerForm.issuer.value = admin;
-    const unset = CHAIN_ROLES.find((_, i) => issuers[i] === zeroAddress);
+    const unset = ISSUER_ROLES.find((_, i) => issuers[i] === zeroAddress);
     if (unset) issuerForm.role.value = unset;
   }
   issuerList.replaceChildren(
-    ...CHAIN_ROLES.map((role, i) =>
+    ...ISSUER_ROLES.map((role, i) =>
       el(
         "li",
         {},
         el("strong", {}, role),
         issuers[i] === zeroAddress
-          ? el("span", { className: "issuer-unset" }, "No issuer set. Grants for this role are blocked.")
+          ? el("span", { className: "issuer-unset" }, UNSET_TEXT[role] || "No issuer set. Grants for this role are blocked.")
           : el("code", {}, issuers[i])
       )
     )
@@ -498,7 +507,7 @@ issuerForm.onsubmit = async (event) => {
         "Only the registry admin " + registryAdmin + " can set issuers. Connected: " + account + ".";
       return;
     }
-    const current = issuers[CHAIN_ROLES.indexOf(role)];
+    const current = issuers[ISSUER_ROLES.indexOf(role)];
     if (current.toLowerCase() === issuer.toLowerCase()) {
       issuerStatus.textContent = role + " issuer is already " + current + ".";
       return;
