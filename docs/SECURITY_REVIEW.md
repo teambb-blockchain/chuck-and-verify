@@ -5,6 +5,7 @@ Guided Lab 3 (Adversarial Security Audit), Activities 6–11. This document beco
 - Date: 2026-11-08
 - Repository commit: `0dbc924` plus the working-tree changes listed in §5 (portal fixes, not yet deployed to the host; `BeefSupplyChain` v2, deployed on chain but not committed)
 - Updated 2026-11-11: `BeefSupplyChain` v3 (lots, custody legs) deployed from commit `af2fb3c`; see §1, BSC-10 in §3.2, and §5
+- Updated 2026-11-17: `BeefSupplyChain` v4 (lots can be split again) deployed from commit `56b819a`, with `SensorSignatureVerifier` from `6a1fb70`; see §1 and §5
 - Reviewers: Britt Huffman, Bhavana Sriharika Kondapalli (team); Claude Code (AI-assisted audit, see §4)
 
 ## 1. Scope
@@ -13,6 +14,7 @@ Guided Lab 3 (Adversarial Security Audit), Activities 6–11. This document beco
 | :--- | :--- | :--- | :--- |
 | `CredentialRegistry` | `contracts/CredentialRegistry.sol` | [`0x9ef5cb328aE86C968dDcb1Fd60887bd021D7AB2E`](https://explorer.didlab.org/address/0x9ef5cb328aE86C968dDcb1Fd60887bd021D7AB2E) | **Yes.** Runtime bytecode equals the HEAD build once the immutable `admin` and the metadata hash are masked. |
 | `BeefSupplyChain` v4 (current, repeated lot splitting) | `contracts/BeefSupplyChain.sol` | [`0x7b9D401F1D62193b59e7b3d1C6dC6A5b7c7A4a49`](https://explorer.didlab.org/address/0x7b9D401F1D62193b59e7b3d1C6dC6A5b7c7A4a49) | **Yes.** Runtime bytecode equals the current build, metadata hash included, once the six immutable `registry` slots are masked. Deployed 2026-11-17 in block 7649714 (tx `0x0075c7ef…5a93`). |
+| `SensorSignatureVerifier` | `contracts/SensorSignatureVerifier.sol` at `6a1fb70` | [`0x8Ddf5a13911F9f98c00BA2Af6A00aeB20A1b63f4`](https://explorer.didlab.org/address/0x8Ddf5a13911F9f98c00BA2Af6A00aeB20A1b63f4) | **Yes.** Runtime bytecode equals the `6a1fb70` build, metadata hash included, once the two immutable `registry` slots are masked. View functions only; it stores nothing. Deployed 2026-11-17 in block 7649715 (§5). Not covered by the §3 audit. |
 | `BeefSupplyChain` v3 (superseded 2026-11-17) | `contracts/BeefSupplyChain.sol` at `af2fb3c` | [`0x35c56b125da5d3e8CBFbB0e3f87cEC8CCD96b3e0`](https://explorer.didlab.org/address/0x35c56b125da5d3e8CBFbB0e3f87cEC8CCD96b3e0) | **Yes.** Runtime bytecode equals the `af2fb3c` build, metadata hash included, once the six immutable `registry` slots are masked. Deployed 2026-11-11 (§5). The frontend no longer uses v3, but its records stay on chain. |
 | `BeefSupplyChain` v2 (superseded 2026-11-11) | commit `022bc9b` | [`0x903359014d55A25ED1d4a8DCA6740dd30A90448a`](https://explorer.didlab.org/address/0x903359014d55A25ED1d4a8DCA6740dd30A90448a) | **Yes.** Runtime bytecode equals the v2 build, metadata hash included, once the immutable `registry` is masked. Deployed 2026-11-08 (§5). The frontend no longer uses v2, but its records stay on chain. |
 | `BeefSupplyChain` v1 (superseded) | commit `83d7418` | [`0x20bA1c398CD59b05dA4427162bdA7F26d5AB802e`](https://explorer.didlab.org/address/0x20bA1c398CD59b05dA4427162bdA7F26d5AB802e) | **No.** Live bytecode equals commit `83d7418`, built before `ccee520` made `recordRecall` processor-only. A copy of that source is kept at `contracts/test/DeployedBeefSupplyChainV1.sol` (test only). See BSC-0. The frontend no longer uses v1, but its records stay on chain. |
@@ -24,6 +26,8 @@ Live state read on 2026-11-08: `admin()` = `0xb323821F0dFCf3b2E8727A7FBae2E34F0D
 **Update, later on 2026-11-08.** The CUSTODIAN issuer was set to the admin ([`0x2759…466f`](https://explorer.didlab.org/tx/0x2759a41fb9895676559b3cf1241d75e8c15777acd4e7d9aac9f832eaa576466f), block 7270656), and wallet A `0xc2Ad…351E` was granted PROCESSOR and CUSTODIAN. v2 now holds `BEEF-A1-014`, registered by wallet A and inspected by wallet B `0x2710…3b5b`.
 
 **Update, 2026-11-11.** v3 is deployed against the same registry and is the contract the frontend, the scripts and the dashboard index use. It has no batches yet: `getBatch(BEEF-A1-014)` reverts `BatchNotFound` on v3, because batches do not migrate. `BEEF-A1-014` and its inspection stay on v2.
+
+**Update, 2026-11-17.** v4 is deployed against the same registry and replaces v3 as the contract the frontend, the portal dashboard, the scripts and the dashboard index use. v4 had no events when checked on 2026-11-17, so it has no batches. v3 has 22 events, and its records do not migrate. `SensorSignatureVerifier` was deployed in the next block against the same registry. `issuerOf(SENSOR)` is still the zero address: the deployer is not the registry admin, so `setIssuer` for SENSOR was not sent, and no sensor can hold a valid credential yet.
 
 An earlier deployment (`0x3eC1…38B2` / `0x981a…83D8`, deployer `0x8799…b5a8`) is superseded. The frontend, the scripts and CHECKPOINT §6 all use the addresses above.
 
@@ -185,7 +189,7 @@ bytecode         full match with the v2 build, metadata included (registry immut
 
 **v3 redeploy (2026-11-11): lots and custody legs.** v3 keeps every v2 fix and adds two features, so it reuses the v2 rules above.
 
-- **Lots.** `splitBatch(batchId, weights)` lets the current holder, with a valid CUSTODIAN credential, split a batch or lot once into 2–20 lots named `<batch>-L1` … `-Ln`. A lot can be split again by its holder (`<batch>-L1-L1`, …); depth is bounded by the 31-byte ID limit (`LotNameTooLong`), about 3 bytes per level. The weights must add up to the batch weight (`LotWeightMismatch`; the checked sum panics on overflow). A split is refused while a shipment is pending (`ShipmentPending`), and a split batch or lot cannot be split again or shipped (`AlreadySplit`), so the same product is never counted twice. Each lot is its own custody record. `getBatch` on a lot returns the original batch's inspection and the most serious recall among the lot and every batch or lot above it, read at query time, so a recall higher up after the split still reaches every lot. A lot cannot be inspected on its own (`InspectParentBatch`). The processor of record can recall one lot, but only at a more serious class than any recall above it (`RecallNotEscalated`, BSC-5 across the split). `getLotInfo` returns a lot's parent and its own lots, if it was split.
+- **Lots.** `splitBatch(batchId, weights)` lets the current holder, with a valid CUSTODIAN credential, split a batch once into 2–20 lots named `<batch>-L1` … `-Ln`. The weights must add up to the batch weight (`LotWeightMismatch`; the checked sum panics on overflow). A split is refused while a shipment is pending (`ShipmentPending`), a lot cannot be split (`LotCannotBeSplit`), and a split batch cannot be shipped (`AlreadySplit`), so the same product is never counted twice. Each lot is its own custody record. `getBatch` on a lot returns the parent's inspection, and the parent's recall when it is the more serious one, read at query time, so a recall of the parent after the split still reaches every lot. A lot cannot be inspected on its own (`InspectParentBatch`). The processor of record can recall one lot, but only at a more serious class than the parent's (`RecallNotEscalated`, BSC-5 across the split). `getLotInfo` returns a lot's parent or a batch's lots. v4 lifts the one-level limit (below).
 - **Custody legs.** `custodyLeg(batchId)` counts confirmed receipts, so a separate contract can key a record to one holder's stretch of custody (ADR 0005). It is a read-only counter; it changes no access rule.
 - **Gas.** A 20-lot split uses 3,150,472 gas on Hardhat, 67% of DIDLab's 4,700,000 block gas limit; a 2-lot split uses 371,980.
 
@@ -203,6 +207,29 @@ bytecode         full match with the af2fb3c build, metadata included (six regis
 ```
 
 `frontend/public/chain.js`, `scripts/registerBatch.js` and the `server/chainIndex.js` defaults now use v3; the index rebuilds itself on the address change. The frontend still needs to be deployed to the host. v2 records, including `BEEF-A1-014`, do not migrate.
+
+**v4 redeploy (2026-11-17): lots can be split again.** v4 keeps every v3 rule except one: a lot can now be split by whoever holds it, so product can be divided at each custodian down the chain (a distributor, then a grocery store).
+
+- **Repeated splits.** `LotCannotBeSplit` is removed. A batch or lot can be split once (`AlreadySplit`), and a lot's lots are named after it (`<batch>-L2-L1`, …). Depth is bounded by the 31-byte ID limit (`LotNameTooLong`), about 3 bytes per level. A split batch or lot still cannot ship, and the weights of each split must add up to the weight of what was split, so the same product is still never counted twice.
+- **Read-through.** `getBatch` on a lot returns the original batch's inspection and the most serious recall among the lot and every batch or lot above it, read at query time, so a recall anywhere above a lot after the split still reaches it. The walk up is short because each level adds at least 3 bytes to a 31-byte ID. Only the original batch can be inspected (`InspectParentBatch`). A lot recall must be more serious than every recall above it (`RecallNotEscalated`). `getLotInfo` returns a lot's parent and, if it was split, its own lots.
+- **Portal.** Only distributors and retailers see Split. That is a portal choice: on chain, any CUSTODIAN holder can split.
+
+```
+finding          feature (repeated lot splits); no new finding
+fix              BeefSupplyChain v4 (contracts/BeefSupplyChain.sol at 56b819a)
+regression_test  splitBatch tests in test/BeefSupplyChain.test.js; lots in test/chainIndex.test.js
+old_contract     0x35c56b125da5d3e8CBFbB0e3f87cEC8CCD96b3e0
+new_contract     0x7b9D401F1D62193b59e7b3d1C6dC6A5b7c7A4a49
+deploy_tx        0x0075c7ef421c7dd22bcc72fc1d7d9ed6931d4f015cc016475b0bafe007155a93
+block            7649714 (2026-11-17 17:04:10 UTC), status success, gas 1,445,062
+deployer         0x87996A1051e98DD5586643c9a19B7C000A7eb5a8 (not the registry admin; BeefSupplyChain has no owner)
+registry()       0x9ef5cb328aE86C968dDcb1Fd60887bd021D7AB2E (reused)
+bytecode         full match with the 56b819a build, metadata included (six registry immutable slots masked)
+```
+
+`SensorSignatureVerifier` was deployed by the same command (`DEPLOY_CONTRACTS=BeefSupplyChain,SensorSignatureVerifier`): [`0x8Ddf…63f4`](https://explorer.didlab.org/address/0x8Ddf5a13911F9f98c00BA2Af6A00aeB20A1b63f4), tx [`0x282b…1761`](https://explorer.didlab.org/tx/0x282b61f422c334021e1cee77bd96342e7e52e30398fac13703176acda6cb1761), block 7649715, 950,685 gas, `registry()` `0x9ef5…AB2E`. It has view functions only. Until the registry admin calls `setIssuer(keccak256("SENSOR"), …)` (the call is in `docs/references/notes.md`), every summary it checks returns `SensorNotRegistered`.
+
+`frontend/public/chain.js`, the portal dashboard (`frontend/dashboard/src/`, rebuilt into `portal/`), `scripts/registerBatch.js` and the `server/chainIndex.js` defaults now use v4, starting from block 7649714; the index rebuilds itself on the address change. The frontend still needs to be deployed to the host. v3 records do not migrate.
 
 ## 6. Residual risk
 
