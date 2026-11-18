@@ -1601,6 +1601,21 @@ body[data-view="result"] .lookup-only { display: none !important; }
   letter-spacing: -0.01em;
 }
 .cold-panel .panel-head { margin-bottom: 4px; gap: 8px; }
+
+/* Per-leg temperature summaries (TemperatureLog). */
+.cold-n.is-long { font-size: 19px; line-height: 34px; white-space: nowrap; }
+.leg-list { list-style: none; margin: 16px 0 8px; padding: 0; display: grid; gap: 14px; }
+.leg-list li { min-width: 0; }
+.leg-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.leg-name { font-weight: 600; font-size: 14px; color: var(--ink); }
+.leg-tag { font-size: 12px; color: var(--muted); }
+.leg-sub { font-size: 13px; color: var(--muted); margin: 2px 0 6px; }
+.leg-list li.tone-warn .leg-name, .leg-list li.tone-warn .leg-sub { color: var(--amber-ink); }
+.leg-bar { position: relative; height: 8px; border-radius: 4px; background: var(--surface-muted-2); overflow: hidden; }
+.leg-band { position: absolute; top: 0; bottom: 0; background: var(--success-tint); }
+.leg-span { position: absolute; top: 1px; bottom: 1px; border-radius: 3px; background: var(--brand); }
+.leg-list li.tone-warn .leg-span { background: var(--amber-ink); }
+.leg-list.is-compact { margin: 10px 0 0; gap: 10px; }
 .cold-panel .panel-head h2 { font-size: 18px; letter-spacing: 0; }
 .panel-meta { font-size: 13px; color: var(--muted); }
 

@@ -84,6 +84,16 @@ The processor also receives the CUSTODIAN credential so it can ship a batch afte
 
 After a redeploy, update the BeefSupplyChain address in `frontend/public/chain.js` and `scripts/registerBatch.js`, and the address and deployment block in the `DEFAULTS` of `server/chainIndex.js` (or set `BSC_ADDRESS` and `BSC_FROM_BLOCK`). If the contract interface changes, regenerate `frontend/public/abi.js` from the BeefSupplyChain artifact. Then run `npm run stamp` and update the table above. Batches do not move to a new contract.
 
+## Temperature
+
+`contracts/TemperatureLog.sol` is the temperature contract from [ADR 0005](./docs/decisions/0005-temperature-in-separate-contract.md). It stores one sensor-signed summary per custody leg of a batch: low, high, time out of range, reading count, the counter range (so missing readings show), and the Merkle root of the full log, which stays off chain. Each summary is checked by the deployed `SensorSignatureVerifier`, and every fact the check needs comes from chain state: the leg is `BeefSupplyChain.custodyLeg`, the custodian is the batch's current holder, the sensor is the one that custodian registered with `registerSensor`, and the range is fixed at deployment (default -2.2 to 4.44 °C, which is 28–40 °F). So a summary is recorded for the current leg, before the next receiver confirms receipt. Anyone can send it; the sensor's signature is what counts. The sensor must hold a valid SENSOR credential. The format and signing code are in `contracts/SensorSummary.sol` and `scripts/lib/sensor-summary.js`.
+
+```bash
+DEPLOY_CONTRACTS=BeefSupplyChain,TemperatureLog npm run deploy:supply-chain   # v5 and its TemperatureLog, using the deployed verifier
+```
+
+After deploying, add `temperatureLog: "0x…"` to that deployment's entry in `frontend/public/chain.js`. The batch page then shows a row per leg in the Temperature panel (who held it, how long the sensor logged, low and high, any time out of range, and a bar against the safe band), and the cold-chain check warns when any leg went out of range. A lot also shows the legs of the batches it was split from. Summaries from DIDLab sensors are accepted only once the registry admin sets the SENSOR issuer (`docs/references/notes.md`).
+
 ## Portal roles
 
 Login is a wallet signature. The server issues a one-time message, the wallet signs it (no gas, no transaction), and the server sets an HttpOnly session cookie. Each wallet's portal roles decide which sections of the page it sees and which server routes it may call.

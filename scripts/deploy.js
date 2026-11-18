@@ -4,7 +4,13 @@ const hre = require("hardhat");
 // Which contracts to deploy against the registry, comma-separated.
 // Default is BeefSupplyChain only, as before. SensorSignatureVerifier deploys
 // the signing feasibility verifier (ADR 0004) and sets the SENSOR issuer.
-const KNOWN_CONTRACTS = ["BeefSupplyChain", "SensorSignatureVerifier"];
+// TemperatureLog (ADR 0005) stores verified summaries. It uses the
+// BeefSupplyChain and verifier deployed in the same run, or BSC_ADDRESS and
+// SENSOR_VERIFIER_ADDRESS (default: the verifier deployed 2026-11-17).
+// The required range is TEMP_RANGE_LOW_CENTIC / TEMP_RANGE_HIGH_CENTIC
+// (default -220 / 444, i.e. 28-40 °F, as in test/SensorSignature.test.js).
+const KNOWN_CONTRACTS = ["BeefSupplyChain", "SensorSignatureVerifier", "TemperatureLog"];
+const DEPLOYED_VERIFIER = "0x8Ddf5a13911F9f98c00BA2Af6A00aeB20A1b63f4";
 
 function contractsToDeploy() {
   const list = (process.env.DEPLOY_CONTRACTS || "BeefSupplyChain")
@@ -45,6 +51,7 @@ async function deployBeefSupplyChain(registryAddress) {
   }
 
   console.log("SupplyChain registry:", linkedRegistry);
+  return supplyChainAddress;
 }
 
 async function deploySensorVerifier(registry, registryAddress, deployer, admin) {
@@ -71,6 +78,34 @@ async function deploySensorVerifier(registry, registryAddress, deployer, admin) 
   }
 
   await setSensorIssuer(registry, CRED_SENSOR, deployer, admin);
+  return verifier.getAddress();
+}
+
+async function deployTemperatureLog(supplyChainAddress, verifierAddress, registryAddress) {
+  for (const [name, value] of [["BeefSupplyChain", supplyChainAddress], ["SensorSignatureVerifier", verifierAddress]]) {
+    if (!value || !hre.ethers.isAddress(value) || (await hre.ethers.provider.getCode(value)) === "0x") {
+      throw new Error(`TemperatureLog needs a deployed ${name}; got ${value}`);
+    }
+  }
+  const low = Number(process.env.TEMP_RANGE_LOW_CENTIC ?? -220);
+  const high = Number(process.env.TEMP_RANGE_HIGH_CENTIC ?? 444);
+  const Log = await hre.ethers.getContractFactory("TemperatureLog");
+  const log = await Log.deploy(verifierAddress, supplyChainAddress, low, high);
+  await log.waitForDeployment();
+  console.log("TemperatureLog:", await log.getAddress());
+  console.log("TemperatureLog deployment TX:", log.deploymentTransaction().hash);
+
+  // Read back: it must point at this supply chain and verifier, and through
+  // the verifier at the same registry.
+  const checks = [
+    ["supplyChain()", await log.supplyChain(), supplyChainAddress],
+    ["verifier()", await log.verifier(), verifierAddress],
+    ["registry()", await log.registry(), registryAddress],
+  ];
+  for (const [label, got, want] of checks) {
+    if (got.toLowerCase() !== want.toLowerCase()) throw new Error(`TemperatureLog ${label} mismatch: expected ${want}, got ${got}`);
+  }
+  console.log(`TemperatureLog range: ${low} to ${high} (0.01 °C)`);
 }
 
 // SENSOR_ISSUER stands in for the calibration lab (0003). Without it, an
@@ -178,11 +213,16 @@ async function main() {
   console.log("Registry admin:", admin);
   console.log("Deploying:", contracts.join(", "));
 
+  let supplyChainAddress = process.env.BSC_ADDRESS;
+  let verifierAddress = process.env.SENSOR_VERIFIER_ADDRESS || DEPLOYED_VERIFIER;
   if (contracts.includes("BeefSupplyChain")) {
-    await deployBeefSupplyChain(registryAddress);
+    supplyChainAddress = await deployBeefSupplyChain(registryAddress);
   }
   if (contracts.includes("SensorSignatureVerifier")) {
-    await deploySensorVerifier(registry, registryAddress, deployer, admin);
+    verifierAddress = await deploySensorVerifier(registry, registryAddress, deployer, admin);
+  }
+  if (contracts.includes("TemperatureLog")) {
+    await deployTemperatureLog(supplyChainAddress, verifierAddress, registryAddress);
   }
 
   console.log("Deployment completed successfully!");

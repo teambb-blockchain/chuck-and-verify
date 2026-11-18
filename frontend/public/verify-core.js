@@ -41,6 +41,36 @@ export function summarizeReadings(readingsC, range = SAFE_RANGE_F) {
   };
 }
 
+// Per-leg sensor summaries (TemperatureLog, ADR 0005). `temperature` is
+// { rangeC: { low, high }, legs: [{ minC, maxC, secondsOut, readingCount,
+// missing, startTime, endTime, custodian, ... }] } with temperatures in °C.
+// Returns the low and high in °F, total time out of range, how many legs
+// had any, and the required range in whole °F.
+export function summarizeLegs(temperature) {
+  if (!temperature || !temperature.legs || temperature.legs.length === 0) return null;
+  const legs = temperature.legs;
+  const round1 = (f) => Math.round(f * 10) / 10;
+  return {
+    low: round1(Math.min(...legs.map((l) => cToF(l.minC)))),
+    high: round1(Math.max(...legs.map((l) => cToF(l.maxC)))),
+    secondsOut: legs.reduce((sum, l) => sum + l.secondsOut, 0),
+    legsOut: legs.filter((l) => l.secondsOut > 0).length,
+    legs: legs.length,
+    missing: legs.reduce((sum, l) => sum + (l.missing || 0), 0),
+    range: { low: Math.round(cToF(temperature.rangeC.low)), high: Math.round(cToF(temperature.rangeC.high)) }
+  };
+}
+
+// 2700 -> "45 min", 5400 -> "1 h 30 min", 30 -> "under 1 min".
+export function durationText(seconds) {
+  if (seconds < 60) return "under 1 min";
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return minutes + " min";
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return h + " h" + (m ? " " + m + " min" : "");
+}
+
 // --- Formatting --------------------------------------------------------------
 
 // 0x903359014d55A25ED1d4a8DCA6740dd30A90448a -> 0x9033…0448a
@@ -238,7 +268,7 @@ export function buildTimeline(events, { batchName, batch, credentialOk = () => t
 // --- Checklist and verdict ---------------------------------------------------
 // Each item: { status: "pass" | "warn" | "fail" | "none", title, detail }.
 
-export function deriveChecklist({ steps, batch, readingsC = [] }) {
+export function deriveChecklist({ steps, batch, readingsC = [], temperature = null }) {
   const real = steps.filter((s) => !s.synthetic);
 
   // 1. Handoffs: every shipment must be confirmed by the wallet it named.
@@ -274,10 +304,23 @@ export function deriveChecklist({ steps, batch, readingsC = [] }) {
             (lapsedSigners === 1 ? "no longer holds" : "no longer hold") + " an active credential"
         };
 
-  // 3. Cold chain.
-  const summary = summarizeReadings(readingsC);
+  // 3. Cold chain: per-leg sensor summaries when the contract has them,
+  // otherwise raw readings (none are recorded yet anywhere but TemperatureLog).
+  const legSummary = summarizeLegs(temperature);
+  const summary = legSummary ? null : summarizeReadings(readingsC);
   const range = SAFE_RANGE_F.low + "–" + SAFE_RANGE_F.high + " °F";
-  const coldChain = !summary
+  const legRange = legSummary ? legSummary.range.low + "–" + legSummary.range.high + " °F" : "";
+  const coldChain = legSummary
+    ? legSummary.secondsOut === 0
+      ? { status: "pass", title: "Kept cold", detail: "Every sensor reading stayed within " + legRange }
+      : {
+          status: "warn",
+          title: "Got too warm or cold",
+          detail:
+            durationText(legSummary.secondsOut) + " outside " + legRange + ", on " +
+            legSummary.legsOut + " of " + legSummary.legs + (legSummary.legs === 1 ? " leg" : " legs")
+        }
+    : !summary
     ? { status: "none", title: "Cold chain", detail: "No sensor readings recorded for this batch" }
     : summary.excursions === 0
       ? { status: "pass", title: "Cold chain held", detail: "All readings within " + range }
@@ -287,7 +330,7 @@ export function deriveChecklist({ steps, batch, readingsC = [] }) {
           detail: summary.excursions + (summary.excursions === 1 ? " stretch" : " stretches") + " outside " + range
         };
 
-  return { signed, credentials, coldChain, handoffs: { confirmed, total: shipments.length }, lapsed: lapsed.length, summary };
+  return { signed, credentials, coldChain, handoffs: { confirmed, total: shipments.length }, lapsed: lapsed.length, summary, legSummary };
 }
 
 // The badge. Recall and failed inspection are failures; anything still open

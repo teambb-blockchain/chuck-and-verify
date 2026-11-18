@@ -117,6 +117,21 @@ describe("verify-core", function () {
       expect(core.deriveVerdict({ batch: b, checklist: list })).to.deep.equal({ tone: "pass", label: "Verified on-chain" });
     });
 
+    it("judges the cold chain from per-leg sensor summaries", function () {
+      const steps = core.buildTimeline(journey(), { batchName: "BEEF-001", batch: batch() });
+      const rangeC = { low: -2.2, high: 4.44 };
+      const cold = { rangeC, legs: [{ minC: 1.2, maxC: 3.1, secondsOut: 0 }, { minC: 0.4, maxC: 2.8, secondsOut: 0 }] };
+      const list = core.deriveChecklist({ steps, batch: batch(), temperature: cold });
+      expect(list.coldChain).to.deep.equal({ status: "pass", title: "Kept cold", detail: "Every sensor reading stayed within 28–40 °F" });
+      expect(list.legSummary).to.include({ low: 32.7, high: 37.6, legs: 2, legsOut: 0 });
+      const warm = { rangeC, legs: [...cold.legs, { minC: 1.0, maxC: 6.1, secondsOut: 2700, missing: 1 }] };
+      const warned = core.deriveChecklist({ steps, batch: batch(), temperature: warm });
+      expect(warned.coldChain).to.deep.equal({ status: "warn", title: "Got too warm or cold", detail: "45 min outside 28–40 °F, on 1 of 3 legs" });
+      expect(core.deriveVerdict({ batch: batch(), checklist: warned }).label).to.equal("Verified with warnings");
+      expect(core.summarizeLegs({ rangeC, legs: [] })).to.equal(null);
+      expect([30, 2700, 5400, 7200].map(core.durationText)).to.deep.equal(["under 1 min", "45 min", "1 h 30 min", "2 h"]);
+    });
+
     it("warns while a shipment awaits receipt", function () {
       const events = journey().slice(0, 5);
       const b = batch({ currentHolder: CARRIER, pendingReceiver: STORE });
